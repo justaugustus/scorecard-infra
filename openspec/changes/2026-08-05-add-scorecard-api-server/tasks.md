@@ -39,13 +39,16 @@
 
 ## 4. live-scan (engine + tokens)
 
-- [ ] 4.1 Implement `Scanner` wrapping `pkg/scorecard.Run`; create GitHub/GitLab, OSS-Fuzz, CII, and vulnerabilities
-      clients once and reuse them across scans
-- [ ] 4.2 Format results to JSON2; on success write the result back to the store (populate the cache)
-- [ ] 4.3 Handle skip (unreachable/blocked → skipped, not fatal) and fatal errors distinctly
-- [ ] 4.4 Implement `internal/tokens`: SCM token pool (GitHub App / PAT), per-host rate limiter, backoff/retry
-- [ ] 4.5 Bound live scans with an in-process worker pool (concurrency from config)
-- [ ] 4.6 Unit tests with a fake scanner; declare live coverage in capabilities (all checks; any accessible repo)
+- [x] 4.1 Implement `Scanner` wrapping `pkg/scorecard.Run`; reuse OSS-Fuzz/CII/vulnerabilities clients across scans;
+      create the stateful SCM repo client per scan (unsafe to share concurrently) — `EngineScanner`
+- [x] 4.2 Format results to JSON2 (`AsJSON2`); write-back to the store is performed by the orchestrator (group 5),
+      which owns the latest-vs-commit key policy (design D2) — the scanner returns the JSON2 + resolved commit
+- [x] 4.3 Handle skip (unreachable/blocked → `ErrSkipped`, not retried) and fatal errors distinctly
+- [x] 4.4 Implement `internal/tokens`: PAT pool (+ `Joined` for Scorecard's GITHUB_AUTH_TOKEN rotation), per-host
+      rate limiter, backoff/retry with a `Permanent` sentinel
+- [x] 4.5 Bound live scans with an in-process worker pool (`Bounded`; concurrency from config)
+- [x] 4.6 Unit tests with a fake scanner (`FakeScanner`); live coverage (all checks; any accessible repo; no opt-in)
+      documented for `/capabilities` (group 6). EngineScanner is compile-verified against v5.5.0 (no network here)
 
 ## 5. result-cache (orchestrator)
 
