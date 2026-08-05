@@ -16,25 +16,57 @@ limitations under the License.
 
 // Package scan generates Scorecard results on demand by wrapping
 // pkg/scorecard.Run (design D8). Following the upstream ScorecardWorker pattern,
-// the SCM (GitHub/GitLab), OSS-Fuzz, CII, and vulnerabilities clients are
-// created once and reused across scans; results are formatted to canonical JSON2
-// via AsJSON2() and written back to the store to populate the cache.
+// the OSS-Fuzz, CII, and vulnerabilities clients are created once and reused
+// across scans, while the SCM repo client is created per scan (it is stateful
+// per repository and unsafe to share across concurrent scans). Results are
+// formatted to canonical JSON2 via AsJSON2.
 //
-// SCM API rate limits — not CPU — are the scaling bottleneck, so live scans are
-// fronted by internal/tokens (token pool + per-host rate limiter) and bounded by
-// an in-process worker pool.
+// The orchestrator (design D2) depends on the Scanner interface — not the
+// concrete engine — so it is testable with a fake, and live scans are bounded by
+// a Bounded worker pool and paced by internal/tokens.
+//
+// Coverage: the engine runs all default checks against any repository the
+// configured SCM token can access (including private repos); it requires no
+// opt-in. The server advertises this at /capabilities (design D7).
 package scan
 
 import (
-	"github.com/ossf/scorecard/v5/pkg/scorecard"
+	"context"
+	"errors"
+
+	"github.com/uwu-tools/scorecard-api/internal/model"
 )
 
-// runFn pins the pkg/scorecard entrypoint the Scanner adapts. Keeping a typed
-// reference documents the exact upstream signature this package depends on and
-// anchors the module dependency until the Scanner lands.
-//
-// TODO(group 4): implement Scanner (reused clients, JSON2 formatting, skip vs.
-// fatal handling, write-back to the store) over this entrypoint.
-var runFn = scorecard.Run
+// ErrSkipped indicates the repository could not be scanned for a non-fatal
+// reason (unreachable, blocked, or behind an IP allow list). Callers treat it as
+// "no result available", distinct from a scan failure (design task 4.3).
+var ErrSkipped = errors.New("scan: repository skipped (unreachable or blocked)")
 
-var _ = runFn
+// Result is a produced Scorecard result. Field order is chosen for pointer
+// packing (govet fieldalignment), not readability.
+type Result struct {
+	// ResolvedCommit is the commit SHA the scan actually ran against.
+	ResolvedCommit string
+	// JSON2 is the canonical Scorecard JSON2 body, served and cached verbatim.
+	JSON2 []byte
+	// Complete reports whether every check produced a conclusive score.
+	Complete bool
+}
+
+// Scanner produces Scorecard results on demand. An empty commit means the
+// repository's default-branch HEAD.
+type Scanner interface {
+	Scan(ctx context.Context, ref model.RepoRef, commit string) (*Result, error)
+}
+
+// complete reports whether every check produced a conclusive score. A negative
+// score (-1) is Scorecard's "inconclusive" sentinel, so its presence means the
+// result is not fully complete.
+func complete(checks []model.Check) bool {
+	for i := range checks {
+		if checks[i].Score < 0 {
+			return false
+		}
+	}
+	return true
+}

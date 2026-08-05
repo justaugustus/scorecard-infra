@@ -169,6 +169,13 @@ linters:
       checks:
         - "all"
         - "-QF1003"
+    wrapcheck:
+      # Errors crossing this module's own package boundaries are already
+      # contextualized at their source (e.g. "store: ...", "tokens: ..."), so
+      # re-wrapping them would only double the prefix. wrapcheck still enforces
+      # wrapping for third-party (Scorecard, gocloud, stdlib) errors.
+      ignore-package-globs:
+        - github.com/uwu-tools/scorecard-api/*
   exclusions:
     generated: lax
     presets:
