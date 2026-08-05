@@ -59,19 +59,17 @@ results on demand.
 Every request flows through a single **read-through cache** (the orchestrator),
 which decides serve-vs-scan:
 
-```text
-GET /projects/{host}/{org}/{repo}[?commit=SHA]
-        │
-        ▼
-   orchestrator ──► store.Get(key)  ── HIT & fresh ──►  return cached (200)
-        │                │
-        │                └─ MISS / stale
-        ▼
-   scan.Run(ref, commit)          # live pkg/scorecard.Run, bounded + single-flight
-        │
-        ├─ within SCORECARD_SYNC_TIMEOUT ─►  store.Put(key) ─►  return live (200)
-        └─ exceeds the timeout ──────────►  202 + Retry-After  (scan finishes in
-                                             the background; the next request HITs)
+```mermaid
+flowchart TD
+    C["Client — GET /projects/{host}/{org}/{repo}?commit=SHA"] --> O["orchestrator (read-through cache)"]
+    O --> G{"store hit and fresh?"}
+    G -- "yes" --> RC["200 — cached result"]
+    G -- "no (miss or stale)" --> SF["single-flight: one scan per key"]
+    SF --> SC["scan.Run — live pkg/scorecard.Run (bounded)"]
+    SC -- "within SCORECARD_SYNC_TIMEOUT" --> PUT["store.Put — latest + commit-pinned"]
+    PUT --> RL["200 — live result"]
+    SC -- "exceeds timeout" --> R202["202 + Retry-After (scan continues in background)"]
+    R202 -. "next request hits the cache" .-> O
 ```
 
 - **Freshness:** commit-pinned results (`?commit=SHA`) are immutable and cached
@@ -87,6 +85,21 @@ GET /projects/{host}/{org}/{repo}[?commit=SHA]
 
 The binary wires seven focused packages: `config → store + scanner →
 orchestrator → HTTP`.
+
+```mermaid
+flowchart LR
+    CFG["config (env)"] --> ST["store"]
+    CFG --> SC["scan + tokens"]
+    ST --> OR["orchestrator"]
+    SC --> OR
+    OR --> API["httpapi"]
+    API -- "JSON2" --> CLI["scorecard-mcp / webapp clients"]
+    ST <-- "blob" --> BK[("object store")]
+    SC <-- "SCM API" --> GH[("GitHub / GitLab")]
+```
+
+The `model` package (JSON2 + provenance + repo-ref parsing) is shared across all
+of these.
 
 | Component | Path | Responsibility |
 | --- | --- | --- |
