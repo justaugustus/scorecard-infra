@@ -74,9 +74,10 @@
 
 ## 7. Configuration
 
-- [ ] 7.1 Load all config from env: bucket URL, `latest` TTL, request/scan timeouts, enabled checks, worker
-      concurrency, listen port, SCM credentials; document each with defaults
-- [ ] 7.2 Startup validation: fail fast with actionable errors on missing/invalid required config
+- [x] 7.1 Load all config from env: bucket URL, `latest` TTL, request/scan timeouts, enabled checks, worker
+      concurrency, listen port, SCM credentials; document each with defaults (`internal/config`)
+- [x] 7.2 Startup validation: fail fast with actionable errors on missing/invalid required config (verified via
+      `go run` with no bucket URL)
 
 ## 8. Acceptance: scorecard-mcp as the client
 
