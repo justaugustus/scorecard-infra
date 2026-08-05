@@ -31,9 +31,9 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"gocloud.dev/blob"
-
 	// Blank-import every backend driver so a bucket URL alone selects the
 	// backend at runtime. Credentials resolve via each backend's default chain.
 	_ "gocloud.dev/blob/azureblob"
@@ -47,6 +47,9 @@ import (
 // The orchestrator treats it as a cache miss (design D2), not a fatal error.
 var ErrNotFound = errors.New("store: result not found")
 
+// errEmptyBucketURL is returned by Open when no bucket URL is configured.
+var errEmptyBucketURL = errors.New("store: bucket URL is empty")
+
 // Store is a cloud-agnostic Scorecard result store backed by gocloud.dev/blob.
 type Store struct {
 	bucket *blob.Bucket
@@ -57,18 +60,21 @@ type Store struct {
 // It fails fast when the URL is empty or the backend cannot be opened.
 func Open(ctx context.Context, bucketURL string) (*Store, error) {
 	if bucketURL == "" {
-		return nil, errors.New("store: bucket URL is empty")
+		return nil, errEmptyBucketURL
 	}
 	bucket, err := blob.OpenBucket(ctx, bucketURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: opening bucket: %w", err)
 	}
 	return &Store{bucket: bucket}, nil
 }
 
 // Close releases the underlying bucket.
 func (s *Store) Close() error {
-	return s.bucket.Close()
+	if err := s.bucket.Close(); err != nil {
+		return fmt.Errorf("store: closing bucket: %w", err)
+	}
+	return nil
 }
 
 // TODO(group 3): key construction, Get/Put of JSON2 bodies, latest-pointer

@@ -27,12 +27,16 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
 var version = "dev"
+
+// errNotImplemented is a placeholder until the server wiring lands (groups 6/7).
+var errNotImplemented = errors.New("not implemented yet; see the OpenSpec task plan")
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -47,5 +51,5 @@ func main() {
 // store, construct the scanner and orchestrator, and serve the HTTP contract
 // (/projects, /badge, /capabilities, /health, /readyz) with graceful shutdown.
 func run(_ []string) error {
-	return fmt.Errorf("not implemented yet (version %s); see the OpenSpec task plan", version)
+	return fmt.Errorf("%w (version %s)", errNotImplemented, version)
 }

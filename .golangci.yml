@@ -1,0 +1,209 @@
+# Aligned with ossf/scorecard's .golangci.yml (the upstream graft target), with
+# three repo-specific adaptations:
+#   - gci import prefix points at this module;
+#   - scorecard-only exclusion paths (probes/…) and the fileparser wrapcheck glob
+#     are dropped (they do not exist here);
+#   - goheader is not enabled (its year-matching template is brittle across years;
+#     headers are kept consistent by convention instead).
+version: "2"
+run:
+  concurrency: 6
+  timeout: 5m
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new-from-rev: ""
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - dogsled
+    - durationcheck
+    - err113
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - lll
+    - loggercheck
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - noctx
+    - nolintlint
+    - paralleltest
+    - predeclared
+    - protogetter
+    - reassign
+    - recvcheck
+    - rowserrcheck
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - usestdlibvars
+    - usetesting
+    - whitespace
+    - wrapcheck
+    - zerologlint
+  disable:
+    - exhaustruct
+    - testpackage
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    exhaustive:
+      default-signifies-exhaustive: true
+    forbidigo:
+      forbid:
+        - pattern: "^fmt\\.Print.*$"
+          msg: "Do not commit print statements. Output to stdout interferes with users who redirect JSON results to files."
+    gocritic:
+      disable-all: true
+      enabled-checks:
+        - appendAssign
+        - argOrder
+        - badCall
+        - badCond
+        - caseOrder
+        - codegenComment
+        - commentedOutCode
+        - deprecatedComment
+        - dupArg
+        - dupBranchBody
+        - dupCase
+        - dupSubExpr
+        - exitAfterDefer
+        - flagDeref
+        - flagName
+        - mapKey
+        - nilValReturn
+        - octalLiteral
+        - offBy1
+        - sloppyLen
+        - sloppyTypeAssert
+        - weakCond
+        - appendCombine
+        - hugeParam
+        - rangeExprCopy
+        - rangeValCopy
+        - assignOp
+        - boolExprSimplify
+        - captLocal
+        - commentedOutImport
+        - commentFormatting
+        - defaultCaseOrder
+        - docStub
+        - elseif
+        - emptyFallthrough
+        - hexLiteral
+        - ifElseChain
+        - methodExprCall
+        - newDeref
+        - regexpMust
+        - singleCaseSwitch
+        - switchTrue
+        - typeAssertChain
+        - typeSwitchVar
+        - underef
+        - unlabelStmt
+        - unlambda
+        - unslice
+        - valSwap
+        - wrapperFunc
+        - builtinShadow
+        - importShadow
+        - initClause
+        - nestingReduce
+        - paramTypeCombine
+        - ptrToRefParam
+        - typeUnparen
+        - unnecessaryBlock
+    godox:
+      keywords:
+        - BUG
+        - FIXME
+        - HACK
+    gosec:
+      excludes:
+        - G115
+        - G703
+        - G704
+        - G705
+        - G706
+    govet:
+      enable:
+        - fieldalignment
+    nolintlint:
+      require-specific: true
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF1003"
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - err113
+          - funlen
+          - goconst
+          - gocyclo
+          - lll
+          - wrapcheck
+        path: (.+)_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/uwu-tools/scorecard-api)
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
