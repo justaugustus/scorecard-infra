@@ -28,12 +28,14 @@
 
 ## 3. result-store (blob)
 
-- [ ] 3.1 Implement `Store` over `gocloud.dev/blob`; blank-import `s3blob`, `azureblob`, `gcsblob`, `fileblob`, `memblob`
-- [ ] 3.2 Open the bucket from a URL env var (no hardcoded bucket); fail fast when unset/invalid
-- [ ] 3.3 Implement the key contract: `{host}/{org}/{repo}/results.json` and `{host}/{org}/{repo}/{commit}/results.json`;
-      write the latest pointer on scan write-back
-- [ ] 3.4 Get/Put canonical JSON2 bodies; return a not-found sentinel on miss
-- [ ] 3.5 Unit tests over `memblob`; integration test over `fileblob` and MinIO (S3-compatible)
+- [x] 3.1 Implement `Store` over `gocloud.dev/blob`; blank-import `s3blob`, `azureblob`, `gcsblob`, `fileblob`, `memblob`
+- [x] 3.2 Open the bucket from a URL (no hardcoded bucket); fail fast when unset/invalid — env-var binding lands in
+      config (task 7.1); `Open` already errors on an empty/invalid URL
+- [x] 3.3 Implement the key contract: `{host}/{org}/{repo}/results.json` and `{host}/{org}/{repo}/{commit}/results.json`;
+      write the latest pointer on scan write-back (`PutLatestAndCommit`)
+- [x] 3.4 Get/Put canonical JSON2 bodies; return a not-found sentinel on miss (`ErrNotFound`)
+- [x] 3.5 Unit tests over `memblob`; integration test over `fileblob` (runs) and MinIO/S3 (gated on
+      `SCORECARD_TEST_S3_URL`, skipped when no endpoint is available)
 
 ## 4. live-scan (engine + tokens)
 
