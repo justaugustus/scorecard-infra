@@ -5,6 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # scorecard-api
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](go.mod)
+
 A cloud-agnostic, self-hosted [OpenSSF Scorecard](https://github.com/ossf/scorecard)
 results **API server**. It serves pre-computed Scorecard results from any object
 store and **generates them live on demand** when the cache misses — a read-through
@@ -20,7 +23,29 @@ client of the public `api.scorecard.dev`.
 > its source, freshness, and completeness. A score of `-1` means *inconclusive*,
 > not failing. See [`/capabilities`](#get-capabilities).
 
-## Why
+## Contents
+
+- [About](#about)
+- [How it works](#how-it-works)
+- [Components](#components)
+- [Getting started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage](#usage)
+  - [Run the server](#run-the-server)
+  - [Endpoints](#endpoints)
+  - [Provenance headers](#provenance-headers)
+  - [`GET /capabilities`](#get-capabilities)
+  - [Storage backends](#storage-backends)
+  - [Configuration](#configuration)
+  - [As a `scorecard-mcp` backend](#as-a-scorecard-mcp-backend)
+  - [Verifying end to end](#verifying-end-to-end)
+- [Development](#development)
+- [Roadmap](#roadmap)
+- [Community](#community)
+- [License](#license)
+
+## About
 
 The public Scorecard API only covers repositories that opted in via
 `publish_results: true`, and its production stack is wedded to Google Cloud. Teams
@@ -29,7 +54,98 @@ scan, or on **non-GCP** infrastructure have no first-class option. This server
 fills that gap: it serves the same contract from **any** object store and computes
 results on demand.
 
-## Endpoints
+## How it works
+
+Every request flows through a single **read-through cache** (the orchestrator),
+which decides serve-vs-scan:
+
+```text
+GET /projects/{host}/{org}/{repo}[?commit=SHA]
+        │
+        ▼
+   orchestrator ──► store.Get(key)  ── HIT & fresh ──►  return cached (200)
+        │                │
+        │                └─ MISS / stale
+        ▼
+   scan.Run(ref, commit)          # live pkg/scorecard.Run, bounded + single-flight
+        │
+        ├─ within SCORECARD_SYNC_TIMEOUT ─►  store.Put(key) ─►  return live (200)
+        └─ exceeds the timeout ──────────►  202 + Retry-After  (scan finishes in
+                                             the background; the next request HITs)
+```
+
+- **Freshness:** commit-pinned results (`?commit=SHA`) are immutable and cached
+  forever; `latest` results carry a TTL and are refreshed on expiry.
+- **De-duplication:** concurrent requests for the same key coalesce into exactly
+  one scan (single-flight), so a burst of clients can't trigger redundant scans
+  or exhaust SCM rate limits.
+- **Persistence:** a live scan writes both the `latest` pointer and the
+  commit-pinned object, so results are immediately reusable by this server, the
+  public webapp, and `scorecard-mcp`.
+
+## Components
+
+The binary wires seven focused packages: `config → store + scanner →
+orchestrator → HTTP`.
+
+| Component | Path | Responsibility |
+| --- | --- | --- |
+| **Binary** | `cmd/scorecard-api` | Loads config, wires the store, scanner, and orchestrator, and serves the HTTP API with graceful shutdown. |
+| **model** | `internal/model` | Lean mirror of Scorecard **JSON2** plus provenance and `platform/owner/repo` parsing (default `github.com`; also `gitlab.com`; 40-hex commits). |
+| **store** | `internal/store` | Object storage over [`gocloud.dev/blob`](https://gocloud.dev/); backend chosen by URL; implements the `{host}/{org}/{repo}[/{commit}]/results.json` key contract. |
+| **scan** | `internal/scan` | The live engine: wraps `pkg/scorecard.Run`, reuses the OSS-Fuzz/CII/vulnerability clients across scans, and formats results to JSON2. |
+| **tokens** | `internal/tokens` | SCM token pool (feeds Scorecard's `GITHUB_AUTH_TOKEN` rotation), per-host rate limiter, and bounded-concurrency worker pool with backoff. |
+| **orchestrator** | `internal/orchestrator` | The read-through cache: freshness/TTL policy, single-flight de-duplication, and the sync-vs-async (`200`/`202`) decision. |
+| **httpapi** | `internal/httpapi` | The webapp GET contract (`/projects`, `/badge`), plus `/capabilities`, `/health`, `/readyz`, and error mapping. |
+| **config** | `internal/config` | 12-factor environment configuration with fail-fast validation. |
+
+This is an **incubator, not a permanent fork**. The durable pieces are structured
+to graft upstream over time — the contract + blob read path into
+`ossf/scorecard-webapp`, and the live scan + HTTP surface into `ossf/scorecard`'s
+`scorecard serve`. See [`docs/upstream-graft.md`](docs/upstream-graft.md) for the
+per-component graft map and the `scorecard serve` reconciliation status.
+
+## Getting started
+
+### Prerequisites
+
+- **Go** matching [`go.mod`](go.mod) (1.25.x).
+- An **object store** reachable by a `gocloud.dev/blob` URL — a local directory
+  (`file://…`) is enough to start; see [Storage backends](#storage-backends).
+- For **live scans only**: network egress (the engine calls the SCM API and
+  Scorecard's auxiliary data sources) and an **SCM token** (`GITHUB_AUTH_TOKEN`).
+  Serving already-cached results needs neither.
+
+### Installation
+
+Build from source:
+
+```sh
+git clone https://github.com/uwu-tools/scorecard-api
+cd scorecard-api
+go build -o scorecard-api ./cmd/scorecard-api
+```
+
+Or, once a version is tagged, install the binary directly:
+
+```sh
+go install github.com/uwu-tools/scorecard-api/cmd/scorecard-api@latest
+```
+
+## Usage
+
+### Run the server
+
+```sh
+export SCORECARD_RESULTS_BUCKET_URL="file:///tmp/scorecard"   # required
+export GITHUB_AUTH_TOKEN="ghp_..."                            # only for live scans
+./scorecard-api
+```
+
+The server logs its listen address (default `:8080`) and the resolved bucket URL,
+then serves until it receives `SIGINT`/`SIGTERM`.
+
+### Endpoints
 
 | Method & path | Returns |
 | --- | --- |
@@ -43,11 +159,25 @@ results on demand.
 `host` includes the TLD (e.g. `github.com`). `github.com` and `gitlab.com` are
 supported.
 
+```sh
+# Latest (cache HIT if present, else a live scan populates the cache)
+curl -s http://localhost:8080/projects/github.com/ossf/scorecard | jq .score
+
+# A specific, immutable commit
+curl -s "http://localhost:8080/projects/github.com/ossf/scorecard?commit=<40-hex-sha>"
+
+# Badge, capabilities, health
+curl -s  http://localhost:8080/projects/github.com/ossf/scorecard/badge
+curl -s  http://localhost:8080/capabilities | jq .
+curl -sI http://localhost:8080/health
+```
+
 On a cache miss the server attempts a synchronous scan within
 `SCORECARD_SYNC_TIMEOUT`. If it finishes in time you get `200` with the result;
 otherwise you get `202 Accepted` with a `Retry-After` header while the scan
 continues in the background and populates the cache for your next request.
-Commit-pinned results are immutable, so retries are cheap.
+Malformed refs return `400`, unreachable/blocked repos `404`, and scan failures
+`502`.
 
 ### Provenance headers
 
@@ -82,7 +212,7 @@ public-cache behavior:
 }
 ```
 
-## Storage
+### Storage backends
 
 Results are persisted through [`gocloud.dev/blob`](https://gocloud.dev/), so the
 backend is selected entirely by a URL — nothing cloud-specific is compiled in.
@@ -99,12 +229,12 @@ Credentials resolve via each backend's default chain.
 Object keys match `scorecard-webapp` exactly, so the same objects are servable by
 the public webapp and readable by `scorecard-mcp`:
 
-```
+```text
 {host}/{org}/{repo}/results.json            # latest (mutable, TTL)
 {host}/{org}/{repo}/{commit}/results.json   # pinned (immutable)
 ```
 
-## Configuration
+### Configuration
 
 All configuration comes from the environment. Only the bucket URL is required.
 
@@ -128,36 +258,26 @@ egress and an SCM token (`GITHUB_AUTH_TOKEN`, or `SCORECARD_GITHUB_TOKENS` which
 is fed into Scorecard's token rotation). Serving already-cached results needs
 neither.
 
-## Quick start
-
-```sh
-go build -o scorecard-api ./cmd/scorecard-api
-
-export SCORECARD_RESULTS_BUCKET_URL="file:///tmp/scorecard"
-export GITHUB_AUTH_TOKEN="ghp_..."   # required only for live scans
-./scorecard-api
-```
-
-Query it:
-
-```sh
-# Latest (cache HIT if present, else a live scan populates the cache)
-curl -s http://localhost:8080/projects/github.com/ossf/scorecard | jq .score
-
-# A specific, immutable commit
-curl -s "http://localhost:8080/projects/github.com/ossf/scorecard?commit=<40-hex-sha>"
-
-# Badge, capabilities, health
-curl -s http://localhost:8080/projects/github.com/ossf/scorecard/badge
-curl -s http://localhost:8080/capabilities | jq .
-curl -sI http://localhost:8080/health
-```
-
 ### As a `scorecard-mcp` backend
 
+[`scorecard-mcp`](https://github.com/uwu-tools/scorecard-mcp) is an MCP server
+that reads Scorecard results. Point it at this server with `-base-url`, and its
+`get_repo_score` / `get_check_result` tools resolve against your cache + live
+scans instead of the public API:
+
 ```sh
-scorecard-mcp --base-url http://localhost:8080 get_repo_score github.com/ossf/scorecard
+scorecard-mcp -base-url http://localhost:8080
 ```
+
+Configure it in an MCP host (Claude Desktop/Code, VS Code) the same way, setting
+the base URL to your server. See the `scorecard-mcp` README for host wiring.
+
+### Verifying end to end
+
+[`docs/acceptance.md`](docs/acceptance.md) is a reproducible runbook that drives a
+real `scorecard-mcp` binary against this server and checks both a cache **HIT** on
+`fileblob` and a cache **MISS** that triggers a live scan, persists, and re-serves
+from cache.
 
 ## Development
 
@@ -170,29 +290,42 @@ golangci-lint run ./...        # config in .golangci.yml (aligned with ossf/scor
 An S3-compatible integration test runs when `SCORECARD_TEST_S3_URL` is set (e.g. a
 local MinIO), and is skipped otherwise.
 
-See [`AGENTS.md`](AGENTS.md) for conventions and [`docs/bootstrap.md`](docs/bootstrap.md)
-plus the OpenSpec change under [`openspec/`](openspec/) for the full design.
+This repository is developed spec-first with
+[OpenSpec](https://github.com/Fission-AI/OpenSpec); see
+[`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md) for conventions,
+and [`docs/bootstrap.md`](docs/bootstrap.md) plus the change under
+[`openspec/`](openspec/) for the full design.
 
-## Architecture
+## Roadmap
 
-```
-cmd/scorecard-api/   the binary (config -> store + scanner -> orchestrator -> HTTP)
-internal/
-  model/         JSON2 result mirror + provenance + repo-ref parsing
-  store/         gocloud.dev/blob store; backend by URL; the key contract
-  orchestrator/  read-through cache: freshness/TTL, single-flight, sync/async
-  scan/          wraps pkg/scorecard.Run; reused clients; worker pool
-  tokens/        SCM token pool + per-host rate limiter + backoff
-  httpapi/       the webapp GET contract, /capabilities, /health, /readyz
-  config/        env-driven configuration
-```
+Delivered in v0: the blob store (all drivers), the read-through cache
+(single-flight + sync/async), the live scan engine, the token/rate manager, the
+HTTP contract (`/projects`, `/badge`, `/capabilities`, `/health`, `/readyz`), and
+acceptance against `scorecard-mcp` on `fileblob`.
 
-This is an incubator, not a permanent fork. The durable pieces are structured to
-graft upstream over time — the contract + blob read path into `ossf/scorecard-webapp`,
-and the live scan + HTTP surface into `ossf/scorecard`'s `scorecard serve`. See
-[`docs/upstream-graft.md`](docs/upstream-graft.md) for the per-component graft map
-and the `scorecard serve` reconciliation status.
+Planned / deferred:
+
+- MinIO/S3 leg of the smoke test in CI (the store already has a gated integration
+  test).
+- Teach `scorecard-mcp` to read `/capabilities` so it reports this server's
+  provenance instead of the hardcoded public-cache caveats.
+- A `gocloud.dev/pubsub` broker for multi-node scan fan-out.
+- A warm-cache scheduler and an analytics/index layer.
+- Signed-upload `POST` (Sigstore) and request-level auth / multi-tenancy.
+- Grafting the durable pieces upstream (see
+  [`docs/upstream-graft.md`](docs/upstream-graft.md)).
+
+## Community
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Support](SUPPORT.md)
+- [Maintainers](MAINTAINERS.md)
 
 ## License
 
-[Apache-2.0](LICENSE).
+Apache 2.0 — see [`LICENSE`](LICENSE).
+
+Data served from Scorecard is licensed under
+[CDLA Permissive 2.0](https://github.com/ossf/scorecard#scorecard-rest-api).
