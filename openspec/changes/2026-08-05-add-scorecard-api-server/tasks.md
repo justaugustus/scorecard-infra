@@ -22,9 +22,9 @@
 
 ## 2. Core types
 
-- [ ] 2.1 Define the result model mirroring Scorecard JSON2 (`date`, `repo{name,commit}`, `scorecard{version,commit}`,
+- [x] 2.1 Define the result model mirroring Scorecard JSON2 (`date`, `repo{name,commit}`, `scorecard{version,commit}`,
       `score`, `checks[]`, `metadata`) plus provenance (`source`, resolved commit SHA, date, version) and completeness
-- [ ] 2.2 Define `platform/owner/repo` parsing (default `github.com`; accept `gitlab.com`; enforce a 40-hex commit)
+- [x] 2.2 Define `platform/owner/repo` parsing (default `github.com`; accept `gitlab.com`; enforce a 40-hex commit)
 
 ## 3. result-store (blob)
 
