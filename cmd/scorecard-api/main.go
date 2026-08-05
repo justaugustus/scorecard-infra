@@ -20,36 +20,107 @@ limitations under the License.
 // engine ("hybrid"). It speaks the ossf/scorecard-webapp GET contract so it is a
 // drop-in --base-url target for uwu-tools/scorecard-mcp.
 //
-// The wiring (config -> store + scanner -> orchestrator -> HTTP server) is
-// implemented across the internal packages and assembled here. See
-// openspec/changes/2026-08-05-add-scorecard-api-server for the design and the
-// task plan.
+// All configuration comes from the environment; see internal/config.
 package main
 
 import (
-	"errors"
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/uwu-tools/scorecard-api/internal/config"
+	"github.com/uwu-tools/scorecard-api/internal/httpapi"
+	"github.com/uwu-tools/scorecard-api/internal/orchestrator"
+	"github.com/uwu-tools/scorecard-api/internal/scan"
+	"github.com/uwu-tools/scorecard-api/internal/store"
+	"github.com/uwu-tools/scorecard-api/internal/tokens"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
-// errNotImplemented is a placeholder until the server wiring lands (groups 6/7).
-var errNotImplemented = errors.New("not implemented yet; see the OpenSpec task plan")
-
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "scorecard-api:", err)
 		os.Exit(1)
 	}
 }
 
-// run is the real entry point, kept separate from main so it is testable.
-//
-// TODO(group 6/7): load configuration from the environment, open the result
-// store, construct the scanner and orchestrator, and serve the HTTP contract
-// (/projects, /badge, /capabilities, /health, /readyz) with graceful shutdown.
-func run(_ []string) error {
-	return fmt.Errorf("%w (version %s)", errNotImplemented, version)
+// run loads configuration, wires the store, scanner, orchestrator, and HTTP
+// server, and serves until interrupted.
+func run() error {
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		return err
+	}
+
+	logger := newLogger(cfg.LogLevel)
+	slog.SetDefault(logger)
+
+	// Feed the SCM token pool into Scorecard's GitHub roundtripper, which rotates
+	// a comma-separated GITHUB_AUTH_TOKEN across concurrent requests (design D8).
+	pool := tokens.NewPATPool(cfg.GitHubTokens)
+	if pool.Len() == 0 {
+		logger.Warn("no SCM tokens configured; live scans will be unauthenticated and heavily rate-limited")
+	} else if err := os.Setenv(config.EnvGitHubAuth, pool.Joined()); err != nil {
+		return fmt.Errorf("setting %s: %w", config.EnvGitHubAuth, err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	st, err := store.Open(ctx, cfg.BucketURL)
+	if err != nil {
+		return fmt.Errorf("opening result store: %w", err)
+	}
+	defer closeQuietly(logger, "store", st.Close)
+
+	limiter := tokens.NewHostLimiter(cfg.HostRatePerSecond, cfg.HostRateBurst)
+	scanner, err := scan.NewEngineScanner(scan.EngineConfig{
+		Limiter:  limiter,
+		LogLevel: cfg.LogLevel,
+		Checks:   cfg.EnabledChecks,
+	})
+	if err != nil {
+		return fmt.Errorf("creating scanner: %w", err)
+	}
+	defer closeQuietly(logger, "scanner", scanner.Close)
+
+	orch := orchestrator.New(st, scanner, orchestrator.Config{
+		TTL:         cfg.LatestTTL,
+		SyncTimeout: cfg.SyncTimeout,
+		ScanTimeout: cfg.ScanTimeout,
+		RetryAfter:  cfg.RetryAfter,
+		Concurrency: cfg.Concurrency,
+	}, orchestrator.WithLogger(logger))
+
+	srv := httpapi.New(orch, httpapi.DefaultCapabilities(cfg.LatestTTL), httpapi.WithLogger(logger))
+
+	logger.Info("starting scorecard-api",
+		"version", version, "addr", cfg.ListenAddr, "bucket", cfg.BucketURL, "tokens", pool.Len())
+
+	return srv.ListenAndServe(ctx, httpapi.ServeConfig{
+		Addr:            cfg.ListenAddr,
+		ShutdownTimeout: 10 * time.Second,
+	})
+}
+
+// newLogger builds a JSON slog logger at the given level, defaulting to info.
+func newLogger(level string) *slog.Logger {
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(level)); err != nil {
+		l = slog.LevelInfo
+	}
+	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: l}))
+}
+
+// closeQuietly runs a Close function on shutdown, logging any error.
+func closeQuietly(logger *slog.Logger, name string, closeFn func() error) {
+	if err := closeFn(); err != nil {
+		logger.Error("closing "+name, "error", err)
+	}
 }

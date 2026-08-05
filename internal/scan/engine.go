@@ -55,6 +55,7 @@ type EngineScanner struct {
 	cii       clients.CIIBestPracticesClient
 	limiter   *tokens.HostLimiter
 	checkDocs docs.Doc
+	checks    []string
 	backoff   tokens.BackoffConfig
 	logLevel  sclog.Level
 }
@@ -65,6 +66,8 @@ type EngineConfig struct {
 	Limiter *tokens.HostLimiter
 	// LogLevel is the Scorecard engine log level (e.g. "info").
 	LogLevel string
+	// Checks optionally restricts the checks to run; empty means all default checks.
+	Checks []string
 	// Backoff governs retries of a scan. A zero value uses tokens.DefaultBackoff.
 	Backoff tokens.BackoffConfig
 }
@@ -106,6 +109,7 @@ func NewEngineScanner(cfg EngineConfig) (*EngineScanner, error) {
 		cii:       clients.DefaultCIIBestPracticesClient(),
 		limiter:   limiter,
 		checkDocs: checkDocs,
+		checks:    cfg.Checks,
 		backoff:   backoff,
 		logLevel:  level,
 	}, nil
@@ -144,7 +148,7 @@ func (s *EngineScanner) Scan(ctx context.Context, ref model.RepoRef, commit stri
 		required = append(required, checker.CommitBased)
 	}
 
-	enabled, err := policy.GetEnabled(nil, nil, required, repo.Type())
+	enabled, err := policy.GetEnabled(nil, s.checks, required, repo.Type())
 	if err != nil {
 		return nil, fmt.Errorf("scan: policy.GetEnabled: %w", err)
 	}
