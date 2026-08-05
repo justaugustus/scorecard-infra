@@ -15,20 +15,19 @@ limitations under the License.
 */
 
 // Package model defines a lean in-repo mirror of the OpenSSF Scorecard JSON2
-// wire format, plus provenance metadata (source, resolved commit, date,
-// version) that this server attaches to every response.
+// wire format ([Result]), the repository reference the server routes on
+// ([RepoRef]), and the provenance metadata ([Provenance]) that the server
+// declares for every response.
 //
 // Per design decision D13, this package deliberately does NOT import the
 // go-swagger-generated models from ossf/scorecard-webapp (which drag in the full
 // go-openapi runtime). Live results are formatted via pkg/scorecard.AsJSON2()
-// and cached bytes are passed through unchanged; this model exists only to
+// and cached bytes are passed through unchanged; [Result] exists only to
 // unmarshal the fields the server must introspect (score for the badge; repo
-// commit and date for freshness/provenance).
+// commit, date, and version for freshness and provenance). It mirrors the
+// canonical shape of pkg/scorecard.JSONScorecardResultV2 exactly.
 //
-// The JSON2 body shape (confirmed against a live api.scorecard.dev object,
-// task 0.3): {date, repo{name,commit}, scorecard{version,commit}, score,
-// checks[]{name,score,reason,details,documentation{short,url}}, metadata}.
-// The metadata field is omitted when empty and details is nullable.
-//
-// TODO(group 2): define the result and provenance types here.
+// Provenance is delivered out of band (HTTP response headers and /capabilities),
+// never embedded in the canonical JSON2 body, so webapp-compatible clients such
+// as scorecard-mcp parse the body unchanged (design D4/D12).
 package model
