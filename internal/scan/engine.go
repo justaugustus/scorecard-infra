@@ -180,7 +180,7 @@ func (s *EngineScanner) Scan(ctx context.Context, ref model.RepoRef, commit stri
 	return &Result{
 		JSON2:          buf.Bytes(),
 		ResolvedCommit: parsed.Repo.Commit,
-		Complete:       complete(parsed.Checks),
+		Complete:       Complete(parsed.Checks),
 	}, nil
 }
 

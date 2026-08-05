@@ -59,10 +59,10 @@ type Scanner interface {
 	Scan(ctx context.Context, ref model.RepoRef, commit string) (*Result, error)
 }
 
-// complete reports whether every check produced a conclusive score. A negative
+// Complete reports whether every check produced a conclusive score. A negative
 // score (-1) is Scorecard's "inconclusive" sentinel, so its presence means the
-// result is not fully complete.
-func complete(checks []model.Check) bool {
+// result is not fully complete. The orchestrator reuses this for cached results.
+func Complete(checks []model.Check) bool {
 	for i := range checks {
 		if checks[i].Score < 0 {
 			return false
