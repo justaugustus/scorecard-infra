@@ -12,12 +12,13 @@
 
 ## 1. Project scaffolding
 
-- [ ] 1.1 Initialize the Go module, matching the Scorecard repo's Go toolchain version
-- [ ] 1.2 Add dependencies: `github.com/ossf/scorecard/v5`, `gocloud.dev`
-- [ ] 1.3 Lay out packages: `cmd/scorecard-api`, `internal/store`, `internal/orchestrator`, `internal/scan`,
+- [x] 1.1 Initialize the Go module, matching the Scorecard repo's Go toolchain version (go 1.25.6)
+- [x] 1.2 Add dependencies: `github.com/ossf/scorecard/v5` (v5.5.0), `gocloud.dev` (v0.46.0)
+- [x] 1.3 Lay out packages: `cmd/scorecard-api`, `internal/store`, `internal/orchestrator`, `internal/scan`,
       `internal/tokens`, `internal/model` (JSON2 + provenance)
-- [ ] 1.4 Add `LICENSE` (Apache-2.0), `.golangci.yml` aligned with Scorecard, and meta files copied from scorecard-mcp
-      (PR template, CODEOWNERS, CONTRIBUTING, SECURITY, dependabot, CI/lint/scorecard/zizmor workflows, AGENTS.md)
+- [x] 1.4 Add `LICENSE` (Apache-2.0), `.golangci.yml` aligned with Scorecard, and meta files (PR template, CODEOWNERS,
+      CONTRIBUTING, SECURITY, dependabot, CI/lint/scorecard/zizmor workflows, AGENTS.md) — sourced from the sibling
+      uwu-tools repos (peribolos, org .github) since scorecard-mcp is not accessible in this environment
 
 ## 2. Core types
 
