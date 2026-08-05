@@ -1,0 +1,77 @@
+schema: spec-driven
+
+context: |
+  Project: A cloud-agnostic, self-hosted (non-OpenSSF) OpenSSF Scorecard results
+  API server. It serves pre-computed Scorecard results and generates them live on
+  demand — a read-through cache over an in-process scan engine ("hybrid").
+
+  Language & stack: Go. HTTP server (net/http; chi optional). Imports the Scorecard
+  library directly: github.com/ossf/scorecard/v5/pkg (in-process entrypoint
+  pkg/scorecard.Run) for live scans. Blob storage via gocloud.dev/blob.
+
+  Contract (mirrors ossf/scorecard-webapp so this is a drop-in --base-url target
+  for uwu-tools/scorecard-mcp):
+  - GET /projects/{host}/{org}/{repo}[?commit=SHA] -> ScorecardResult (JSON2)
+  - GET /projects/{host}/{org}/{repo}/badge        -> SVG badge
+  - GET /capabilities                              -> this server's caveats/limits (NEW)
+  - GET /health, /readyz
+  Blob object keys (match webapp exactly):
+    {host}/{org}/{repo}/results.json            (latest)
+    {host}/{org}/{repo}/{commit}/results.json   (pinned, immutable)
+
+  Architecture (internal/):
+  - store/         gocloud.dev/blob; s3/azure/gcs/file/mem selected by URL env; key contract.
+  - orchestrator/  read-through cache: freshness/TTL (commit=immutable, latest=TTL),
+                   single-flight dedup, sync-with-timeout vs async decision.
+  - scan/          wraps pkg/scorecard.Run; reused clients; JSON2 formatter; writes
+                   the result back to store (populates the cache).
+  - tokens/        SCM token pool (GitHub App) + per-host rate limiter/backoff.
+  cmd/scorecard-api/ = the binary.
+
+  Cloud-agnostic rules: no hardcoded gs://; all config via env (bucket URL, TTL,
+  creds, checks, concurrency, port); creds resolve via each backend's default chain;
+  no BigQuery. Local dev = fileblob; local S3 = MinIO; tests = memblob.
+
+  Placement / endgame: incubate in this standalone repo (uwu-tools/scorecard-api),
+  a sibling to uwu-tools/scorecard-mcp. Graft upstream as it matures — the contract
+  + blob read path -> ossf/scorecard-webapp (bucket-parameterization); the live scan
+  + HTTP surface -> ossf/scorecard's `scorecard serve` (today an on-demand net/http
+  server at /?repo=..., no store, no cloud deps; endgame = teach it the /projects
+  contract + a blob cache). Structure code so these split cleanly.
+
+  Relationship to scorecard-mcp: scorecard-mcp is the reference client AND the
+  acceptance test — it queries this server via --base-url. The /capabilities
+  endpoint exists because the MCP currently hardcodes public-cache caveats
+  (internal/provider/rest.go), which are wrong for any other backend; the server
+  MUST advertise its own so provenance is reported correctly.
+
+  Conventions:
+  - OpenSSF-aligned: DCO sign-off (git commit -s) on all commits; Apache-2.0.
+  - Responsible-AI framing: Scorecard results are heuristic signals, not a verdict;
+    never assert a repo "is secure/insecure." Every result declares its source,
+    freshness, and completeness.
+  - Return canonical Scorecard JSON2; deterministic + cache-keyable per repo+commit
+    (resolved commit SHA + generation date in every result).
+  - No employer/internal references anywhere. Internal deployment glue (object-store
+    endpoint, org/repo scan lists, orchestration manifests, token sourcing) lives in
+    a separate internal repo that deploys and feeds this server.
+
+  Development methodology (IMPORTANT for future agent sessions):
+  - Spec-driven via OpenSpec: explore -> propose -> design -> specs -> tasks ->
+    implement. Do not restructure without a spec.
+  - Match the Scorecard Go toolchain version. If builds fail on a go tool version
+    mismatch, prefix commands with `env -u GOROOT`.
+
+# Per-artifact rules (optional)
+rules:
+  proposal:
+    - Always include a "Non-goals" section.
+    - State explicitly that the message broker, warm-cache scheduler, analytics
+      index, and signed-upload POST path are deferred to later changes.
+  design:
+    - Document the read-through cache (freshness/TTL, single-flight, sync/async) as
+      the central orchestration seam.
+    - Document the blob key contract and cloud-agnostic storage (gocloud.dev/blob).
+    - Document the /capabilities endpoint and why it exists (MCP hardcoded-caveat gap).
+    - Document the upstream graft map (webapp contract/blob; `scorecard serve`) and
+      the reconciliation question with the existing `scorecard serve`.
