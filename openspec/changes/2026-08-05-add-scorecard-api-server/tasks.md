@@ -96,12 +96,14 @@
       tests per package; the live-engine and scorecard-mcp-compat scenarios are exercised via the fake seam and
       deferred to group 8 for a real run
 - [x] 9.2 Run `golangci-lint` (0 issues) and `go test ./...` clean — plus `actionlint` and `zizmor` on workflows
-- [ ] 9.3 Manual smoke test: `curl` each route against a local `fileblob` bucket and MinIO — DEFERRED (needs a running
-      server; the fileblob cache-HIT path is achievable offline, the MISS path needs network)
+- [ ] 9.3 Smoke test each route against a local `fileblob` bucket and MinIO — PARTIAL: done offline via an end-to-end
+      integration test (`internal/httpapi/integration_test.go`: real HTTP -> orchestrator -> fileblob, covering HIT,
+      MISS->scan->persist->re-HIT, badge, capabilities, health). Remaining: a live MISS against a real scan and the
+      MinIO backend (needs network/token/Docker) — folded into group 8
 
 ## 10. Documentation
 
-- [ ] 10.1 README: what it is, the contract, cloud-agnostic backends (S3/MinIO/Azure/GCS/file), env config, and the
+- [x] 10.1 README: what it is, the contract, cloud-agnostic backends (S3/MinIO/Azure/GCS/file), env config, and the
       `scorecard-mcp --base-url` example; state the hybrid (cached+live) behavior and caveats
 - [ ] 10.2 Document the upstream graft map and the `scorecard serve` reconciliation status in `docs/`
 
