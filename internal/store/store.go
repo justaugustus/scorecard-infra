@@ -32,6 +32,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 
 	"gocloud.dev/blob"
 	// Blank-import every backend driver so a bucket URL alone selects the
@@ -41,7 +42,18 @@ import (
 	_ "gocloud.dev/blob/gcsblob"
 	_ "gocloud.dev/blob/memblob"
 	_ "gocloud.dev/blob/s3blob"
+	"gocloud.dev/gcerrors"
+
+	"github.com/uwu-tools/scorecard-api/internal/model"
 )
+
+// resultsObject is the fixed object filename for a stored result, matching the
+// scorecard-webapp key contract.
+const resultsObject = "results.json"
+
+// contentTypeJSON is set on every stored object so backends and CDNs serve the
+// canonical JSON2 body with the correct media type.
+const contentTypeJSON = "application/json"
 
 // ErrNotFound is returned when no stored result exists for the requested key.
 // The orchestrator treats it as a cache miss (design D2), not a fatal error.
@@ -77,5 +89,61 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// TODO(group 3): key construction, Get/Put of JSON2 bodies, latest-pointer
-// write-back on scan, and the not-found sentinel on miss.
+// Key returns the object key for a repository reference and optional commit.
+// An empty commit yields the mutable "latest" key; a non-empty commit yields the
+// immutable commit-pinned key. Segments are joined with "/" regardless of OS.
+func Key(ref model.RepoRef, commit string) string {
+	if commit == "" {
+		return path.Join(ref.Host, ref.Org, ref.Repo, resultsObject)
+	}
+	return path.Join(ref.Host, ref.Org, ref.Repo, commit, resultsObject)
+}
+
+// Get returns the stored JSON2 body for ref at commit (empty commit = latest).
+// It returns ErrNotFound when no object exists at the key, distinct from an I/O
+// error.
+func (s *Store) Get(ctx context.Context, ref model.RepoRef, commit string) ([]byte, error) {
+	key := Key(ref, commit)
+	body, err := s.bucket.ReadAll(ctx, key)
+	if err != nil {
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("store: reading %q: %w", key, err)
+	}
+	return body, nil
+}
+
+// Put writes body to the key for ref at commit (empty commit = latest). This
+// writes exactly one object; use PutLatestAndCommit to populate both the latest
+// pointer and the commit-pinned object from one scan.
+func (s *Store) Put(ctx context.Context, ref model.RepoRef, commit string, body []byte) error {
+	return s.write(ctx, Key(ref, commit), body)
+}
+
+// PutLatestAndCommit writes body to both the commit-pinned key and the latest
+// pointer. The orchestrator uses this on a default-branch (latest) scan, where
+// the resolved commit is also HEAD, so both keys should reflect it. commit must
+// be non-empty.
+func (s *Store) PutLatestAndCommit(ctx context.Context, ref model.RepoRef, commit string, body []byte) error {
+	if commit == "" {
+		return fmt.Errorf("%w: commit is empty", errEmptyCommit)
+	}
+	if err := s.write(ctx, Key(ref, commit), body); err != nil {
+		return err
+	}
+	return s.write(ctx, Key(ref, ""), body)
+}
+
+// errEmptyCommit is returned when a commit-pinned write is requested without a
+// commit.
+var errEmptyCommit = errors.New("store: commit required")
+
+// write stores body at key with the JSON content type.
+func (s *Store) write(ctx context.Context, key string, body []byte) error {
+	opts := &blob.WriterOptions{ContentType: contentTypeJSON}
+	if err := s.bucket.WriteAll(ctx, key, body, opts); err != nil {
+		return fmt.Errorf("store: writing %q: %w", key, err)
+	}
+	return nil
+}
