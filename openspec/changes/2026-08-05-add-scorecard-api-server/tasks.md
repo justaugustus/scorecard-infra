@@ -81,6 +81,9 @@
 
 ## 8. Acceptance: scorecard-mcp as the client
 
+> DEFERRED — requires the `scorecard-mcp` client (not accessible in this environment)
+> plus network + an SCM token for a live scan. To be completed once those are available.
+
 - [ ] 8.1 Integration test: run the server on `fileblob`; `scorecard-mcp --base-url http://localhost:PORT get_repo_score`
       returns a correct result on a cache HIT
 - [ ] 8.2 Integration test: cache MISS triggers a live `scorecard.Run()` that populates the bucket and serves it;
@@ -89,9 +92,12 @@
 
 ## 9. Testing and verification
 
-- [ ] 9.1 Map each spec scenario (api-server, result-store, result-cache, live-scan) to a test case
-- [ ] 9.2 Run `golangci-lint` (0 issues) and `go test ./...` clean
-- [ ] 9.3 Manual smoke test: `curl` each route against a local `fileblob` bucket and MinIO
+- [x] 9.1 Map each spec scenario (api-server, result-store, result-cache, live-scan) to a test case — covered by unit
+      tests per package; the live-engine and scorecard-mcp-compat scenarios are exercised via the fake seam and
+      deferred to group 8 for a real run
+- [x] 9.2 Run `golangci-lint` (0 issues) and `go test ./...` clean — plus `actionlint` and `zizmor` on workflows
+- [ ] 9.3 Manual smoke test: `curl` each route against a local `fileblob` bucket and MinIO — DEFERRED (needs a running
+      server; the fileblob cache-HIT path is achievable offline, the MISS path needs network)
 
 ## 10. Documentation
 
@@ -101,6 +107,8 @@
 
 ## 11. Change closeout
 
-- [ ] 11.1 `openspec validate add-scorecard-api-server --strict` passes against the implemented behavior
-- [ ] 11.2 Update `AGENTS.md`/README if any convention changed during implementation
-- [ ] 11.3 Archive the OpenSpec change once implemented and merged
+- [x] 11.1 `openspec validate 2026-08-05-add-scorecard-api-server --strict` passes against the implemented behavior
+- [x] 11.2 Update `AGENTS.md`/README if any convention changed during implementation — AGENTS.md updated with the
+      lint conventions that emerged and a status note (README is group 10, not yet written)
+- [ ] 11.3 Archive the OpenSpec change once implemented and merged — DEFERRED until group 8 acceptance is done and the
+      change is merged to `main`

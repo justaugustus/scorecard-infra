@@ -12,6 +12,12 @@ pre-computed results from any object store and generates them live on demand. It
 speaks the `ossf/scorecard-webapp` GET contract so it is a drop-in `--base-url`
 target for `uwu-tools/scorecard-mcp`.
 
+**Status:** the v0 core (OpenSpec groups 0–7) is implemented and tested — model,
+store, scan/tokens, orchestrator, HTTP contract, config, and the wired binary.
+Deferred: acceptance against `scorecard-mcp` (group 8, needs the client + network
++ an SCM token), the README (group 10), and a live smoke test (needs network).
+See the OpenSpec change's `tasks.md` for the authoritative status.
+
 ## Where to start
 
 1. Read [`docs/bootstrap.md`](docs/bootstrap.md).
@@ -47,6 +53,27 @@ Everything must be clean before a change is considered done.
 **Toolchain note:** match the Scorecard Go toolchain version (see `go.mod`). If
 builds fail with a Go tool version mismatch across many stdlib packages, a stray
 `GOROOT` is the cause — prefix commands with `env -u GOROOT`.
+
+Configuration is env-driven; `internal/config` documents every variable and its
+default. Workflows are also linted with `actionlint` and `zizmor`.
+
+### Linting conventions (aligned with ossf/scorecard's strict config)
+
+The `.golangci.yml` is a near-verbatim port of Scorecard's. A few `//nolint`
+patterns are intentional and should be preserved when editing:
+
+- `wrapcheck` ignores this module's own packages: their errors are already
+  contextualized at the source (`store: …`, `tokens: …`), so re-wrapping across
+  our own boundaries would only double the prefix. Third-party errors must still
+  be wrapped with `%w`.
+- `//nolint:govet` (fieldalignment) on the JSON2 mirror types (`model.Result`,
+  `model.Check`) keeps canonical wire field order, and on lifetime singletons
+  (`scan.EngineScanner`) where field order documents client reuse. Elsewhere,
+  order fields for pointer packing instead of suppressing.
+- `//nolint:contextcheck` where a background scan or graceful shutdown
+  intentionally uses a fresh context that must outlive the request.
+- Define package-level sentinel errors (`err113`) rather than returning dynamic
+  `errors.New`/`fmt.Errorf` values inline.
 
 ## Cloud-agnostic rules (non-negotiable)
 

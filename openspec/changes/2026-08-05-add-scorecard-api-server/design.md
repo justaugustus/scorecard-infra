@@ -256,7 +256,14 @@ Greenfield — no data migration. Phased:
 - ~~Whether to import `scorecard-webapp`'s generated models directly or vendor
   `openapi.yaml` and regenerate.~~ **Resolved** (task 0.2): neither — lean in-repo JSON2
   mirror, see D13.
-- Default `latest` TTL and default request/scan timeout values.
-- `/capabilities` payload shape (align with a future `scorecard-mcp` reader).
-- Badge rendering: reuse the webapp renderer vs. minimal in-repo implementation.
-- Canonical result host header/metadata to record as the `source_url` for attribution.
+- ~~Default `latest` TTL and default request/scan timeout values.~~ **Resolved**
+  (group 7): `internal/config` defaults — latest TTL 24h, sync timeout 20s, scan
+  timeout 5m, retry-after 10s, concurrency 4; all env-overridable.
+- ~~`/capabilities` payload shape (align with a future `scorecard-mcp` reader).~~
+  **Resolved** (group 6): `httpapi.Capabilities` (`mode`, `checks`,
+  `requires_opt_in`, `latest_ttl_seconds`, `caveats`).
+- ~~Badge rendering: reuse the webapp renderer vs. minimal in-repo implementation.~~
+  **Resolved** (group 6): minimal self-contained in-repo SVG (avoids a heavy
+  dependency for v0); a richer renderer can graft from the webapp later.
+- Canonical result host header/metadata to record as the `source_url` for
+  attribution — still open; deferred (not required for v0).
