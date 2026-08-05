@@ -81,14 +81,21 @@
 
 ## 8. Acceptance: scorecard-mcp as the client
 
-> DEFERRED — requires the `scorecard-mcp` client (not accessible in this environment)
-> plus network + an SCM token for a live scan. To be completed once those are available.
+> EXECUTED 2026-08-05 on `fileblob` with a real `scorecard-mcp` binary (stdio,
+> `-base-url`) and a `gh` SCM token — HIT and live-MISS legs pass. See
+> `docs/acceptance.md` for the reproducible runbook and observed results. The
+> MinIO/S3 repeat is still outstanding (no Docker); see 9.3.
 
-- [ ] 8.1 Integration test: run the server on `fileblob`; `scorecard-mcp --base-url http://localhost:PORT get_repo_score`
-      returns a correct result on a cache HIT
-- [ ] 8.2 Integration test: cache MISS triggers a live `scorecard.Run()` that populates the bucket and serves it;
-      repeat over MinIO
-- [ ] 8.3 Verify `scorecard-mcp` receives correct provenance/caveats (manually, pending the MCP `/capabilities` reader)
+- [x] 8.1 Integration test: run the server on `fileblob`; `scorecard-mcp -base-url http://localhost:PORT get_repo_score`
+      returns a correct result on a cache HIT — verified via the real MCP binary over stdio (`get_repo_score
+      ossf/scorecard` → score 8.9, 18 checks, served from the bucket)
+- [x] 8.2 Integration test: cache MISS triggers a live `scorecard.Run()` that populates the bucket and serves it —
+      verified (`uwu-tools/scorecard-mcp` scanned in ~10s; both `latest` + commit-pinned keys written; re-request a
+      ~30ms HIT; MCP consumes the live result). MinIO repeat deferred to 9.3 (no Docker)
+- [x] 8.3 Verify `scorecard-mcp` receives correct provenance/caveats (manually, pending the MCP `/capabilities` reader)
+      — VERIFIED: server side is correct (`/capabilities` = `cached+live`, `requires_opt_in:false`); the MCP still
+      hardcodes public-cache caveats + `source=cached-rest`, so it misreports provenance. The `/capabilities`-reader
+      fix is the D7 follow-up in the `scorecard-mcp` repo (documented in `docs/acceptance.md`)
 
 ## 9. Testing and verification
 
@@ -96,10 +103,10 @@
       tests per package; the live-engine and scorecard-mcp-compat scenarios are exercised via the fake seam and
       deferred to group 8 for a real run
 - [x] 9.2 Run `golangci-lint` (0 issues) and `go test ./...` clean — plus `actionlint` and `zizmor` on workflows
-- [ ] 9.3 Smoke test each route against a local `fileblob` bucket and MinIO — PARTIAL: done offline via an end-to-end
-      integration test (`internal/httpapi/integration_test.go`: real HTTP -> orchestrator -> fileblob, covering HIT,
-      MISS->scan->persist->re-HIT, badge, capabilities, health). Remaining: a live MISS against a real scan and the
-      MinIO backend (needs network/token/Docker) — folded into group 8
+- [ ] 9.3 Smoke test each route against a local `fileblob` bucket and MinIO — PARTIAL: the `fileblob` leg is now fully
+      covered, both offline (`internal/httpapi/integration_test.go`: real HTTP -> orchestrator -> fileblob) and live
+      (group 8, 2026-08-05: real MCP client, live MISS scan, HIT, badge, capabilities, health — see
+      `docs/acceptance.md`). Remaining: the **MinIO/S3 backend** (needs Docker), which was unavailable at execution
 
 ## 10. Documentation
 
