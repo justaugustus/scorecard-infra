@@ -15,8 +15,12 @@ The MinIO/S3 leg is deferred (needs Docker); see the bottom of this file.
 
 - Go toolchain matching `go.mod` (1.25.x). Prefix Go commands with
   `env -u GOROOT` if a stray `GOROOT` breaks stdlib builds (see `AGENTS.md`).
-- Network egress: startup eagerly fetches the OSS-Fuzz `status.json`
-  (`clients/ossfuzz`), and a live scan calls the GitHub API.
+- Network egress for the live-scan leg: a live scan calls the GitHub API and,
+  on first use, fetches the OSS-Fuzz `status.json` (`clients/ossfuzz`). The
+  server itself starts offline — the OSS-Fuzz client is created lazily
+  (`ossfuzz.CreateOSSFuzzClient`, not the eager variant), so it does no
+  network I/O until a scan actually runs, and cache HITs serve without any
+  network access.
 - An SCM token for the live-scan leg. Any of these works; the server reads a
   comma-separated pool and falls back to `GITHUB_AUTH_TOKEN`:
 

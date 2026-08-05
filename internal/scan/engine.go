@@ -75,10 +75,10 @@ type EngineConfig struct {
 // Ensure EngineScanner satisfies the Scanner interface.
 var _ Scanner = (*EngineScanner)(nil)
 
-// NewEngineScanner constructs a live scanner, eagerly creating and reusing the
-// auxiliary clients. It reads the check documentation once. The OSS-Fuzz client
-// loads its status data eagerly, so this performs network I/O and should be
-// called at server startup.
+// NewEngineScanner constructs a live scanner, creating and reusing the
+// auxiliary clients. It reads the check documentation once. The OSS-Fuzz
+// client fetches its status data lazily on first use (during a scan), not
+// here, so this performs no network I/O and the server can start offline.
 func NewEngineScanner(cfg EngineConfig) (*EngineScanner, error) {
 	level := sclog.ParseLevel(cfg.LogLevel)
 	logger := sclog.NewLogger(level)
@@ -88,10 +88,7 @@ func NewEngineScanner(cfg EngineConfig) (*EngineScanner, error) {
 		return nil, fmt.Errorf("scan: reading check docs: %w", err)
 	}
 
-	ossFuzz, err := ossfuzz.CreateOSSFuzzClientEager(ossfuzz.StatusURL)
-	if err != nil {
-		return nil, fmt.Errorf("scan: creating OSS-Fuzz client: %w", err)
-	}
+	ossFuzz := ossfuzz.CreateOSSFuzzClient(ossfuzz.StatusURL)
 
 	limiter := cfg.Limiter
 	if limiter == nil {
