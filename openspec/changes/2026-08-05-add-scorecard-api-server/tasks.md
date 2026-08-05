@@ -62,13 +62,15 @@
 
 ## 6. api-server (HTTP)
 
-- [ ] 6.1 Implement `GET /projects/{host}/{org}/{repo}` (+ optional `?commit=`) returning JSON2 via the orchestrator
-- [ ] 6.2 Implement `GET /projects/{host}/{org}/{repo}/badge` (SVG)
-- [ ] 6.3 Implement `GET /capabilities` advertising source/mode, check set, opt-in=false, freshness policy, caveats
-- [ ] 6.4 Implement `GET /health` and `GET /readyz`
-- [ ] 6.5 Error handling: unknown/never-scanned + scan failure → clear status codes and messages; responsible framing
-- [ ] 6.6 Graceful shutdown on SIGINT/SIGTERM; listen port + timeouts from config
-- [ ] 6.7 Handler tests for each route (hit, miss→live, commit-pinned, badge, capabilities, health)
+- [x] 6.1 Implement `GET /projects/{host}/{org}/{repo}` (+ optional `?commit=`) returning JSON2 via the orchestrator
+- [x] 6.2 Implement `GET /projects/{host}/{org}/{repo}/badge` (SVG)
+- [x] 6.3 Implement `GET /capabilities` advertising source/mode, check set, opt-in=false, freshness policy, caveats
+- [x] 6.4 Implement `GET /health` and `GET /readyz` (readiness probe injectable)
+- [x] 6.5 Error handling: malformed→400, skipped/unreachable→404, scan failure→502, not-ready→202; responsible framing
+- [x] 6.6 Graceful shutdown via `ListenAndServe` (context-driven; SIGINT/SIGTERM→ctx wiring in main, group 7); listen
+      port + timeouts from config
+- [x] 6.7 Handler tests for each route (ready, malformed, bad commit, skip→404, fail→502, 202, badge, capabilities,
+      health, readyz, method-not-allowed, graceful shutdown)
 
 ## 7. Configuration
 
