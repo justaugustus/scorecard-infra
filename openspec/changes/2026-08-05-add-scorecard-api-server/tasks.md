@@ -2,10 +2,13 @@
 
 ## 0. Pre-work / decisions
 
-- [ ] 0.1 Verify PR #4665's true merge status in `ossf/scorecard`; decide whether to reuse/extend `scorecard serve`'s
-      handler wiring or implement fresh and back-port (design D11)
-- [ ] 0.2 Decide: import `scorecard-webapp` generated models directly vs. vendor `openapi.yaml` and regenerate (design)
-- [ ] 0.3 Confirm the blob key + JSON2 body contract against a live `scorecard-webapp` object (design D4)
+- [x] 0.1 Verify PR #4665's true merge status in `ossf/scorecard`; decide whether to reuse/extend `scorecard serve`'s
+      handler wiring or implement fresh and back-port (design D11) — MERGED 2025-09-10, reverted to stdlib `net/http`;
+      decision: implement fresh `/projects` handlers on `net/http`, graft into `serve` later (design D11)
+- [x] 0.2 Decide: import `scorecard-webapp` generated models directly vs. vendor `openapi.yaml` and regenerate (design)
+      — neither; define a lean `internal/model` JSON2 mirror, format live via `pkg/scorecard.AsJSON2()` (design D13)
+- [x] 0.3 Confirm the blob key + JSON2 body contract against a live `scorecard-webapp` object (design D4) — confirmed;
+      `metadata` is `omitempty`, `host` includes the TLD (design D4)
 
 ## 1. Project scaffolding
 

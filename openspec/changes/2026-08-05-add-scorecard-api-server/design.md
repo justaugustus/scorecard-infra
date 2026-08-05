@@ -105,6 +105,18 @@ score, checks[], metadata}`). Matching this means the same objects are servable 
 `scorecard-webapp` and readable by `scorecard-mcp` unchanged, and any conforming
 producer can populate the cache.
 
+**CONFIRMED (2026-08-05, task 0.3)** against `scorecard-webapp/app/server/get_results.go`
+and a live `api.scorecard.dev` object:
+
+- Keys are built with `filepath.Join(host, org, repo[, commit], "results.json")`; `host`
+  **includes the TLD** (e.g. `github.com`, matching `repo.name = github.com/ossf/scorecard`).
+- Wire body per check: `{name, score, reason, details ([]string|null), documentation{short,url}}`.
+- **`metadata` is omitted when empty** in the live wire format → model it `omitempty`
+  (`details` likewise nullable). `date` is RFC3339.
+- The webapp reads a **primary + fallback** bucket (`gs://ossf-scorecard-results` +
+  `…-cron-results`); v0 here uses a **single configured bucket URL** — a fallback URL is
+  deferred as internal deployment glue.
+
 ### D5 — Freshness policy and sync-vs-async responses
 
 - **Commit-pinned** (`?commit=SHA`) results are **immutable** → cache forever; a hit
@@ -170,6 +182,35 @@ reuse/extend `scorecard serve`'s handler wiring here, or implement fresh and
 back-port? First **verify PR #4665's true merge status** (main still uses `net/http`,
 so treat its chi/REST refactor as unlanded).
 
+**RESOLVED (2026-08-05, task 0.1):** PR #4665 **merged 2025-09-10**. It refactored
+`scorecard serve` into a REST/HTTP interface but the author **reverted chi back to the
+stdlib `net/http`** (Go 1.22 `ServeMux` method+pattern routing). So `main`'s `serve`
+today is: `net/http`; `GET/POST /` with `?repo=` (and package-manager params); `/health`;
+per-request options (race-safe); `scorecard.Run` + `AsJSON2()`; aggregate-score fix and
+`show_annotations` — but **still no store, no cloud dependency, and it does not speak the
+`/projects/{host}/{org}/{repo}` contract**. **Decision:** implement fresh `/projects`
+handlers in this repo on stdlib **`net/http` with Go 1.22 routing** (matching `serve`'s
+choice and config.yaml's "net/http; chi optional" — chi is explicitly not needed for
+parity), reusing `serve`'s proven patterns (per-request options to avoid data races;
+`AsJSON2()` for the body). Graft the `/projects` contract + optional blob cache back into
+`scorecard serve` later (the endgame in this D11).
+
+### D13 — Result model: lean in-repo JSON2 mirror (not the webapp's generated models)
+
+`scorecard-webapp` ships **go-swagger–generated** models under
+`app/generated/{client,models,restapi}` (from an OpenAPI 2.0 `openapi.yaml`), which pull
+in the full go-openapi runtime (`strfmt`/`validate`/`errors`/`runtime`). The canonical
+wire body, however, is produced by `pkg/scorecard`'s `AsJSON2()` — exactly what `serve`
+and the cron producer already emit. **Decision (task 0.2):** do **not** import the webapp
+generated models, and do **not** vendor + regenerate `openapi.yaml`. Instead define a lean
+`internal/model` that mirrors Scorecard **JSON2** for the fields we must introspect
+(`score` → badge; `repo.commit` + `date` → freshness/provenance) and for unmarshaling
+cached bytes; for **live** results, format via `pkg/scorecard.AsJSON2()` directly and pass
+bytes through unchanged on cache reads. Rationale: avoids dragging a swagger runtime and a
+codegen build step into what is essentially a passthrough; keeps the module lean; matches
+tasks 2.1/2.2. _If strict wire-parity ever needs asserting, add the webapp models as a
+**test-only** dependency rather than a runtime one._
+
 ### D12 — Responsible-AI framing
 
 Every response declares `source` (`cached` vs `live`), freshness, and completeness.
@@ -209,10 +250,12 @@ Greenfield — no data migration. Phased:
 
 ## Open Questions
 
-- Verify PR #4665 merge status and decide the `scorecard serve` reuse/extend approach
-  (D11).
-- Whether to import `scorecard-webapp`'s generated models directly or vendor
-  `openapi.yaml` and regenerate.
+- ~~Verify PR #4665 merge status and decide the `scorecard serve` reuse/extend approach
+  (D11).~~ **Resolved** (task 0.1): merged as `net/http`; implement fresh `/projects`
+  handlers, graft into `serve` later — see D11.
+- ~~Whether to import `scorecard-webapp`'s generated models directly or vendor
+  `openapi.yaml` and regenerate.~~ **Resolved** (task 0.2): neither — lean in-repo JSON2
+  mirror, see D13.
 - Default `latest` TTL and default request/scan timeout values.
 - `/capabilities` payload shape (align with a future `scorecard-mcp` reader).
 - Badge rendering: reuse the webapp renderer vs. minimal in-repo implementation.
