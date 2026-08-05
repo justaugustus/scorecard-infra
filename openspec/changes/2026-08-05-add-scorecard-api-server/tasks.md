@@ -52,12 +52,13 @@
 
 ## 5. result-cache (orchestrator)
 
-- [ ] 5.1 Implement `GetOrProduce(ref, commit)`: store lookup → freshness check → serve, else scan+persist+serve
-- [ ] 5.2 Freshness policy: commit-pinned = immutable; `latest` = TTL (from config)
-- [ ] 5.3 Single-flight de-duplication so concurrent identical requests trigger exactly one scan
-- [ ] 5.4 Sync-with-timeout vs. async: return `200` within the timeout, else `202` + `Retry-After`
-- [ ] 5.5 Attach provenance (source, commit SHA, date, version) and completeness to every result
-- [ ] 5.6 Unit tests: hit-fresh, miss→scan, stale→refresh, concurrent coalescing, timeout→202
+- [x] 5.1 Implement `GetOrProduce(ref, commit)`: store lookup → freshness check → serve, else scan+persist+serve
+- [x] 5.2 Freshness policy: commit-pinned = immutable; `latest` = TTL (from config)
+- [x] 5.3 Single-flight de-duplication so concurrent identical requests trigger exactly one scan (`singleflight.DoChan`)
+- [x] 5.4 Sync-with-timeout vs. async: return ready (`200`) within the timeout, else not-ready (`202`) + `RetryAfter`
+- [x] 5.5 Attach provenance (source, commit SHA, date, version) and completeness to every result
+- [x] 5.6 Unit tests: hit-fresh, miss→scan, stale→refresh, commit immutability, concurrent coalescing, timeout→202,
+      skip propagation, and -1 preservation
 
 ## 6. api-server (HTTP)
 
