@@ -189,7 +189,9 @@ internal/
 
 This is an incubator, not a permanent fork. The durable pieces are structured to
 graft upstream over time — the contract + blob read path into `ossf/scorecard-webapp`,
-and the live scan + HTTP surface into `ossf/scorecard`'s `scorecard serve`.
+and the live scan + HTTP surface into `ossf/scorecard`'s `scorecard serve`. See
+[`docs/upstream-graft.md`](docs/upstream-graft.md) for the per-component graft map
+and the `scorecard serve` reconciliation status.
 
 ## License
 

@@ -104,4 +104,6 @@ freshness, and completeness. A score of `-1` is inconclusive, not failing.
 
 This is an incubator, not a permanent fork. Structure code so durable pieces graft
 upstream cleanly (design **D11**): the contract + blob read path → `ossf/scorecard-webapp`;
-the live scan + HTTP surface → `ossf/scorecard`'s `scorecard serve`.
+the live scan + HTTP surface → `ossf/scorecard`'s `scorecard serve`. The full
+per-component graft map and the `scorecard serve` reconciliation status live in
+[`docs/upstream-graft.md`](docs/upstream-graft.md).

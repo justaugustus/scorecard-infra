@@ -105,7 +105,8 @@
 
 - [x] 10.1 README: what it is, the contract, cloud-agnostic backends (S3/MinIO/Azure/GCS/file), env config, and the
       `scorecard-mcp --base-url` example; state the hybrid (cached+live) behavior and caveats
-- [ ] 10.2 Document the upstream graft map and the `scorecard serve` reconciliation status in `docs/`
+- [x] 10.2 Document the upstream graft map and the `scorecard serve` reconciliation status in `docs/` — added
+      `docs/upstream-graft.md` (per-component graft map + D11/#4665 reconciliation); README/AGENTS link to it
 
 ## 11. Change closeout
 
