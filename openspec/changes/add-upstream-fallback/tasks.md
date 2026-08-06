@@ -2,10 +2,12 @@
 
 ## 0. Pre-work / decisions
 
-- [ ] 0.1 Confirm `api.scorecard.dev` serves the `/projects/{host}/{org}/{repo}`
+- [x] 0.1 Confirm `api.scorecard.dev` serves the `/projects/{host}/{org}/{repo}`
       GET contract as canonical JSON2, and the status for an unknown/opted-out repo
-      (expect 404 = miss) — PENDING a live check; implemented to the documented
-      contract (design F8), exercised against an httptest stub
+      — VERIFIED live 2026-08-06: `ossf/scorecard` → 200 JSON2 (RFC3339 date,
+      `repo.commit`, `checks[]`); a nonexistent repo → 404. Note the result
+      *includes* Dependency-Update-Tool, so the "omitted checks" list is unreliable
+      — reinforces F4 (no completeness penalty for omissions)
 - [x] 0.2 Confirm blob metadata is available for the origin tag — verified for
       `memblob` and `fileblob` via store tests; S3 uses the same gocloud metadata
 
@@ -59,8 +61,15 @@
 - [x] 7.1 Map each spec scenario (upstream-fallback, result-cache, result-store,
       api-server) to a test case
 - [x] 7.2 `golangci-lint` and `go test -race ./...` clean
-- [ ] 7.3 Live check against `api.scorecard.dev` via `scorecard-mcp` — PENDING (not
-      run in this session)
+- [x] 7.3 Live check against `api.scorecard.dev` — VERIFIED live 2026-08-06 by
+      running the server with `SCORECARD_FALLBACK_URL=https://api.scorecard.dev`
+      (HTTP-level via curl, which also checks the provenance headers): fetch-first
+      served `ossf/scorecard` as `X-Scorecard-Source: upstream` with the upstream's
+      own generated-at date and `Complete: false`, backfilled it (on-disk `.attrs`
+      shows `origin: upstream`), and the 2nd request served from the store in ~2.5ms
+      still as `upstream`; `/capabilities` reported `cached+upstream+live` with the
+      caveats; a nonexistent repo missed (404) and fell through to a scan, and the
+      miss was not persisted
 
 ## 8. Documentation
 
