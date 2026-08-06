@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/uwu-tools/scorecard-api/internal/config"
+	"github.com/uwu-tools/scorecard-api/internal/fallback"
 	"github.com/uwu-tools/scorecard-api/internal/flags"
 	"github.com/uwu-tools/scorecard-api/internal/httpapi"
 	"github.com/uwu-tools/scorecard-api/internal/orchestrator"
@@ -63,10 +64,10 @@ func run() error {
 	slog.SetDefault(logger)
 
 	// Initialize the feature-flag provider at startup (design FF2/FF7): this
-	// validates SCORECARD_FLAGS_PROVIDER and establishes the in-process,
-	// env-seeded provider, failing fast on a bad value. No capability reads flags
-	// yet, so the client is discarded here; the first consumer will capture it.
-	if _, err := flags.New(os.Getenv, flags.Config{Provider: cfg.FlagsProvider}); err != nil {
+	// validates SCORECARD_FLAGS_PROVIDER and the fallback flags, establishing the
+	// in-process, env-seeded provider and failing fast on a bad value.
+	fl, err := flags.New(os.Getenv, flags.Config{Provider: cfg.FlagsProvider}, fallbackFlagDefs()...)
+	if err != nil {
 		return fmt.Errorf("initializing feature flags: %w", err)
 	}
 	logger.Info("feature flags initialized", "provider", cfg.FlagsProvider)
@@ -100,15 +101,25 @@ func run() error {
 	}
 	defer closeQuietly(logger, "scanner", scanner.Close)
 
-	orch := orchestrator.New(st, scanner, orchestrator.Config{
-		TTL:         cfg.LatestTTL,
-		SyncTimeout: cfg.SyncTimeout,
-		ScanTimeout: cfg.ScanTimeout,
-		RetryAfter:  cfg.RetryAfter,
-		Concurrency: cfg.Concurrency,
-	}, orchestrator.WithLogger(logger))
+	orchOpts := []orchestrator.Option{orchestrator.WithLogger(logger), orchestrator.WithFlags(fl)}
+	caps := httpapi.DefaultCapabilities(cfg.LatestTTL)
+	if cfg.FallbackURL != "" {
+		fb := fallback.NewClient(cfg.FallbackURL, cfg.FallbackTimeout, cfg.FallbackMaxAge)
+		orchOpts = append(orchOpts, orchestrator.WithFallback(fb))
+		caps = caps.WithFallback()
+		logger.Info("upstream fallback enabled", "url", cfg.FallbackURL, "max_age", cfg.FallbackMaxAge)
+	}
 
-	srv := httpapi.New(orch, httpapi.DefaultCapabilities(cfg.LatestTTL), httpapi.WithLogger(logger))
+	orch := orchestrator.New(st, scanner, orchestrator.Config{
+		TTL:            cfg.LatestTTL,
+		SyncTimeout:    cfg.SyncTimeout,
+		ScanTimeout:    cfg.ScanTimeout,
+		RetryAfter:     cfg.RetryAfter,
+		Concurrency:    cfg.Concurrency,
+		FallbackMaxAge: cfg.FallbackMaxAge,
+	}, orchOpts...)
+
+	srv := httpapi.New(orch, caps, httpapi.WithLogger(logger))
 
 	logger.Info("starting scorecard-api",
 		"version", version, "addr", cfg.ListenAddr, "bucket", cfg.BucketURL, "tokens", pool.Len())
@@ -117,6 +128,20 @@ func run() error {
 		Addr:            cfg.ListenAddr,
 		ShutdownTimeout: 10 * time.Second,
 	})
+}
+
+// fallbackFlagDefs declares the feature flags that gate the upstream fallback, so
+// the flags package validates their env overrides at startup. They are always
+// registered; the orchestrator ignores them when no fallback is configured.
+func fallbackFlagDefs() []flags.Definition {
+	return []flags.Definition{
+		{Key: orchestrator.FlagEnabled, Kind: flags.KindBool, Default: true},
+		{
+			Key: orchestrator.FlagMode, Kind: flags.KindString,
+			Default: orchestrator.ModeFetchFirst,
+			Allowed: []string{orchestrator.ModeFetchFirst, orchestrator.ModeSafetyNet},
+		},
+	}
 }
 
 // newLogger builds a JSON slog logger at the given level, defaulting to info.

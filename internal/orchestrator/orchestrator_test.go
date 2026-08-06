@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uwu-tools/scorecard-api/internal/fallback"
 	"github.com/uwu-tools/scorecard-api/internal/model"
 	"github.com/uwu-tools/scorecard-api/internal/scan"
 	"github.com/uwu-tools/scorecard-api/internal/store"
@@ -291,5 +292,256 @@ func TestInconclusiveScorePreserved(t *testing.T) {
 	}
 	if out.Provenance.Complete {
 		t.Error("Provenance.Complete = true, want false for an inconclusive check")
+	}
+}
+
+// fakeFallback is a controllable Fallback for tests.
+type fakeFallback struct {
+	err    error
+	result *scan.Result
+	mu     sync.Mutex
+	calls  int
+}
+
+func (f *fakeFallback) Fetch(_ context.Context, _ model.RepoRef) (*scan.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeFallback) Calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// fakeFlags is a static FlagSource for tests.
+type fakeFlags struct {
+	mode    string
+	enabled bool
+}
+
+func (f fakeFlags) Bool(_ context.Context, _ string, _ bool) bool { return f.enabled }
+
+func (f fakeFlags) String(_ context.Context, _, def string) string {
+	if f.mode == "" {
+		return def
+	}
+	return f.mode
+}
+
+// newOrchOpts is newOrch with extra options (e.g. a fallback or flag source).
+func newOrchOpts(t *testing.T, sc scan.Scanner, cfg Config, opts ...Option) *Orchestrator {
+	t.Helper()
+	st, err := store.Open(context.Background(), "mem://")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if cerr := st.Close(); cerr != nil {
+			t.Errorf("store.Close: %v", cerr)
+		}
+	})
+	all := append([]Option{WithClock(func() time.Time { return fixedNow })}, opts...)
+	return New(st, sc, cfg, all...)
+}
+
+// noScan fails the test if the scanner is called; used where the fallback or a
+// cache hit must serve without scanning.
+func noScan(t *testing.T) *scan.FakeScanner {
+	t.Helper()
+	return &scan.FakeScanner{ScanFunc: func(_ context.Context, _ model.RepoRef, _ string) (*scan.Result, error) {
+		t.Error("scanner called unexpectedly")
+		return nil, errors.New("unexpected scan")
+	}}
+}
+
+func liveScanner(commit string) *scan.FakeScanner {
+	return &scan.FakeScanner{ScanFunc: func(_ context.Context, _ model.RepoRef, _ string) (*scan.Result, error) {
+		return &scan.Result{JSON2: json2(fixedNow, commit, 8.0), ResolvedCommit: commit, Complete: true}, nil
+	}}
+}
+
+func TestFetchFirstServesAndBackfills(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{result: &scan.Result{
+		JSON2: json2(fixedNow, "up-sha", 7.5), ResolvedCommit: "up-sha", Complete: true,
+	}}
+	fake := noScan(t) // fetch-first hit must not scan
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, SyncTimeout: time.Second}, WithFallback(fb))
+	ref := testRef(t)
+
+	out, err := o.GetOrProduce(context.Background(), ref, "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceUpstream || out.Provenance.Commit != "up-sha" {
+		t.Errorf("outcome = %+v, want upstream up-sha", out.Provenance)
+	}
+	if fb.Calls() != 1 {
+		t.Errorf("fallback called %d times, want 1", fb.Calls())
+	}
+	// The upstream result was backfilled tagged upstream.
+	_, origin, gerr := o.store.GetWithOrigin(context.Background(), ref, "")
+	if gerr != nil || origin != store.OriginUpstream {
+		t.Errorf("backfill origin = %q, %v; want upstream", origin, gerr)
+	}
+}
+
+func TestFetchFirstMissThenScans(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{err: fallback.ErrFallbackMiss}
+	fake := liveScanner("live-sha")
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, SyncTimeout: time.Second}, WithFallback(fb))
+
+	out, err := o.GetOrProduce(context.Background(), testRef(t), "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceLive {
+		t.Errorf("source = %q, want live after an upstream miss", out.Provenance.Source)
+	}
+	if fb.Calls() != 1 || fake.Calls() != 1 {
+		t.Errorf("fallback=%d scanner=%d, want 1 and 1", fb.Calls(), fake.Calls())
+	}
+}
+
+func TestSafetyNetScanSuccessSkipsUpstream(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{result: &scan.Result{JSON2: json2(fixedNow, "up-sha", 7.5), ResolvedCommit: "up-sha"}}
+	fake := liveScanner("live-sha")
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, SyncTimeout: time.Second},
+		WithFallback(fb), WithFlags(fakeFlags{enabled: true, mode: ModeSafetyNet}))
+
+	out, err := o.GetOrProduce(context.Background(), testRef(t), "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceLive {
+		t.Errorf("source = %q, want live", out.Provenance.Source)
+	}
+	if fb.Calls() != 0 {
+		t.Errorf("fallback called %d times on a successful scan, want 0", fb.Calls())
+	}
+}
+
+func TestSafetyNetSkipRescuedByUpstream(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{result: &scan.Result{
+		JSON2: json2(fixedNow, "up-sha", 7.5), ResolvedCommit: "up-sha", Complete: true,
+	}}
+	fake := &scan.FakeScanner{ScanFunc: func(_ context.Context, _ model.RepoRef, _ string) (*scan.Result, error) {
+		return nil, scan.ErrSkipped
+	}}
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, SyncTimeout: time.Second},
+		WithFallback(fb), WithFlags(fakeFlags{enabled: true, mode: ModeSafetyNet}))
+
+	out, err := o.GetOrProduce(context.Background(), testRef(t), "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceUpstream {
+		t.Errorf("source = %q, want upstream (rescued a skipped scan)", out.Provenance.Source)
+	}
+	if fb.Calls() != 1 {
+		t.Errorf("fallback called %d times, want 1", fb.Calls())
+	}
+}
+
+func TestCommitPinnedBypassesFallback(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{result: &scan.Result{JSON2: json2(fixedNow, "up-sha", 7.5), ResolvedCommit: "up-sha"}}
+	const commit = "2418d6d95e928102e1f3f8d6e7b92f4f3c78631f"
+	fake := liveScanner(commit)
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, SyncTimeout: time.Second}, WithFallback(fb))
+
+	out, err := o.GetOrProduce(context.Background(), testRef(t), commit)
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceLive {
+		t.Errorf("source = %q, want live (commit-pinned scans)", out.Provenance.Source)
+	}
+	if fb.Calls() != 0 {
+		t.Errorf("fallback called %d times for a commit-pinned request, want 0", fb.Calls())
+	}
+}
+
+func TestKillSwitchDisablesFallback(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{result: &scan.Result{JSON2: json2(fixedNow, "up-sha", 7.5), ResolvedCommit: "up-sha"}}
+	fake := liveScanner("live-sha")
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, SyncTimeout: time.Second},
+		WithFallback(fb), WithFlags(fakeFlags{enabled: false}))
+
+	out, err := o.GetOrProduce(context.Background(), testRef(t), "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceLive {
+		t.Errorf("source = %q, want live (fallback disabled)", out.Provenance.Source)
+	}
+	if fb.Calls() != 0 {
+		t.Errorf("fallback called %d times while disabled, want 0", fb.Calls())
+	}
+}
+
+func TestUpstreamEntryFreshByMaxAge(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{}
+	fake := noScan(t)
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, FallbackMaxAge: 24 * time.Hour, SyncTimeout: time.Second},
+		WithFallback(fb))
+	ref := testRef(t)
+	// An upstream entry two hours old: stale for a 1h local TTL, but fresh under
+	// the 24h fallback max-age, so it is served without a fetch or scan.
+	if err := o.store.PutWithOrigin(context.Background(), ref, "",
+		json2(fixedNow.Add(-2*time.Hour), "up-sha", 7.0), store.OriginUpstream); err != nil {
+		t.Fatalf("seed upstream: %v", err)
+	}
+
+	out, err := o.GetOrProduce(context.Background(), ref, "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Source != model.SourceUpstream {
+		t.Errorf("source = %q, want upstream", out.Provenance.Source)
+	}
+	if fb.Calls() != 0 {
+		t.Errorf("fallback called %d times for a fresh upstream entry, want 0", fb.Calls())
+	}
+}
+
+func TestUpstreamEntryStaleByMaxAge(t *testing.T) {
+	t.Parallel()
+
+	fb := &fakeFallback{result: &scan.Result{
+		JSON2: json2(fixedNow, "new-up-sha", 8.0), ResolvedCommit: "new-up-sha", Complete: true,
+	}}
+	fake := noScan(t)
+	o := newOrchOpts(t, fake, Config{TTL: time.Hour, FallbackMaxAge: 24 * time.Hour, SyncTimeout: time.Second},
+		WithFallback(fb))
+	ref := testRef(t)
+	// An upstream entry 48h old exceeds the 24h max-age, so it is refreshed
+	// (here, re-fetched from the upstream in fetch-first).
+	if err := o.store.PutWithOrigin(context.Background(), ref, "",
+		json2(fixedNow.Add(-48*time.Hour), "old-up-sha", 5.0), store.OriginUpstream); err != nil {
+		t.Fatalf("seed upstream: %v", err)
+	}
+
+	out, err := o.GetOrProduce(context.Background(), ref, "")
+	if err != nil {
+		t.Fatalf("GetOrProduce: %v", err)
+	}
+	if out.Provenance.Commit != "new-up-sha" || fb.Calls() != 1 {
+		t.Errorf("outcome=%+v fallback=%d; want refreshed new-up-sha via 1 fetch", out.Provenance, fb.Calls())
 	}
 }
