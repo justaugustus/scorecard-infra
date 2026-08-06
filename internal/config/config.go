@@ -24,6 +24,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -31,21 +32,24 @@ import (
 
 // Environment variable names.
 const (
-	EnvBucketURL     = "SCORECARD_RESULTS_BUCKET_URL"
-	EnvListenAddr    = "SCORECARD_LISTEN_ADDR"
-	EnvPort          = "PORT"
-	EnvLatestTTL     = "SCORECARD_LATEST_TTL"
-	EnvSyncTimeout   = "SCORECARD_SYNC_TIMEOUT"
-	EnvScanTimeout   = "SCORECARD_SCAN_TIMEOUT"
-	EnvRetryAfter    = "SCORECARD_RETRY_AFTER"
-	EnvConcurrency   = "SCORECARD_SCAN_CONCURRENCY"
-	EnvLogLevel      = "SCORECARD_LOG_LEVEL"
-	EnvEnabledCheck  = "SCORECARD_ENABLED_CHECKS"
-	EnvGitHubTokens  = "SCORECARD_GITHUB_TOKENS"
-	EnvGitHubAuth    = "GITHUB_AUTH_TOKEN"
-	EnvHostRate      = "SCORECARD_HOST_RATE_PER_SECOND"
-	EnvHostBurst     = "SCORECARD_HOST_RATE_BURST"
-	EnvFlagsProvider = "SCORECARD_FLAGS_PROVIDER"
+	EnvBucketURL       = "SCORECARD_RESULTS_BUCKET_URL"
+	EnvListenAddr      = "SCORECARD_LISTEN_ADDR"
+	EnvPort            = "PORT"
+	EnvLatestTTL       = "SCORECARD_LATEST_TTL"
+	EnvSyncTimeout     = "SCORECARD_SYNC_TIMEOUT"
+	EnvScanTimeout     = "SCORECARD_SCAN_TIMEOUT"
+	EnvRetryAfter      = "SCORECARD_RETRY_AFTER"
+	EnvConcurrency     = "SCORECARD_SCAN_CONCURRENCY"
+	EnvLogLevel        = "SCORECARD_LOG_LEVEL"
+	EnvEnabledCheck    = "SCORECARD_ENABLED_CHECKS"
+	EnvGitHubTokens    = "SCORECARD_GITHUB_TOKENS"
+	EnvGitHubAuth      = "GITHUB_AUTH_TOKEN"
+	EnvHostRate        = "SCORECARD_HOST_RATE_PER_SECOND"
+	EnvHostBurst       = "SCORECARD_HOST_RATE_BURST"
+	EnvFlagsProvider   = "SCORECARD_FLAGS_PROVIDER"
+	EnvFallbackURL     = "SCORECARD_FALLBACK_URL"
+	EnvFallbackTimeout = "SCORECARD_FALLBACK_TIMEOUT"
+	EnvFallbackMaxAge  = "SCORECARD_FALLBACK_MAX_AGE"
 )
 
 var (
@@ -64,6 +68,10 @@ type Config struct {
 	// FlagsProvider selects the feature-flag provider (default "static"); the
 	// flags package validates the value at startup.
 	FlagsProvider string
+	// FallbackURL is the upstream Scorecard API base URL for the result fallback;
+	// empty disables the fallback. The tier is further gated by the
+	// fallback.enabled feature flag.
+	FallbackURL string
 	// EnabledChecks optionally restricts the checks to run; empty means all.
 	EnabledChecks []string
 	// GitHubTokens is the SCM token pool; falls back to GITHUB_AUTH_TOKEN.
@@ -76,6 +84,11 @@ type Config struct {
 	ScanTimeout time.Duration
 	// RetryAfter is the hint returned with a 202 (default 10s).
 	RetryAfter time.Duration
+	// FallbackTimeout bounds a single upstream fallback fetch (default 5s).
+	FallbackTimeout time.Duration
+	// FallbackMaxAge is the maximum age of an upstream result that may be used or
+	// backfilled (default 7d, aligned with the weekly public cron).
+	FallbackMaxAge time.Duration
 	// HostRatePerSecond is the per-host scan rate; 0 means unlimited (default 0).
 	HostRatePerSecond float64
 	// Concurrency bounds simultaneous live scans (default 4).
@@ -89,15 +102,17 @@ type Config struct {
 // problem.
 func Load(getenv func(string) string) (Config, error) {
 	c := Config{
-		ListenAddr:    ":8080",
-		LogLevel:      "info",
-		LatestTTL:     24 * time.Hour,
-		SyncTimeout:   20 * time.Second,
-		ScanTimeout:   5 * time.Minute,
-		RetryAfter:    10 * time.Second,
-		Concurrency:   4,
-		HostRateBurst: 1,
-		FlagsProvider: "static",
+		ListenAddr:      ":8080",
+		LogLevel:        "info",
+		LatestTTL:       24 * time.Hour,
+		SyncTimeout:     20 * time.Second,
+		ScanTimeout:     5 * time.Minute,
+		RetryAfter:      10 * time.Second,
+		Concurrency:     4,
+		HostRateBurst:   1,
+		FlagsProvider:   "static",
+		FallbackTimeout: 5 * time.Second,
+		FallbackMaxAge:  7 * 24 * time.Hour,
 	}
 
 	c.BucketURL = getenv(EnvBucketURL)
@@ -113,6 +128,7 @@ func Load(getenv func(string) string) (Config, error) {
 	if v := getenv(EnvFlagsProvider); v != "" {
 		c.FlagsProvider = v
 	}
+	c.FallbackURL = getenv(EnvFallbackURL)
 	c.EnabledChecks = splitList(getenv(EnvEnabledCheck))
 	c.GitHubTokens = splitList(getenv(EnvGitHubTokens))
 	if len(c.GitHubTokens) == 0 {
@@ -130,6 +146,12 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	if c.RetryAfter, err = duration(getenv, EnvRetryAfter, c.RetryAfter); err != nil {
+		return Config{}, err
+	}
+	if c.FallbackTimeout, err = duration(getenv, EnvFallbackTimeout, c.FallbackTimeout); err != nil {
+		return Config{}, err
+	}
+	if c.FallbackMaxAge, err = duration(getenv, EnvFallbackMaxAge, c.FallbackMaxAge); err != nil {
 		return Config{}, err
 	}
 	if c.Concurrency, err = positiveInt(getenv, EnvConcurrency, c.Concurrency); err != nil {
@@ -159,6 +181,12 @@ func listenAddr(getenv func(string) string, def string) string {
 
 // validate checks the fully-resolved config for internal consistency.
 func validate(c *Config) error {
+	if c.FallbackURL != "" {
+		u, err := url.Parse(c.FallbackURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("%w: %s must be an http(s) URL", errInvalidValue, EnvFallbackURL)
+		}
+	}
 	switch {
 	case c.SyncTimeout <= 0:
 		return fmt.Errorf("%w: %s must be > 0", errInvalidValue, EnvSyncTimeout)
@@ -166,6 +194,10 @@ func validate(c *Config) error {
 		return fmt.Errorf("%w: %s must be > 0", errInvalidValue, EnvScanTimeout)
 	case c.LatestTTL < 0:
 		return fmt.Errorf("%w: %s must be >= 0", errInvalidValue, EnvLatestTTL)
+	case c.FallbackTimeout <= 0:
+		return fmt.Errorf("%w: %s must be > 0", errInvalidValue, EnvFallbackTimeout)
+	case c.FallbackMaxAge <= 0:
+		return fmt.Errorf("%w: %s must be > 0", errInvalidValue, EnvFallbackMaxAge)
 	default:
 		return nil
 	}

@@ -50,6 +50,35 @@ func TestLoadDefaults(t *testing.T) {
 	if c.LogLevel != "info" {
 		t.Errorf("LogLevel = %q, want info", c.LogLevel)
 	}
+	if c.FlagsProvider != "static" {
+		t.Errorf("FlagsProvider = %q, want static", c.FlagsProvider)
+	}
+	if c.FallbackURL != "" {
+		t.Errorf("FallbackURL = %q, want empty (disabled)", c.FallbackURL)
+	}
+	if c.FallbackTimeout != 5*time.Second || c.FallbackMaxAge != 7*24*time.Hour {
+		t.Errorf("unexpected fallback defaults: timeout=%v maxAge=%v", c.FallbackTimeout, c.FallbackMaxAge)
+	}
+}
+
+func TestFallbackConfig(t *testing.T) {
+	t.Parallel()
+
+	c, err := Load(env(map[string]string{
+		EnvBucketURL:       "mem://",
+		EnvFallbackURL:     "https://api.scorecard.dev",
+		EnvFallbackTimeout: "3s",
+		EnvFallbackMaxAge:  "48h",
+	}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.FallbackURL != "https://api.scorecard.dev" {
+		t.Errorf("FallbackURL = %q", c.FallbackURL)
+	}
+	if c.FallbackTimeout != 3*time.Second || c.FallbackMaxAge != 48*time.Hour {
+		t.Errorf("unexpected fallback values: timeout=%v maxAge=%v", c.FallbackTimeout, c.FallbackMaxAge)
+	}
 }
 
 func TestLoadMissingBucketFailsFast(t *testing.T) {
@@ -122,10 +151,13 @@ func TestLoadInvalid(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]map[string]string{
-		"bad duration":    {EnvBucketURL: "mem://", EnvLatestTTL: "soon"},
-		"bad concurrency": {EnvBucketURL: "mem://", EnvConcurrency: "-1"},
-		"non-int burst":   {EnvBucketURL: "mem://", EnvHostBurst: "lots"},
-		"bad rate":        {EnvBucketURL: "mem://", EnvHostRate: "-2"},
+		"bad duration":     {EnvBucketURL: "mem://", EnvLatestTTL: "soon"},
+		"bad concurrency":  {EnvBucketURL: "mem://", EnvConcurrency: "-1"},
+		"non-int burst":    {EnvBucketURL: "mem://", EnvHostBurst: "lots"},
+		"bad rate":         {EnvBucketURL: "mem://", EnvHostRate: "-2"},
+		"bad fallback url": {EnvBucketURL: "mem://", EnvFallbackURL: "notaurl"},
+		"zero fb timeout":  {EnvBucketURL: "mem://", EnvFallbackTimeout: "0s"},
+		"zero fb max age":  {EnvBucketURL: "mem://", EnvFallbackMaxAge: "0s"},
 	}
 	for name, m := range cases {
 		t.Run(name, func(t *testing.T) {
