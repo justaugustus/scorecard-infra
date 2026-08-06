@@ -197,6 +197,48 @@ func TestCapabilities(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesWithFallback(t *testing.T) {
+	t.Parallel()
+
+	base := DefaultCapabilities(time.Hour)
+	srv := New(&fakeProducer{}, base.WithFallback())
+	rec := do(t, srv, http.MethodGet, "/capabilities")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var caps Capabilities
+	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
+		t.Fatalf("decoding capabilities: %v", err)
+	}
+	if caps.Mode != "cached+upstream+live" {
+		t.Errorf("Mode = %q, want cached+upstream+live", caps.Mode)
+	}
+	if len(caps.Caveats) <= len(base.Caveats) {
+		t.Errorf("fallback caveats not appended: got %d, base %d", len(caps.Caveats), len(base.Caveats))
+	}
+}
+
+func TestUpstreamSourceHeader(t *testing.T) {
+	t.Parallel()
+
+	out := &orchestrator.Outcome{
+		Ready: true,
+		Body:  json2(7.5),
+		Provenance: model.Provenance{
+			Source: model.SourceUpstream, Commit: "up", Date: "2026-08-05T12:00:00Z",
+			ScorecardVersion: "v5.5.0", Complete: false,
+		},
+	}
+	srv := New(&fakeProducer{out: out}, DefaultCapabilities(time.Hour).WithFallback())
+	rec := do(t, srv, http.MethodGet, "/projects/github.com/ossf/scorecard")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if src := rec.Header().Get(headerSource); src != "upstream" {
+		t.Errorf("%s = %q, want upstream", headerSource, src)
+	}
+}
+
 func TestHealth(t *testing.T) {
 	t.Parallel()
 

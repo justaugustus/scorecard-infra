@@ -63,39 +63,58 @@ which decides serve-vs-scan:
 flowchart TD
     C["Client — GET /projects/{host}/{org}/{repo}?commit=SHA"] --> O["orchestrator (read-through cache)"]
     O --> G{"store hit and fresh?"}
-    G -- "yes" --> RC["200 — cached result"]
-    G -- "no (miss or stale)" --> SF["single-flight: one scan per key"]
+    G -- "yes" --> RC["200 — result (source: cached or upstream)"]
+    G -- "no (miss or stale)" --> MODE{"upstream fallback?"}
+    MODE -- "off" --> SF["single-flight: one scan per key"]
+    MODE -- "fetch-first" --> FE["fallback.Fetch — upstream API (≤ max-age)"]
+    MODE -- "safety-net" --> SF
+    FE -- "hit" --> BF["backfill (origin = upstream)"]
+    BF --> RU["200 — source: upstream"]
+    FE -- "miss" --> SF
     SF --> SC["scan.Run — live pkg/scorecard.Run (bounded)"]
     SC -- "within SCORECARD_SYNC_TIMEOUT" --> PUT["store.Put — latest + commit-pinned"]
-    PUT --> RL["200 — live result"]
+    PUT --> RL["200 — source: live"]
+    SC -- "skip / error (safety-net)" --> FE2["fallback.Fetch — upstream rescue"]
+    FE2 --> RU
     SC -- "exceeds timeout" --> R202["202 + Retry-After (scan continues in background)"]
     R202 -. "next request hits the cache" .-> O
 ```
 
 - **Freshness:** commit-pinned results (`?commit=SHA`) are immutable and cached
-  forever; `latest` results carry a TTL and are refreshed on expiry.
+  forever; `latest` results carry a freshness window — the TTL for locally-scanned
+  results, the fallback max-age for upstream-sourced ones — and are refreshed on
+  expiry.
 - **De-duplication:** concurrent requests for the same key coalesce into exactly
   one scan (single-flight), so a burst of clients can't trigger redundant scans
   or exhaust SCM rate limits.
+- **Upstream fallback (optional):** when enabled, a cache miss can reuse a recent
+  result from an upstream Scorecard API — before scanning (`fetch-first`) or only
+  when a scan can't run (`safety-net`). It is off by default and reported honestly
+  (`X-Scorecard-Source: upstream`); see [Upstream result fallback](#upstream-result-fallback).
 - **Persistence:** a live scan writes both the `latest` pointer and the
-  commit-pinned object, so results are immediately reusable by this server, the
-  public webapp, and `scorecard-mcp`.
+  commit-pinned object; a used upstream result is backfilled tagged as upstream.
+  Results are immediately reusable by this server, the public webapp, and
+  `scorecard-mcp`.
 
 ## Components
 
-The binary wires seven focused packages: `config → store + scanner →
-orchestrator → HTTP`.
+The binary wires nine focused packages: `config → store + scanner + flags →
+orchestrator (+ optional fallback) → HTTP`.
 
 ```mermaid
 flowchart LR
     CFG["config (env)"] --> ST["store"]
     CFG --> SC["scan + tokens"]
+    CFG --> FL["flags (OpenFeature)"]
     ST --> OR["orchestrator"]
     SC --> OR
+    FL --> OR
     OR --> API["httpapi"]
+    OR -. "optional" .-> FB["fallback"]
     API -- "JSON2" --> CLI["scorecard-mcp / webapp clients"]
     ST <-- "blob" --> BK[("object store")]
     SC <-- "SCM API" --> GH[("GitHub / GitLab")]
+    FB <-- "GET /projects" --> UP[("upstream Scorecard API")]
 ```
 
 The `model` package (JSON2 + provenance + repo-ref parsing) is shared across all
@@ -107,10 +126,12 @@ of these.
 | **model** | `internal/model` | Lean mirror of Scorecard **JSON2** plus provenance and `platform/owner/repo` parsing (default `github.com`; also `gitlab.com`; 40-hex commits). |
 | **store** | `internal/store` | Object storage over [`gocloud.dev/blob`](https://gocloud.dev/); backend chosen by URL; implements the `{host}/{org}/{repo}[/{commit}]/results.json` key contract. |
 | **scan** | `internal/scan` | The live engine: wraps `pkg/scorecard.Run`, reuses the OSS-Fuzz/CII/vulnerability clients across scans, and formats results to JSON2. |
+| **fallback** | `internal/fallback` | Optional best-effort client that fetches an existing `latest` result from an upstream Scorecard API over the `/projects` contract (bounded by a timeout and max-age). |
 | **tokens** | `internal/tokens` | SCM token pool (feeds Scorecard's `GITHUB_AUTH_TOKEN` rotation), per-host rate limiter, and bounded-concurrency worker pool with backoff. |
 | **orchestrator** | `internal/orchestrator` | The read-through cache: freshness/TTL policy, single-flight de-duplication, and the sync-vs-async (`200`/`202`) decision. |
 | **httpapi** | `internal/httpapi` | The webapp GET contract (`/projects`, `/badge`), plus `/capabilities`, `/health`, `/readyz`, and error mapping. |
 | **config** | `internal/config` | 12-factor environment configuration with fail-fast validation. |
+| **flags** | `internal/flags` | Runtime feature-flag seam over OpenFeature; in-process env-seeded static provider with fail-safe defaults (gates the upstream fallback's `enabled`/`mode`). |
 
 This is an **incubator, not a permanent fork**. The durable pieces are structured
 to graft upstream over time — the contract + blob read path into
@@ -275,11 +296,44 @@ All configuration comes from the environment. Only the bucket URL is required.
 | `SCORECARD_HOST_RATE_BURST` | `1` | Per-host rate burst |
 | `SCORECARD_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `SCORECARD_FLAGS_PROVIDER` | `static` | Feature-flag provider (in-process, env-seeded; `static` only for now) |
+| `SCORECARD_FALLBACK_URL` | — (disabled) | Upstream Scorecard API base URL (e.g. `https://api.scorecard.dev`); enables the fallback |
+| `SCORECARD_FALLBACK_TIMEOUT` | `5s` | Per-fetch timeout for the upstream fallback |
+| `SCORECARD_FALLBACK_MAX_AGE` | `168h` (7d) | Max age of an upstream result to use or backfill |
 
 Live scans call SCM and Scorecard's auxiliary data sources, so they need network
 egress and an SCM token (`GITHUB_AUTH_TOKEN`, or `SCORECARD_GITHUB_TOKENS` which
 is fed into Scorecard's token rotation). Serving already-cached results needs
 neither.
+
+### Upstream result fallback
+
+Optionally, the server can reuse an existing result from an upstream Scorecard API
+(e.g. `api.scorecard.dev`) instead of always scanning locally. It is **off by
+default**; set `SCORECARD_FALLBACK_URL` to enable it. Two orderings are selected
+by the `fallback.mode` feature flag:
+
+- **`fetch-first`** (default) — cache, then upstream, then a live scan on an
+  upstream miss. Cheapest: reuse a recent upstream result and scan only when
+  there is none. For a repository the operator does not own, a local scan is often
+  *less* complete anyway (the token can't read branch protection and similar), so
+  the upstream is frequently comparable and far cheaper.
+- **`safety-net`** — cache, then a live scan, and the upstream only when a scan
+  can't run (rate-limited, blocked, transient failure).
+
+Runtime toggles are feature flags, overridable per flag via `SCORECARD_FLAG_*`:
+
+| Flag override | Default | Description |
+| --- | --- | --- |
+| `SCORECARD_FLAG_FALLBACK_ENABLED` | `true` | Kill-switch (when a URL is configured) |
+| `SCORECARD_FLAG_FALLBACK_MODE` | `fetch-first` | `fetch-first` or `safety-net` |
+
+An upstream result may be up to a week old (bounded by `SCORECARD_FALLBACK_MAX_AGE`),
+may omit some checks, and covers only repositories that opted in upstream via
+`publish_results`. It is served and backfilled with `X-Scorecard-Source: upstream`
+and its own generation date, so a client can tell it from a local scan.
+Commit-pinned requests never use the upstream (it answers only `latest`), and
+`/capabilities` reports mode `cached+upstream+live` with these caveats when the
+fallback is enabled.
 
 ### As a `scorecard-mcp` backend
 

@@ -53,3 +53,21 @@ func DefaultCapabilities(latestTTL time.Duration) Capabilities {
 		},
 	}
 }
+
+// WithFallback returns a copy of c advertising the upstream result fallback: it
+// updates the mode and appends caveats describing the upstream's limits, so a
+// client reports provenance accurately when a result is served from upstream
+// (design F2/D7).
+func (c Capabilities) WithFallback() Capabilities {
+	c.Mode = "cached+upstream+live"
+	caveats := make([]string, len(c.Caveats), len(c.Caveats)+2)
+	copy(caveats, c.Caveats)
+	caveats = append(caveats,
+		"When a fresh local result is unavailable, a result may be served from an upstream Scorecard API; "+
+			"such results may be up to a week old, may omit some checks, and cover only repositories that "+
+			"opted in upstream.",
+		`An upstream-sourced result is reported with source "upstream" and its own generation date.`,
+	)
+	c.Caveats = caveats
+	return c
+}

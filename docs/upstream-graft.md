@@ -86,7 +86,13 @@ scaling work or internal deployment glue (see the proposal's Non-Goals):
 - signed-upload `POST`; request-level auth / multi-tenancy;
 - BigQuery (read path needs none; it lives only in `scorecard/cron`);
 - object-store endpoints, org/repo scan lists, orchestration manifests, and token
-  sourcing — internal deployment glue that lives in a separate repo.
+  sourcing — internal deployment glue that lives in a separate repo;
+- **feature flagging** (`internal/flags`, OpenFeature) and the **upstream result
+  fallback** (`internal/fallback`) — deployment concerns of a self-hosted hybrid
+  server. `scorecard serve` and `scorecard-webapp` would not inherit them (the
+  OpenSSF stack is itself the upstream cache), so both are isolated behind their
+  own packages and config/flags to keep the graftable core paths clean (designs
+  FF1 and F1).
 
 ## References
 
