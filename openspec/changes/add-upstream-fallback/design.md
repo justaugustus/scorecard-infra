@@ -76,11 +76,15 @@ scan-first behavior.
 
 ### F4 — Uniform, source-agnostic completeness
 
-Completeness is a property of a result, not of its source. A result — live,
-cached, or upstream — is complete only if every check this server would run is
-**present and conclusive** (no omitted checks, no `-1`). This replaces the earlier
-upstream-only penalty: a token-limited local scan of a non-owned repo is reported
-incomplete for the same reason an upstream result with omitted checks is.
+Completeness is a property of a result, not of its source: a result — live,
+cached, or upstream — is complete only if every check it contains is conclusive
+(no `-1`). The same rule (`scan.Complete`) is applied to all sources, so a
+token-limited local scan of a non-owned repo is reported incomplete for the same
+reason as any other result — there is no upstream-specific penalty. Counting
+checks omitted entirely from an upstream result is deliberately *not* a demerit:
+treating an upstream result's few omitted checks as "incomplete" would be exactly
+the penalty this reframing rejects. Distinguishing omitted-versus-inconclusive is
+a possible future refinement.
 
 ### F5 — Synchronous fast GET, outside the singleflight/202 machinery
 

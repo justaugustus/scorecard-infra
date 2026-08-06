@@ -24,6 +24,9 @@ const (
 	SourceCached Source = "cached"
 	// SourceLive means the result was produced by an on-demand scan.
 	SourceLive Source = "live"
+	// SourceUpstream means the result was fetched from an upstream Scorecard API
+	// (the result fallback), not produced locally.
+	SourceUpstream Source = "upstream"
 )
 
 // Provenance describes where a served result came from and how complete it is.
@@ -42,7 +45,9 @@ type Provenance struct {
 	Date string
 	// ScorecardVersion is the engine version that produced the result.
 	ScorecardVersion string
-	// Complete reports whether every requested check ran (no checks skipped).
+	// Complete reports whether every check produced a conclusive (non-negative)
+	// score. This one source-agnostic rule applies to live, cached, and upstream
+	// results alike (see scan.Complete).
 	Complete bool
 }
 

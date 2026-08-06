@@ -61,7 +61,9 @@ type Scanner interface {
 
 // Complete reports whether every check produced a conclusive score. A negative
 // score (-1) is Scorecard's "inconclusive" sentinel, so its presence means the
-// result is not fully complete. The orchestrator reuses this for cached results.
+// result is not fully complete. This one source-agnostic rule is applied to
+// cached, live, and upstream results alike, so a token-limited local scan and an
+// upstream result are judged by the same standard (design F4).
 func Complete(checks []model.Check) bool {
 	for i := range checks {
 		if checks[i].Score < 0 {

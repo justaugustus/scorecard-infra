@@ -71,7 +71,7 @@ orchestrator continue with the active mode's next step.
 
 A result served from the upstream SHALL declare its source as upstream and SHALL
 carry the upstream result's own generation date. Completeness SHALL follow the
-uniform, source-agnostic rule (present and conclusive checks), not a
+uniform, source-agnostic rule (conclusive, non-negative scores), not a
 source-specific penalty.
 
 #### Scenario: Source and staleness declared
