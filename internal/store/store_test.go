@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/uwu-tools/scorecard-api/internal/model"
@@ -148,7 +149,51 @@ func TestRoundTripFileblob(t *testing.T) {
 	runRoundTrip(t, "file://"+t.TempDir())
 }
 
-// TestRoundTripS3 runs the contract against an S3-compatible bucket (e.g. MinIO).
+func TestDefaultFileNoTempDir(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"file url gets the default", "file:///data", "file:///data?no_tmp_dir=true"},
+		{"existing params are preserved", "file:///data?create_dir=true", "file:///data?create_dir=true&no_tmp_dir=true"},
+		{"explicit value is not overridden", "file:///data?no_tmp_dir=false", "file:///data?no_tmp_dir=false"},
+		{"non-file scheme is untouched", "mem://", "mem://"},
+		{"s3 scheme is untouched", "s3://bucket?region=us-east-1", "s3://bucket?region=us-east-1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := defaultFileNoTempDir(tc.in)
+			if err != nil {
+				t.Fatalf("defaultFileNoTempDir(%q): %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("defaultFileNoTempDir(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFileblobSurvivesUnwritableTempDir guards the cross-device-rename footgun
+// this fix closes: fileblob's default behavior writes its temp file in
+// os.TempDir() before renaming it into place, which fails with "invalid
+// cross-device link" whenever the bucket directory is a separate mount from
+// os.TempDir (true for any container volume, bind mount, or Kubernetes PVC).
+// Pointing TMPDIR at a nonexistent path simulates that: with no_tmp_dir
+// defaulted on, the temp file is created next to the destination instead, so
+// TMPDIR is never touched and the round trip still succeeds.
+func TestFileblobSurvivesUnwritableTempDir(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
+
+	runRoundTrip(t, "file://"+t.TempDir())
+}
+
+// TestRoundTripS3 runs the contract against an S3-compatible bucket (e.g. a
+// self-hosted S3-compatible store).
 // It is skipped unless SCORECARD_TEST_S3_URL is set to a gocloud.dev/blob s3://
 // URL; credentials resolve via the AWS default chain.
 func TestRoundTripS3(t *testing.T) {
@@ -156,7 +201,7 @@ func TestRoundTripS3(t *testing.T) {
 
 	bucketURL := os.Getenv("SCORECARD_TEST_S3_URL")
 	if bucketURL == "" {
-		t.Skip("set SCORECARD_TEST_S3_URL (e.g. a MinIO s3:// URL) to run the S3 integration test")
+		t.Skip("set SCORECARD_TEST_S3_URL (e.g. a local S3-compatible s3:// URL) to run the S3 integration test")
 	}
 	runRoundTrip(t, bucketURL)
 }

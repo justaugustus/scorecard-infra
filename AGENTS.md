@@ -12,13 +12,14 @@ pre-computed results from any object store and generates them live on demand. It
 speaks the `ossf/scorecard-webapp` GET contract so it is a drop-in `--base-url`
 target for `uwu-tools/scorecard-mcp`.
 
-**Status:** 44/46 OpenSpec tasks done. The v0 core (groups 0–7) is implemented and
+**Status:** 45/46 OpenSpec tasks done. The v0 core (groups 0–7) is implemented and
 tested — model, store, scan/tokens, orchestrator, HTTP contract, config, and the
 wired binary — plus docs (group 10) and the group 8 acceptance: a real
 `scorecard-mcp` binary (stdio, `-base-url`) verified against a live server for both
-a cache HIT and a MISS→live-scan→persist→HIT on `fileblob` (see
-`docs/acceptance.md`). Remaining: the MinIO/S3 leg of the smoke test (9.3, needs
-Docker) and archiving the change after merge (11.3). See the OpenSpec change's
+a cache HIT and a MISS→live-scan→persist→HIT on `fileblob` and, via the local
+Docker Compose dev environment, on a self-hosted S3-compatible store too
+(9.3 — see `docs/acceptance.md`).
+Remaining: archiving the change after merge (11.3). See the OpenSpec change's
 `tasks.md` for the authoritative status.
 
 ## Where to start
@@ -85,7 +86,8 @@ patterns are intentional and should be preserved when editing:
   credentials.
 - Blank-import every blob driver (`s3blob`, `azureblob`, `gcsblob`, `fileblob`,
   `memblob`); credentials resolve via each backend's default chain.
-- **No BigQuery.** Local dev = `fileblob`; local S3 = MinIO; tests = `memblob`.
+- **No BigQuery.** Local dev = `fileblob`; local S3 = a self-hosted
+  S3-compatible store; tests = `memblob`.
 
 ## Responsible framing
 
