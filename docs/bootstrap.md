@@ -6,9 +6,10 @@ without re-deriving it.
 
 ## Start here
 
-1. Read the OpenSpec change: `openspec list`, then
-   `openspec show 2026-08-05-add-scorecard-api-server` (or read
-   `openspec/changes/2026-08-05-add-scorecard-api-server/{proposal,design,tasks}.md`).
+1. Read the canonical specs (`openspec list --specs`, then
+   `openspec/specs/{api-server,result-store,result-cache,live-scan}/spec.md`); the
+   original proposal, design, and tasks are archived under
+   `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
 2. Read `openspec/config.yaml` — it holds the durable project context and per-artifact
    rules.
 3. Do the pre-work tasks (group 0) **before** writing the HTTP layer (see below).

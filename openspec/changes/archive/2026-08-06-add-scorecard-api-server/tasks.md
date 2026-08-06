@@ -124,5 +124,5 @@
 - [x] 11.1 `openspec validate 2026-08-05-add-scorecard-api-server --strict` passes against the implemented behavior
 - [x] 11.2 Update `AGENTS.md`/README if any convention changed during implementation — AGENTS.md updated with the
       lint conventions that emerged and a status note (README is group 10, not yet written)
-- [ ] 11.3 Archive the OpenSpec change once implemented and merged — DEFERRED until group 8 acceptance is done and the
-      change is merged to `main`
+- [x] 11.3 Archive the OpenSpec change once implemented and merged — DONE 2026-08-06: implementation landed on `main`
+      (final dev-environment work merged via #8); archived and the four delta specs promoted to `openspec/specs/`

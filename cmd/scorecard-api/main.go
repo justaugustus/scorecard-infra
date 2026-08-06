@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/uwu-tools/scorecard-api/internal/config"
+	"github.com/uwu-tools/scorecard-api/internal/flags"
 	"github.com/uwu-tools/scorecard-api/internal/httpapi"
 	"github.com/uwu-tools/scorecard-api/internal/orchestrator"
 	"github.com/uwu-tools/scorecard-api/internal/scan"
@@ -60,6 +61,15 @@ func run() error {
 
 	logger := newLogger(cfg.LogLevel)
 	slog.SetDefault(logger)
+
+	// Initialize the feature-flag provider at startup (design FF2/FF7): this
+	// validates SCORECARD_FLAGS_PROVIDER and establishes the in-process,
+	// env-seeded provider, failing fast on a bad value. No capability reads flags
+	// yet, so the client is discarded here; the first consumer will capture it.
+	if _, err := flags.New(os.Getenv, flags.Config{Provider: cfg.FlagsProvider}); err != nil {
+		return fmt.Errorf("initializing feature flags: %w", err)
+	}
+	logger.Info("feature flags initialized", "provider", cfg.FlagsProvider)
 
 	// Feed the SCM token pool into Scorecard's GitHub roundtripper, which rotates
 	// a comma-separated GITHUB_AUTH_TOKEN across concurrent requests (design D8).

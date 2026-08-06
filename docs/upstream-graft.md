@@ -9,7 +9,7 @@ in-tree server, `scorecard serve`.
 
 It is the detailed companion to design decision **D11** (and touches **D4**,
 **D7**, **D13**); the README and `AGENTS.md` point here. See
-`openspec/changes/2026-08-05-add-scorecard-api-server/design.md`.
+`openspec/changes/archive/2026-08-06-add-scorecard-api-server/design.md`.
 
 ## Graft targets
 
@@ -92,9 +92,9 @@ scaling work or internal deployment glue (see the proposal's Non-Goals):
 
 - Design **D11** (graft map + serve reconciliation), **D4** (key/body contract),
   **D7** (`/capabilities`), **D13** (result model) —
-  `openspec/changes/2026-08-05-add-scorecard-api-server/design.md`.
+  `openspec/changes/archive/2026-08-06-add-scorecard-api-server/design.md`.
 - Task 0.1 (PR #4665 status) —
-  `openspec/changes/2026-08-05-add-scorecard-api-server/tasks.md`.
+  `openspec/changes/archive/2026-08-06-add-scorecard-api-server/tasks.md`.
 - `scorecard serve`: `github.com/ossf/scorecard` (`cmd`/`serve`).
 - Contract + blob reader: `github.com/ossf/scorecard-webapp`
   (`app/server/get_results.go`).

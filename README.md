@@ -274,6 +274,7 @@ All configuration comes from the environment. Only the bucket URL is required.
 | `SCORECARD_HOST_RATE_PER_SECOND` | `0` (unlimited) | Per-host scan rate limit |
 | `SCORECARD_HOST_RATE_BURST` | `1` | Per-host rate burst |
 | `SCORECARD_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `SCORECARD_FLAGS_PROVIDER` | `static` | Feature-flag provider (in-process, env-seeded; `static` only for now) |
 
 Live scans call SCM and Scorecard's auxiliary data sources, so they need network
 egress and an SCM token (`GITHUB_AUTH_TOKEN`, or `SCORECARD_GITHUB_TOKENS` which

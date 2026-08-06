@@ -19,18 +19,20 @@ wired binary — plus docs (group 10) and the group 8 acceptance: a real
 a cache HIT and a MISS→live-scan→persist→HIT on `fileblob` and, via the local
 Docker Compose dev environment, on a self-hosted S3-compatible store too
 (9.3 — see `docs/acceptance.md`).
-Remaining: archiving the change after merge (11.3). See the OpenSpec change's
-`tasks.md` for the authoritative status.
+The change has since been archived (11.3): the canonical specs now live under
+`openspec/specs/`, and the original proposal, design, and tasks are preserved
+under `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
 
 ## Where to start
 
 1. Read [`docs/bootstrap.md`](docs/bootstrap.md).
-2. Read the OpenSpec change: `openspec list`, then
-   `openspec show 2026-08-05-add-scorecard-api-server` (or read the files under
-   `openspec/changes/2026-08-05-add-scorecard-api-server/`:
-   `proposal.md`, `design.md`, `tasks.md`, and `specs/`).
+2. Read the canonical specs: `openspec list --specs`, then read
+   `openspec/specs/{api-server,result-store,result-cache,live-scan}/spec.md`. The
+   original proposal, design, and tasks are archived under
+   `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
 3. Read [`openspec/config.yaml`](openspec/config.yaml) for durable project context.
-4. Implement against `tasks.md`, keeping specs and code in sync.
+4. For new work, propose a new OpenSpec change under `openspec/changes/`, keeping
+   the specs in `openspec/specs/` and the code in sync.
 
 ## Architecture (internal/)
 
@@ -42,6 +44,8 @@ Remaining: archiving the change after merge (11.3). See the OpenSpec change's
   sync-vs-async (**D2/D5/D6**).
 - `scan/` — wraps `pkg/scorecard.Run`; reused clients; JSON2; write-back (**D8**).
 - `tokens/` — SCM token pool + per-host rate limiter/backoff (**D8**).
+- `flags/` — runtime feature-flag seam over OpenFeature; in-process, env-seeded
+  static provider by default (**FF1/FF2/FF5**).
 - `cmd/scorecard-api/` — the binary.
 
 ## Build, test, lint
@@ -88,6 +92,22 @@ patterns are intentional and should be preserved when editing:
   `memblob`); credentials resolve via each backend's default chain.
 - **No BigQuery.** Local dev = `fileblob`; local S3 = a self-hosted
   S3-compatible store; tests = `memblob`.
+
+## Feature flags vs. configuration
+
+Two distinct mechanisms; classify every new setting deliberately (design **FF3**):
+
+- **Configuration** — endpoints, credentials, timeouts, TTLs, tuning. Env-driven,
+  validated at startup, fail-fast. Lives in `internal/config`.
+- **Feature flags** — runtime *behavioral* toggles and rollouts (on/off, mode
+  selection). Read through `internal/flags` with a safe in-code default, and a
+  capability owns and declares its own flags. Backed by an in-process, env-seeded
+  static provider today (per-flag overrides via `SCORECARD_FLAG_*`);
+  `SCORECARD_FLAGS_PROVIDER` selects the provider.
+
+The test: if you would change it *without a redeploy* (incident kill-switch,
+gradual rollout, mode shift), it is a flag; if the process needs it to boot or
+connect, it is configuration.
 
 ## Responsible framing
 
