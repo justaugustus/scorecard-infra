@@ -31,20 +31,21 @@ import (
 
 // Environment variable names.
 const (
-	EnvBucketURL    = "SCORECARD_RESULTS_BUCKET_URL"
-	EnvListenAddr   = "SCORECARD_LISTEN_ADDR"
-	EnvPort         = "PORT"
-	EnvLatestTTL    = "SCORECARD_LATEST_TTL"
-	EnvSyncTimeout  = "SCORECARD_SYNC_TIMEOUT"
-	EnvScanTimeout  = "SCORECARD_SCAN_TIMEOUT"
-	EnvRetryAfter   = "SCORECARD_RETRY_AFTER"
-	EnvConcurrency  = "SCORECARD_SCAN_CONCURRENCY"
-	EnvLogLevel     = "SCORECARD_LOG_LEVEL"
-	EnvEnabledCheck = "SCORECARD_ENABLED_CHECKS"
-	EnvGitHubTokens = "SCORECARD_GITHUB_TOKENS"
-	EnvGitHubAuth   = "GITHUB_AUTH_TOKEN"
-	EnvHostRate     = "SCORECARD_HOST_RATE_PER_SECOND"
-	EnvHostBurst    = "SCORECARD_HOST_RATE_BURST"
+	EnvBucketURL     = "SCORECARD_RESULTS_BUCKET_URL"
+	EnvListenAddr    = "SCORECARD_LISTEN_ADDR"
+	EnvPort          = "PORT"
+	EnvLatestTTL     = "SCORECARD_LATEST_TTL"
+	EnvSyncTimeout   = "SCORECARD_SYNC_TIMEOUT"
+	EnvScanTimeout   = "SCORECARD_SCAN_TIMEOUT"
+	EnvRetryAfter    = "SCORECARD_RETRY_AFTER"
+	EnvConcurrency   = "SCORECARD_SCAN_CONCURRENCY"
+	EnvLogLevel      = "SCORECARD_LOG_LEVEL"
+	EnvEnabledCheck  = "SCORECARD_ENABLED_CHECKS"
+	EnvGitHubTokens  = "SCORECARD_GITHUB_TOKENS"
+	EnvGitHubAuth    = "GITHUB_AUTH_TOKEN"
+	EnvHostRate      = "SCORECARD_HOST_RATE_PER_SECOND"
+	EnvHostBurst     = "SCORECARD_HOST_RATE_BURST"
+	EnvFlagsProvider = "SCORECARD_FLAGS_PROVIDER"
 )
 
 var (
@@ -60,6 +61,9 @@ type Config struct {
 	ListenAddr string
 	// LogLevel is the log level: debug, info, warn, or error (default "info").
 	LogLevel string
+	// FlagsProvider selects the feature-flag provider (default "static"); the
+	// flags package validates the value at startup.
+	FlagsProvider string
 	// EnabledChecks optionally restricts the checks to run; empty means all.
 	EnabledChecks []string
 	// GitHubTokens is the SCM token pool; falls back to GITHUB_AUTH_TOKEN.
@@ -93,6 +97,7 @@ func Load(getenv func(string) string) (Config, error) {
 		RetryAfter:    10 * time.Second,
 		Concurrency:   4,
 		HostRateBurst: 1,
+		FlagsProvider: "static",
 	}
 
 	c.BucketURL = getenv(EnvBucketURL)
@@ -104,6 +109,9 @@ func Load(getenv func(string) string) (Config, error) {
 	c.ListenAddr = listenAddr(getenv, c.ListenAddr)
 	if v := getenv(EnvLogLevel); v != "" {
 		c.LogLevel = v
+	}
+	if v := getenv(EnvFlagsProvider); v != "" {
+		c.FlagsProvider = v
 	}
 	c.EnabledChecks = splitList(getenv(EnvEnabledCheck))
 	c.GitHubTokens = splitList(getenv(EnvGitHubTokens))

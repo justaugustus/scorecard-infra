@@ -44,6 +44,8 @@ under `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
   sync-vs-async (**D2/D5/D6**).
 - `scan/` — wraps `pkg/scorecard.Run`; reused clients; JSON2; write-back (**D8**).
 - `tokens/` — SCM token pool + per-host rate limiter/backoff (**D8**).
+- `flags/` — runtime feature-flag seam over OpenFeature; in-process, env-seeded
+  static provider by default (**FF1/FF2/FF5**).
 - `cmd/scorecard-api/` — the binary.
 
 ## Build, test, lint
@@ -90,6 +92,22 @@ patterns are intentional and should be preserved when editing:
   `memblob`); credentials resolve via each backend's default chain.
 - **No BigQuery.** Local dev = `fileblob`; local S3 = a self-hosted
   S3-compatible store; tests = `memblob`.
+
+## Feature flags vs. configuration
+
+Two distinct mechanisms; classify every new setting deliberately (design **FF3**):
+
+- **Configuration** — endpoints, credentials, timeouts, TTLs, tuning. Env-driven,
+  validated at startup, fail-fast. Lives in `internal/config`.
+- **Feature flags** — runtime *behavioral* toggles and rollouts (on/off, mode
+  selection). Read through `internal/flags` with a safe in-code default, and a
+  capability owns and declares its own flags. Backed by an in-process, env-seeded
+  static provider today (per-flag overrides via `SCORECARD_FLAG_*`);
+  `SCORECARD_FLAGS_PROVIDER` selects the provider.
+
+The test: if you would change it *without a redeploy* (incident kill-switch,
+gradual rollout, mode shift), it is a flag; if the process needs it to boot or
+connect, it is configuration.
 
 ## Responsible framing
 
