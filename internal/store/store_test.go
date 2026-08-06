@@ -24,6 +24,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"gocloud.dev/blob"
+
 	"github.com/uwu-tools/scorecard-api/internal/model"
 )
 
@@ -139,6 +141,48 @@ func TestPutLatestAndCommit(t *testing.T) {
 
 	if err := s.PutLatestAndCommit(ctx, ref, "", body); !errors.Is(err, errEmptyCommit) {
 		t.Errorf("PutLatestAndCommit(empty commit) error = %v, want errEmptyCommit", err)
+	}
+}
+
+func TestOriginRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := openStore(t, "mem://")
+	ref := testRef(t)
+	body := []byte(`{"score":5}`)
+
+	// A plain Put is tagged as locally scanned.
+	if err := s.Put(ctx, ref, "", body); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, origin, err := s.GetWithOrigin(ctx, ref, ""); err != nil || origin != OriginLocal {
+		t.Fatalf("GetWithOrigin(local) = %q, %v; want %q", origin, err, OriginLocal)
+	}
+
+	// An upstream write is tagged upstream and round-trips.
+	if err := s.PutWithOrigin(ctx, ref, testCommit, body, OriginUpstream); err != nil {
+		t.Fatalf("PutWithOrigin: %v", err)
+	}
+	got, origin, err := s.GetWithOrigin(ctx, ref, testCommit)
+	if err != nil || origin != OriginUpstream || !bytes.Equal(got, body) {
+		t.Fatalf("GetWithOrigin(upstream) = %q, %q, %v; want %q, %q", got, origin, err, body, OriginUpstream)
+	}
+}
+
+func TestOriginUntaggedDefaultsLocal(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s := openStore(t, "mem://")
+	ref := testRef(t)
+
+	// Write directly with no origin metadata to simulate a pre-tag object.
+	if err := s.bucket.WriteAll(ctx, Key(ref, ""), []byte(`{}`), &blob.WriterOptions{ContentType: contentTypeJSON}); err != nil {
+		t.Fatalf("WriteAll: %v", err)
+	}
+	if _, origin, err := s.GetWithOrigin(ctx, ref, ""); err != nil || origin != OriginLocal {
+		t.Fatalf("GetWithOrigin(untagged) = %q, %v; want %q", origin, err, OriginLocal)
 	}
 }
 

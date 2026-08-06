@@ -56,6 +56,22 @@ const resultsObject = "results.json"
 // canonical JSON2 body with the correct media type.
 const contentTypeJSON = "application/json"
 
+// metadataOrigin is the blob metadata key recording how a stored result was
+// obtained, so freshness and provenance can distinguish a locally-scanned result
+// from an upstream one without altering the canonical JSON2 body (design F6).
+const metadataOrigin = "origin"
+
+// Origin records how a stored result was obtained.
+type Origin string
+
+const (
+	// OriginLocal marks a result produced by a local scan. It is also the default
+	// reported for a legacy object stored without an origin tag.
+	OriginLocal Origin = "local"
+	// OriginUpstream marks a result backfilled from an upstream Scorecard API.
+	OriginUpstream Origin = "upstream"
+)
+
 // ErrNotFound is returned when no stored result exists for the requested key.
 // The orchestrator treats it as a cache miss (design D2), not a fatal error.
 var ErrNotFound = errors.New("store: result not found")
@@ -130,24 +146,46 @@ func Key(ref model.RepoRef, commit string) string {
 
 // Get returns the stored JSON2 body for ref at commit (empty commit = latest).
 // It returns ErrNotFound when no object exists at the key, distinct from an I/O
-// error.
+// error. Use GetWithOrigin when the caller needs the result's origin.
 func (s *Store) Get(ctx context.Context, ref model.RepoRef, commit string) ([]byte, error) {
+	body, _, err := s.GetWithOrigin(ctx, ref, commit)
+	return body, err
+}
+
+// GetWithOrigin returns the stored JSON2 body and its origin tag. A result stored
+// without an origin tag (e.g. written before the tag existed) is reported as
+// OriginLocal (design F6). ErrNotFound is returned when no object exists.
+func (s *Store) GetWithOrigin(ctx context.Context, ref model.RepoRef, commit string) ([]byte, Origin, error) {
 	key := Key(ref, commit)
 	body, err := s.bucket.ReadAll(ctx, key)
 	if err != nil {
 		if gcerrors.Code(err) == gcerrors.NotFound {
-			return nil, ErrNotFound
+			return nil, "", ErrNotFound
 		}
-		return nil, fmt.Errorf("store: reading %q: %w", key, err)
+		return nil, "", fmt.Errorf("store: reading %q: %w", key, err)
 	}
-	return body, nil
+	origin := OriginLocal
+	if attrs, aerr := s.bucket.Attributes(ctx, key); aerr == nil {
+		if v := attrs.Metadata[metadataOrigin]; v != "" {
+			origin = Origin(v)
+		}
+	}
+	return body, origin, nil
 }
 
-// Put writes body to the key for ref at commit (empty commit = latest). This
-// writes exactly one object; use PutLatestAndCommit to populate both the latest
-// pointer and the commit-pinned object from one scan.
+// Put writes body to the key for ref at commit (empty commit = latest), tagged as
+// a locally-scanned result. This writes exactly one object; use
+// PutLatestAndCommit to populate both the latest pointer and the commit-pinned
+// object from one scan.
 func (s *Store) Put(ctx context.Context, ref model.RepoRef, commit string, body []byte) error {
-	return s.write(ctx, Key(ref, commit), body)
+	return s.PutWithOrigin(ctx, ref, commit, body, OriginLocal)
+}
+
+// PutWithOrigin writes body to the key for ref at commit with the given origin.
+func (s *Store) PutWithOrigin(
+	ctx context.Context, ref model.RepoRef, commit string, body []byte, origin Origin,
+) error {
+	return s.write(ctx, Key(ref, commit), body, origin)
 }
 
 // PutLatestAndCommit writes body to both the commit-pinned key and the latest
@@ -155,22 +193,34 @@ func (s *Store) Put(ctx context.Context, ref model.RepoRef, commit string, body 
 // the resolved commit is also HEAD, so both keys should reflect it. commit must
 // be non-empty.
 func (s *Store) PutLatestAndCommit(ctx context.Context, ref model.RepoRef, commit string, body []byte) error {
+	return s.PutLatestAndCommitWithOrigin(ctx, ref, commit, body, OriginLocal)
+}
+
+// PutLatestAndCommitWithOrigin writes body to both the commit-pinned key and the
+// latest pointer with the given origin. commit must be non-empty.
+func (s *Store) PutLatestAndCommitWithOrigin(
+	ctx context.Context, ref model.RepoRef, commit string, body []byte, origin Origin,
+) error {
 	if commit == "" {
 		return fmt.Errorf("%w: commit is empty", errEmptyCommit)
 	}
-	if err := s.write(ctx, Key(ref, commit), body); err != nil {
+	if err := s.write(ctx, Key(ref, commit), body, origin); err != nil {
 		return err
 	}
-	return s.write(ctx, Key(ref, ""), body)
+	return s.write(ctx, Key(ref, ""), body, origin)
 }
 
 // errEmptyCommit is returned when a commit-pinned write is requested without a
 // commit.
 var errEmptyCommit = errors.New("store: commit required")
 
-// write stores body at key with the JSON content type.
-func (s *Store) write(ctx context.Context, key string, body []byte) error {
-	opts := &blob.WriterOptions{ContentType: contentTypeJSON}
+// write stores body at key with the JSON content type and the origin tag as
+// object metadata (kept separate from the JSON2 body).
+func (s *Store) write(ctx context.Context, key string, body []byte, origin Origin) error {
+	opts := &blob.WriterOptions{
+		ContentType: contentTypeJSON,
+		Metadata:    map[string]string{metadataOrigin: string(origin)},
+	}
 	if err := s.bucket.WriteAll(ctx, key, body, opts); err != nil {
 		return fmt.Errorf("store: writing %q: %w", key, err)
 	}
