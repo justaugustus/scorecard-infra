@@ -19,18 +19,20 @@ wired binary — plus docs (group 10) and the group 8 acceptance: a real
 a cache HIT and a MISS→live-scan→persist→HIT on `fileblob` and, via the local
 Docker Compose dev environment, on a self-hosted S3-compatible store too
 (9.3 — see `docs/acceptance.md`).
-Remaining: archiving the change after merge (11.3). See the OpenSpec change's
-`tasks.md` for the authoritative status.
+The change has since been archived (11.3): the canonical specs now live under
+`openspec/specs/`, and the original proposal, design, and tasks are preserved
+under `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
 
 ## Where to start
 
 1. Read [`docs/bootstrap.md`](docs/bootstrap.md).
-2. Read the OpenSpec change: `openspec list`, then
-   `openspec show 2026-08-05-add-scorecard-api-server` (or read the files under
-   `openspec/changes/2026-08-05-add-scorecard-api-server/`:
-   `proposal.md`, `design.md`, `tasks.md`, and `specs/`).
+2. Read the canonical specs: `openspec list --specs`, then read
+   `openspec/specs/{api-server,result-store,result-cache,live-scan}/spec.md`. The
+   original proposal, design, and tasks are archived under
+   `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
 3. Read [`openspec/config.yaml`](openspec/config.yaml) for durable project context.
-4. Implement against `tasks.md`, keeping specs and code in sync.
+4. For new work, propose a new OpenSpec change under `openspec/changes/`, keeping
+   the specs in `openspec/specs/` and the code in sync.
 
 ## Architecture (internal/)
 
