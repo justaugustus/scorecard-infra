@@ -69,7 +69,9 @@
       shows `origin: upstream`), and the 2nd request served from the store in ~2.5ms
       still as `upstream`; `/capabilities` reported `cached+upstream+live` with the
       caveats; a nonexistent repo missed (404) and fell through to a scan, and the
-      miss was not persisted
+      miss was not persisted. Max-age gate also verified: `MAX_AGE=0s` fails fast
+      at startup, and `=1s` rejects the ~1-day-old upstream result → 202 live scan
+      (nothing served or backfilled)
 
 ## 8. Documentation
 
