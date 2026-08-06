@@ -275,11 +275,44 @@ All configuration comes from the environment. Only the bucket URL is required.
 | `SCORECARD_HOST_RATE_BURST` | `1` | Per-host rate burst |
 | `SCORECARD_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `SCORECARD_FLAGS_PROVIDER` | `static` | Feature-flag provider (in-process, env-seeded; `static` only for now) |
+| `SCORECARD_FALLBACK_URL` | — (disabled) | Upstream Scorecard API base URL (e.g. `https://api.scorecard.dev`); enables the fallback |
+| `SCORECARD_FALLBACK_TIMEOUT` | `5s` | Per-fetch timeout for the upstream fallback |
+| `SCORECARD_FALLBACK_MAX_AGE` | `168h` (7d) | Max age of an upstream result to use or backfill |
 
 Live scans call SCM and Scorecard's auxiliary data sources, so they need network
 egress and an SCM token (`GITHUB_AUTH_TOKEN`, or `SCORECARD_GITHUB_TOKENS` which
 is fed into Scorecard's token rotation). Serving already-cached results needs
 neither.
+
+### Upstream result fallback
+
+Optionally, the server can reuse an existing result from an upstream Scorecard API
+(e.g. `api.scorecard.dev`) instead of always scanning locally. It is **off by
+default**; set `SCORECARD_FALLBACK_URL` to enable it. Two orderings are selected
+by the `fallback.mode` feature flag:
+
+- **`fetch-first`** (default) — cache, then upstream, then a live scan on an
+  upstream miss. Cheapest: reuse a recent upstream result and scan only when
+  there is none. For a repository the operator does not own, a local scan is often
+  *less* complete anyway (the token can't read branch protection and similar), so
+  the upstream is frequently comparable and far cheaper.
+- **`safety-net`** — cache, then a live scan, and the upstream only when a scan
+  can't run (rate-limited, blocked, transient failure).
+
+Runtime toggles are feature flags, overridable per flag via `SCORECARD_FLAG_*`:
+
+| Flag override | Default | Description |
+| --- | --- | --- |
+| `SCORECARD_FLAG_FALLBACK_ENABLED` | `true` | Kill-switch (when a URL is configured) |
+| `SCORECARD_FLAG_FALLBACK_MODE` | `fetch-first` | `fetch-first` or `safety-net` |
+
+An upstream result may be up to a week old (bounded by `SCORECARD_FALLBACK_MAX_AGE`),
+may omit some checks, and covers only repositories that opted in upstream via
+`publish_results`. It is served and backfilled with `X-Scorecard-Source: upstream`
+and its own generation date, so a client can tell it from a local scan.
+Commit-pinned requests never use the upstream (it answers only `latest`), and
+`/capabilities` reports mode `cached+upstream+live` with these caveats when the
+fallback is enabled.
 
 ### As a `scorecard-mcp` backend
 
