@@ -26,7 +26,7 @@ import (
 
 	"gocloud.dev/blob"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
 )
 
 const testCommit = "2418d6d95e928102e1f3f8d6e7b92f4f3c78631f"

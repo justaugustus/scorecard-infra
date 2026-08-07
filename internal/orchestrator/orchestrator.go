@@ -34,10 +34,10 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/uwu-tools/scorecard-api/internal/fallback"
-	"github.com/uwu-tools/scorecard-api/internal/model"
-	"github.com/uwu-tools/scorecard-api/internal/scan"
-	"github.com/uwu-tools/scorecard-api/internal/store"
+	"github.com/uwu-tools/scorecard-infra/internal/fallback"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/scan"
+	"github.com/uwu-tools/scorecard-infra/internal/store"
 )
 
 // Defaults applied by New when a Config field is unset.

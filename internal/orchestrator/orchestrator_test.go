@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uwu-tools/scorecard-api/internal/fallback"
-	"github.com/uwu-tools/scorecard-api/internal/model"
-	"github.com/uwu-tools/scorecard-api/internal/scan"
-	"github.com/uwu-tools/scorecard-api/internal/store"
+	"github.com/uwu-tools/scorecard-infra/internal/fallback"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/scan"
+	"github.com/uwu-tools/scorecard-infra/internal/store"
 )
 
 // fixedNow is the clock all tests run against.
