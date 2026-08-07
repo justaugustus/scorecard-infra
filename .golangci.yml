@@ -1,10 +1,13 @@
 # Aligned with ossf/scorecard's .golangci.yml (the upstream graft target), with
-# three repo-specific adaptations:
+# four repo-specific adaptations:
 #   - gci import prefix points at this module;
 #   - scorecard-only exclusion paths (probes/…) and the fileparser wrapcheck glob
 #     are dropped (they do not exist here);
 #   - goheader is not enabled (its year-matching template is brittle across years;
-#     headers are kept consistent by convention instead).
+#     headers are kept consistent by convention instead);
+#   - the gosec excludes list drops G703-G706, which upstream carries but which
+#     aren't real gosec rule IDs; golangci-lint v2.8.0's `config verify` rejects
+#     them outright, failing the lint job before any linter runs.
 version: "2"
 run:
   concurrency: 6
@@ -156,10 +159,6 @@ linters:
     gosec:
       excludes:
         - G115
-        - G703
-        - G704
-        - G705
-        - G706
     govet:
       enable:
         - fieldalignment
