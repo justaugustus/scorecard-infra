@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
 )
 
 func testRef(t *testing.T) model.RepoRef {

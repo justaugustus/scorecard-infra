@@ -32,14 +32,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/uwu-tools/scorecard-api/internal/config"
-	"github.com/uwu-tools/scorecard-api/internal/fallback"
-	"github.com/uwu-tools/scorecard-api/internal/flags"
-	"github.com/uwu-tools/scorecard-api/internal/httpapi"
-	"github.com/uwu-tools/scorecard-api/internal/orchestrator"
-	"github.com/uwu-tools/scorecard-api/internal/scan"
-	"github.com/uwu-tools/scorecard-api/internal/store"
-	"github.com/uwu-tools/scorecard-api/internal/tokens"
+	"github.com/uwu-tools/scorecard-infra/internal/config"
+	"github.com/uwu-tools/scorecard-infra/internal/fallback"
+	"github.com/uwu-tools/scorecard-infra/internal/flags"
+	"github.com/uwu-tools/scorecard-infra/internal/httpapi"
+	"github.com/uwu-tools/scorecard-infra/internal/orchestrator"
+	"github.com/uwu-tools/scorecard-infra/internal/scan"
+	"github.com/uwu-tools/scorecard-infra/internal/store"
+	"github.com/uwu-tools/scorecard-infra/internal/tokens"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".

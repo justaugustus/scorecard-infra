@@ -35,11 +35,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uwu-tools/scorecard-api/internal/httpapi"
-	"github.com/uwu-tools/scorecard-api/internal/model"
-	"github.com/uwu-tools/scorecard-api/internal/orchestrator"
-	"github.com/uwu-tools/scorecard-api/internal/scan"
-	"github.com/uwu-tools/scorecard-api/internal/store"
+	"github.com/uwu-tools/scorecard-infra/internal/httpapi"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/orchestrator"
+	"github.com/uwu-tools/scorecard-infra/internal/scan"
+	"github.com/uwu-tools/scorecard-infra/internal/store"
 )
 
 // response is the part of an HTTP response the tests assert on. Returning this

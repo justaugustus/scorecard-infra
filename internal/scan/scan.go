@@ -34,7 +34,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
 )
 
 // ErrSkipped indicates the repository could not be scanned for a non-fatal

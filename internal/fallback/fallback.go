@@ -30,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
-	"github.com/uwu-tools/scorecard-api/internal/scan"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/scan"
 )
 
 // ErrFallbackMiss means the upstream has no usable result for the repository —

@@ -45,7 +45,7 @@ import (
 	_ "gocloud.dev/blob/s3blob"
 	"gocloud.dev/gcerrors"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
 )
 
 // resultsObject is the fixed object filename for a stored result, matching the

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
 )
 
 // Badge colors, following the shields.io convention.

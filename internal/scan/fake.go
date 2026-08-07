@@ -20,7 +20,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
 )
 
 // FakeScanner is a configurable Scanner for tests (design task 4.6). It counts

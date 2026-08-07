@@ -163,7 +163,7 @@ go build -o scorecard-api ./cmd/scorecard-api
 Or, once a version is tagged, install the binary directly:
 
 ```sh
-go install github.com/uwu-tools/scorecard-api/cmd/scorecard-api@latest
+go install github.com/uwu-tools/scorecard-infra/cmd/scorecard-api@latest
 ```
 
 ## Usage

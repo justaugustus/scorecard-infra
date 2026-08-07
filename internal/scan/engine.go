@@ -35,8 +35,8 @@ import (
 	"github.com/ossf/scorecard/v5/pkg/scorecard"
 	"github.com/ossf/scorecard/v5/policy"
 
-	"github.com/uwu-tools/scorecard-api/internal/model"
-	"github.com/uwu-tools/scorecard-api/internal/tokens"
+	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/uwu-tools/scorecard-infra/internal/tokens"
 )
 
 // ipAllowListMarker is the substring Scorecard surfaces when a repository is
