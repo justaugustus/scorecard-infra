@@ -1,4 +1,4 @@
-module github.com/uwu-tools/scorecard-infra
+module github.com/ossf/scorecard-infra
 
 go 1.25.6
 

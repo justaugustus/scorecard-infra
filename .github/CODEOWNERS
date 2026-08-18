@@ -4,4 +4,4 @@
 # the repo. Unless a later match takes precedence,
 # the following team will be requested for review when
 # someone opens a pull request.
-* @uwu-tools/org-admins
+* @ossf/scorecard-maintainers

@@ -1,4 +1,4 @@
-# Copyright 2026 The uwu-tools Authors.
+# Copyright 2026 OpenSSF Scorecard Authors.
 # SPDX-License-Identifier: Apache-2.0
 
 # syntax=docker/dockerfile:1

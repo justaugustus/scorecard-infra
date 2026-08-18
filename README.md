@@ -1,5 +1,5 @@
 <!--
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 SPDX-License-Identifier: Apache-2.0
 -->
 
@@ -155,15 +155,15 @@ per-component graft map and the `scorecard serve` reconciliation status.
 Build from source:
 
 ```sh
-git clone https://github.com/uwu-tools/scorecard-api
-cd scorecard-api
+git clone https://github.com/ossf/scorecard-infra
+cd scorecard-infra
 go build -o scorecard-api ./cmd/scorecard-api
 ```
 
 Or, once a version is tagged, install the binary directly:
 
 ```sh
-go install github.com/uwu-tools/scorecard-infra/cmd/scorecard-api@latest
+go install github.com/ossf/scorecard-infra/cmd/scorecard-api@latest
 ```
 
 ## Usage

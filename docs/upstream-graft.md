@@ -21,7 +21,7 @@ There are three homes for code in play:
   `gs://ossf-scorecard-results` constant.
 - **`ossf/scorecard`** — owns the scan engine (`pkg/scorecard.Run`, `docs/checks`)
   and the in-tree HTTP server `scorecard serve`.
-- **This repo (`uwu-tools/scorecard-api`)** — the incubator. Holds the novel
+- **This repo (`ossf/scorecard-infra`)** — the incubator. Holds the novel
   glue (the read-through cache, token/rate management, `/capabilities`) plus
   thin adapters that mirror upstream so they can move.
 

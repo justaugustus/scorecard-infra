@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/ossf/scorecard-infra/internal/model"
 )
 
 // ErrSkipped indicates the repository could not be scanned for a non-fatal

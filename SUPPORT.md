@@ -19,9 +19,9 @@ Thanks for using `scorecard-api`! Here are some ways to get help:
 If you've found a bug or have a feature request:
 
 1. Search [existing
-   issues](https://github.com/uwu-tools/scorecard-api/issues) first
+   issues](https://github.com/ossf/scorecard-infra/issues) first
 2. If not found, [open a new
-   issue](https://github.com/uwu-tools/scorecard-api/issues/new/choose)
+   issue](https://github.com/ossf/scorecard-infra/issues/new/choose)
 
 ### Security Issues
 
