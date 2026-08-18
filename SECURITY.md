@@ -44,8 +44,7 @@ We follow a coordinated disclosure process:
 
 If you do not receive a timely response via GitHub,
 or if you are unable to use the private vulnerability reporting feature,
-please reach out via the [OpenSSF security contact
-email](mailto:security@openssf.org).
+please reach out to the [Scorecard Steering Committee](mailto:scorecard-steering@lists.openssf.org).
 
 ## Suggestions for Improvement
 
