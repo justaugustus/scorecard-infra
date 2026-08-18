@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,9 +36,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/uwu-tools/scorecard-infra/internal/model"
-	"github.com/uwu-tools/scorecard-infra/internal/orchestrator"
-	"github.com/uwu-tools/scorecard-infra/internal/scan"
+	"github.com/ossf/scorecard-infra/internal/model"
+	"github.com/ossf/scorecard-infra/internal/orchestrator"
+	"github.com/ossf/scorecard-infra/internal/scan"
 )
 
 // Provenance response headers (design D12).

@@ -174,7 +174,7 @@ linters:
       # re-wrapping them would only double the prefix. wrapcheck still enforces
       # wrapping for third-party (Scorecard, gocloud, stdlib) errors.
       ignore-package-globs:
-        - github.com/uwu-tools/scorecard-infra/*
+        - github.com/ossf/scorecard-infra/*
   exclusions:
     generated: lax
     presets:
@@ -206,7 +206,7 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/uwu-tools/scorecard-infra)
+        - prefix(github.com/ossf/scorecard-infra)
   exclusions:
     generated: lax
     paths:

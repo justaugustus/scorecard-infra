@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,14 +32,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/uwu-tools/scorecard-infra/internal/config"
-	"github.com/uwu-tools/scorecard-infra/internal/fallback"
-	"github.com/uwu-tools/scorecard-infra/internal/flags"
-	"github.com/uwu-tools/scorecard-infra/internal/httpapi"
-	"github.com/uwu-tools/scorecard-infra/internal/orchestrator"
-	"github.com/uwu-tools/scorecard-infra/internal/scan"
-	"github.com/uwu-tools/scorecard-infra/internal/store"
-	"github.com/uwu-tools/scorecard-infra/internal/tokens"
+	"github.com/ossf/scorecard-infra/internal/config"
+	"github.com/ossf/scorecard-infra/internal/fallback"
+	"github.com/ossf/scorecard-infra/internal/flags"
+	"github.com/ossf/scorecard-infra/internal/httpapi"
+	"github.com/ossf/scorecard-infra/internal/orchestrator"
+	"github.com/ossf/scorecard-infra/internal/scan"
+	"github.com/ossf/scorecard-infra/internal/store"
+	"github.com/ossf/scorecard-infra/internal/tokens"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".

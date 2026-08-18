@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,8 +35,8 @@ import (
 	"github.com/ossf/scorecard/v5/pkg/scorecard"
 	"github.com/ossf/scorecard/v5/policy"
 
-	"github.com/uwu-tools/scorecard-infra/internal/model"
-	"github.com/uwu-tools/scorecard-infra/internal/tokens"
+	"github.com/ossf/scorecard-infra/internal/model"
+	"github.com/ossf/scorecard-infra/internal/tokens"
 )
 
 // ipAllowListMarker is the substring Scorecard surfaces when a repository is

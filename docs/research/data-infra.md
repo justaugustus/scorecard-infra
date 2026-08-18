@@ -15,7 +15,7 @@ It reconciles two research passes —
 model) — and grounds them in the migration now underway (see
 [Context](#context-a-provider-agnostic-migration)).
 
-Prototyping note: `uwu-tools/scorecard-api` is a ground for rapidly prototyping
+Prototyping note: `ossf/scorecard-infra` is a ground for rapidly prototyping
 implementations of these components. Any component here may end up **grafted
 upstream** (`ossf/scorecard`, `ossf/scorecard-webapp`), **standing alone**, or
 proven here first — the design deliberately does not assume which.
@@ -330,7 +330,7 @@ BigQuery gave storage *and* interactive SQL. Replace it in phases:
 API-gateway metering. Serve **static result blobs directly from the object store
 behind a CDN** — no metered API-management layer in the hot path. Keep the
 `GET /projects/...` contract and object-key scheme unchanged; preserve the
-Sigstore publish path. `uwu-tools/scorecard-api` (cloud-agnostic
+Sigstore publish path. `ossf/scorecard-infra` (cloud-agnostic
 `gocloud.dev/blob`, speaks the GET contract, hybrid cache + on-miss live scan) is
 a **candidate implementation** to prototype the serving tier — not an assumed
 adoption.

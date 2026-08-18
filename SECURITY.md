@@ -8,7 +8,7 @@ and will make every effort to acknowledge your contributions.
 ## Reporting a Vulnerability
 
 Report security vulnerabilities using
-[GitHub's private vulnerability reporting](https://github.com/uwu-tools/scorecard-api/security/advisories/new).
+[GitHub's private vulnerability reporting](https://github.com/ossf/scorecard-infra/security/advisories/new).
 
 Please include the following details in your report:
 
@@ -44,7 +44,8 @@ We follow a coordinated disclosure process:
 
 If you do not receive a timely response via GitHub,
 or if you are unable to use the private vulnerability reporting feature,
-please contact the [uwu-tools team](mailto:uwu-tools-team@googlegroups.com).
+please reach out via the [OpenSSF security contact
+email](mailto:security@openssf.org).
 
 ## Suggestions for Improvement
 

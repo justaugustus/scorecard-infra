@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 
 	"gocloud.dev/blob"
 
-	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/ossf/scorecard-infra/internal/model"
 )
 
 const testCommit = "2418d6d95e928102e1f3f8d6e7b92f4f3c78631f"

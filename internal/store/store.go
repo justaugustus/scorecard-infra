@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The uwu-tools Authors.
+Copyright 2026 OpenSSF Scorecard Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ import (
 	_ "gocloud.dev/blob/s3blob"
 	"gocloud.dev/gcerrors"
 
-	"github.com/uwu-tools/scorecard-infra/internal/model"
+	"github.com/ossf/scorecard-infra/internal/model"
 )
 
 // resultsObject is the fixed object filename for a stored result, matching the
