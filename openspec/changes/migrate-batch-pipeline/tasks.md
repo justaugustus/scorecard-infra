@@ -76,11 +76,19 @@ for at least one full scan cycle** (**C10**).
 - [x] 2.5 Extraction remote removed. Branch is **local and unpushed** — the
       filtered result at `../scorecard-cron-extract` and this branch are both
       reviewable before anything reaches the remote.
+- [x] 2.6 Recorded the provenance of the build wiring that could **not** be
+      imported — shared root files are fragments of engine-shared files and are
+      hand-ported in 3.7 / 4.1–4.3. See `docs/cron-build-provenance.md` (**C13**).
+      All Dockerfiles, Cloud Build configs, and k8s manifests *did* import with
+      history; only the `Makefile`, `docker.yml`, `main.yml`, `dependabot.yml`,
+      `.codecov.yml`, and `cloudbuild/README.md` fragments did not.
 
 ## 3. Make it build
 
 - [ ] 3.1 One commit rewriting `github.com/ossf/scorecard/v5/cron/...` →
-      `github.com/ossf/scorecard-infra/cron/...` across the tree (**C4**)
+      `github.com/ossf/scorecard-infra/cron/...` across the tree (**C4**). **Not
+      only `.go` files** — the ported `ko` recipes embed the module path too
+      (**C13**)
 - [ ] 3.2 Correct `go_package` in `cron/data/request.proto` and
       `cron/data/metadata.proto` (both currently declare the stale
       `github.com/ossf/scorecard/cron/data`, missing even `/v5`) and regenerate
@@ -94,7 +102,10 @@ for at least one full scan cycle** (**C10**).
 - [ ] 3.6 `go build ./...`, `go test ./... -race`, and `golangci-lint run ./...`
       clean with the pipeline included
 - [ ] 3.7 Port the Makefile targets — build, docker, ko, proto, add-projects,
-      validate-projects — adjusting paths for this repository root
+      validate-projects — adjusting paths for this repository root. These are
+      hand-ported, not imported: they are fragments of a file shared with the
+      engine. Provenance is recorded in `docs/cron-build-provenance.md` (**C13**).
+      Note there is no `.ko.yaml` content to port — upstream's has no cron entries.
 - [ ] 3.8 Merge the group 2 + group 3 PR
 
 ## 4. CI and image builds, in parallel with production

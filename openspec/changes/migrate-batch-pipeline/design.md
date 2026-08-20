@@ -54,9 +54,10 @@ itself, and convergence with the API server's store/cache paths.
 
 ## Decisions
 
-**Status:** C1–C12 are resolved. Two were settled against the initial
-recommendation during review and are marked below: **C7** gained a `main` canary,
-and **C8** gained a scheduled cross-repo schema check. The only Phase 0 item still
+**Status:** C1–C13 are resolved. Three were settled against the initial
+recommendation and are marked below: **C7** gained a `main` canary, **C8** gained
+a scheduled cross-repo schema check, and **C13** was added during the extraction
+when the shared-root-file constraint surfaced. The only Phase 0 item still
 genuinely open is the external-importer check (see *Open questions*).
 
 ### C1 — `git filter-repo`, not `git subtree split` or `filter-branch`
@@ -292,6 +293,47 @@ A small CI check upstream that fails on any such import closes that window for t
 cost of a few lines. It is added at extraction time and deleted along with `cron/`
 itself, so it leaves no residue.
 
+### C13 — Shared root build files are ported by hand, with recorded provenance
+
+`filter-repo` selects content by path, not by hunk. Everything under `cron/` came
+across with history — including all six Dockerfiles, all six Cloud Build configs,
+and all twelve Kubernetes manifests, which is more of the deployment surface than
+the phrase "port the build system" suggests. What could not come across is the
+wiring that lives in files **shared with the scan engine**: the `Makefile` (96 of
+467 lines are cron), `docker.yml`, `main.yml`, `dependabot.yml`, `.codecov.yml`,
+and `cloudbuild/README.md`.
+
+There is no path filter that extracts 96 lines from a 467-line file. The options
+were to import those files whole — dragging ~370 lines of engine build targets and
+the whole of Scorecard's CI along to recover a handful of recipes — or to port the
+fragments by hand and lose their history. This repository has none of those files,
+so a whole-file import would not have *collided*; the objection is semantic, not
+mechanical.
+
+**Decided: port by hand, and write down what the port erases.**
+[`docs/cron-build-provenance.md`](../../../docs/cron-build-provenance.md) records
+the originating commit for every ported target and job, the earlier lineage where
+the pickaxe is misleading, and how to run further archaeology upstream. It lives
+in `docs/` rather than inside this change so it outlives the change's archival —
+a provenance note filed where it gets archived defeats its own purpose.
+
+The loss is real but modest, and smaller than it is for `cron/`'s source. A build
+recipe's history explains why a flag is set; it is not the load-bearing
+operational record that makes `git blame` on a shard size or an ack deadline
+valuable. Those 96 lines are also substantially rewritten in the port anyway — new
+module path, new repository root, no shared engine variables — so their upstream
+history describes a file that will not exist here. And `ossf/scorecard`'s history
+stays public: deletion in Phase 6 removes the working tree, not the log.
+
+Two things this decision turned up that the plan had wrong:
+
+- **There are no cron `ko` configs to port.** Upstream's `.ko.yaml` declares a
+  single `scorecard` build id and nothing cron-related. The "six ko targets" are
+  Makefile recipes invoking `ko build` against import paths.
+- **The C4 import rewrite is not confined to `.go` files.** Those ko recipes
+  hardcode `github.com/ossf/scorecard/v5/cron/internal/worker`. The ported
+  Makefile must use this module's path.
+
 ## Relationship to the existing API server
 
 The imported pipeline does not touch the orchestrator, the store, the scan path,
@@ -380,6 +422,9 @@ reasonably expect interaction:
 - **Scope** — Upstream removal (groups 6–7) stays inside this change rather than
   splitting into a separate artifact, because the **C10** rollback contract spans
   both repositories and would drift if tracked separately.
+- **C13** — Shared root build files are ported by hand rather than imported whole,
+  with their provenance recorded in `docs/cron-build-provenance.md`. Raised during
+  extraction, not during the original review.
 
 ## Open questions
 
