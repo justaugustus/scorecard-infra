@@ -18,7 +18,7 @@ package ossf.scorecard.cron.internal.data;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/ossf/scorecard/cron/data";
+option go_package = "github.com/ossf/scorecard-infra/cron/data";
 
 message Repo {
   optional string url = 1;
