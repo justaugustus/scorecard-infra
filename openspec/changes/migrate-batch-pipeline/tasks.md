@@ -186,13 +186,23 @@ for at least one full scan cycle** (**C10**).
 
 ## 5. Documentation and repository identity
 
-- [ ] 5.1 Update `AGENTS.md`: the repository is now an API server **and** the batch
-      pipeline; document the imported tree and its boundary (**C11**)
-- [ ] 5.2 Update `docs/upstream-graft.md`: the batch pipeline is explicitly **not**
-      a graft target — its direction of travel is inbound
-- [ ] 5.3 Update `openspec/config.yaml` context to reflect the widened scope
-- [ ] 5.4 Document the pipeline's operational entry points (build, deploy, the
-      inventory contribution path) in `README.md` or a dedicated doc
+- [x] 5.1 `AGENTS.md` rewritten to describe two adjacent systems rather than one,
+      with a `cron/` component map, the behavior-freeze rule, the schema-contract
+      warning, and the Makefile-based workflow. Carries an explicit "do not tidy
+      this by wiring the two together" instruction (**C11**) — the failure mode is
+      a future agent treating the missing import edges as an oversight.
+- [x] 5.2 `docs/upstream-graft.md` gains a section stating the pipeline is the one
+      component travelling **inbound**, plus a `cron/` row in the component graft
+      map marked "does not graft back". Positioned before the graft rules so a
+      reader meets the exception before the rules it contradicts.
+- [x] 5.3 `openspec/config.yaml` context now describes both systems, the C11
+      boundary, and the inbound direction of travel.
+- [x] 5.4 `README.md` gains a **Batch scanning pipeline** section: component and
+      image table, deployment manifest locations, the schema-contract owner, the
+      scan inventories with their contribution workflow, and the pipeline make
+      targets. Includes a note that the inventories moved from `ossf/scorecard`, so
+      someone arriving on a stale link lands on an explanation (**C9** —
+      the upstream half of that redirect is task 7.4).
 
 ## 6. Production cutover
 

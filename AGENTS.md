@@ -6,11 +6,28 @@ with the full project context.
 
 ## What this project is
 
-A cloud-agnostic, self-hosted OpenSSF Scorecard results **API server**: a
-read-through cache over an in-process scan engine ("hybrid"). It serves
-pre-computed results from any object store and generates them live on demand. It
-speaks the `ossf/scorecard-webapp` GET contract so it is a drop-in `--base-url`
-target for `uwu-tools/scorecard-mcp`.
+Two systems, deliberately adjacent:
+
+1. A cloud-agnostic, self-hosted OpenSSF Scorecard results **API server**: a
+   read-through cache over an in-process scan engine ("hybrid"). It serves
+   pre-computed results from any object store and generates them live on demand.
+   It speaks the `ossf/scorecard-webapp` GET contract so it is a drop-in
+   `--base-url` target for `uwu-tools/scorecard-mcp`.
+2. The **batch scanning pipeline** (`cron/`), imported with history from
+   `ossf/scorecard`: the PubSub controller, batch and CII workers, BigQuery
+   transfer, release webhook, GitHub token-pool server, and the `projects.csv`
+   scan inventories behind the weekly public scan of 1M+ repositories.
+
+They share a repository and nothing else — no import edges in either direction,
+enforced by task 3.5 and design **C11**. That is intentional for now. The
+pipeline is a GCP-bound producer writing Scorecard results to a bucket; the API
+server is a provider-agnostic consumer reading them from one. Converging them —
+putting `gocloud.dev/blob` under the pipeline and letting the orchestrator serve
+batch-produced results — is what landing them together makes possible, and is
+tracked separately.
+
+**Do not "tidy" this by wiring the two together.** Any convergence needs its own
+spec; a behavior-preserving migration is what keeps the split revertible.
 
 **Status:** 45/46 OpenSpec tasks done. The v0 core (groups 0–7) is implemented and
 tested — model, store, scan/tokens, orchestrator, HTTP contract, config, and the
@@ -48,15 +65,56 @@ under `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
   static provider by default (**FF1/FF2/FF5**).
 - `cmd/scorecard-api/` — the binary.
 
+## The batch pipeline (cron/)
+
+Imported from `ossf/scorecard` with full history. Read
+[`cron/initial-graft.md`](cron/initial-graft.md) before working in this tree — it
+records what came across, what was hand-ported, and where to trace the rest.
+
+- `cron/internal/controller/` — PubSub batch controller
+- `cron/internal/worker/` — batch scan worker
+- `cron/internal/cii/` — CII best-practices worker
+- `cron/internal/bq/` — BigQuery transfer
+- `cron/internal/webhook/` — release webhook
+- `cron/internal/githubserver/` — GitHub token-pool RPC server (relocated from
+  `clients/githubrepo/roundtripper/tokens/server/`; its parent `tokens/` package
+  stays in `ossf/scorecard`)
+- `cron/internal/format/` — **owns the published BigQuery/JSON schema contract**
+- `cron/internal/data/` — `projects.csv` / `gitlab-projects.csv` scan inventories
+- `cron/k8s/`, `cron/cloudbuild/` — deployment manifests and image build configs
+
+Two things to know before changing anything here. The tree is **behavior-frozen**
+until production cutover completes: it must stay equivalent to what
+`ossf/scorecard` builds, because that equivalence is the migration's acceptance
+test and its rollback path. And `cron/internal/format` serializes a data model
+that lives upstream, so a schema edit here without the corresponding engine change
+breaks the contract silently — `schema_gen_test.go` is what catches it.
+
 ## Build, test, lint
 
 ```sh
-go build ./...
-go test ./... -race
-golangci-lint run ./...        # config in .golangci.yml (aligned with ossf/scorecard)
+make build      # go build ./...
+make test       # go test ./... -race
+make lint       # golangci-lint run ./...
 ```
 
 Everything must be clean before a change is considered done.
+
+Pipeline-specific targets (`make help` lists them all):
+
+```sh
+make build-controller build-worker ...   # the seven pipeline binaries
+make dockerbuild                         # all six container images
+make ko-images                           # the same six via ko
+make validate-projects                   # validate the scan inventories
+make add-projects                        # normalize inventory additions
+make build-proto                         # regenerate protobufs (requires protoc)
+```
+
+`ko` and `protoc` are expected on `PATH` rather than vendored; the Makefile says
+why, and errors actionably when they are missing. `build-proto` is deliberately
+explicit rather than a file rule — run it when you change a `.proto`, and commit
+the generated output.
 
 **Toolchain note:** match the Scorecard Go toolchain version (see `go.mod`). If
 builds fail with a Go tool version mismatch across many stdlib packages, a stray

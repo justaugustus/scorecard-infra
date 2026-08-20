@@ -10,7 +10,7 @@ Extracted with `git filter-repo` from `ossf/scorecard` `main` @ `d1fab88f`, then
 merged with `git merge --allow-unrelated-histories`.
 
 | | |
-|---|---|
+| --- | --- |
 | Imported commits | 466 non-merge, plus 2 retained 2020-era merges |
 | History span | 2020-11-10 → 2026-08-07 |
 | Files | 131 — 128 from `cron/`, 3 from the relocated token server |
@@ -43,7 +43,7 @@ have erased.
 not come across because it lives in files *shared with the scan engine*:
 
 | File | Cron content | Total |
-|---|---|---|
+| --- | --- | --- |
 | `Makefile` | 96 lines mention cron | 467 lines |
 | `.github/workflows/docker.yml` | 6 of 8 `docker_matrix` targets | whole-repo image CI |
 | `.github/workflows/main.yml` | `add-projects`, `validate-projects` | whole-repo CI |
@@ -81,7 +81,7 @@ Commits are in `ossf/scorecard`. All hashes were resolved against `main` @
 The image targets reached their **current names** in one 2021 restructuring:
 
 | Commit | Date | Subject |
-|---|---|---|
+| --- | --- | --- |
 | `aa558ff2` | 2021-12-02 | Add parallelism to improve build times (#1342) |
 
 That commit introduced all twelve of `cron-{controller,worker,cii-worker,bq-transfer,webhook,github-server}-{docker,ko}`. It is a rename and
@@ -89,7 +89,7 @@ restructure, **not** the origin of cron building — the lineage starts earlier
 under different target names:
 
 | Commit | Date | Subject |
-|---|---|---|
+| --- | --- | --- |
 | `688dc5e6` | 2021-03-19 | :sparkles: Refactor cron job |
 | `7622cea5` | 2021-03-22 | :seedling: updated the makefile to include scripts and cron |
 | `eade3f95` | 2021-04-26 | :seedling: Included go mod verify for cron and scripts |
@@ -104,7 +104,7 @@ git log -S'cron' --oneline -- Makefile          # in a clone of ossf/scorecard
 The non-image targets have single, clean origins:
 
 | Target | Commit | Date | Subject |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `add-projects` | `c06f89af` | 2021-06-10 | Script to add new projects to projects.csv file (#567) |
 | `validate-projects` | `ba3b5c59` | 2021-05-15 | Refactor Makefile and add proto compile support. (#458) |
 | `build-proto` | `ba3b5c59` | 2021-05-15 | Refactor Makefile and add proto compile support. (#458) |
@@ -112,7 +112,7 @@ The non-image targets have single, clean origins:
 ### Workflows and configuration
 
 | Wiring | Commit | Date | Subject | Commits |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `docker.yml` cron matrix entries | `35511342` | 2022-02-15 | :seedling: Parallelize the builds | 2 |
 | `main.yml` `add-projects` / `validate-projects` jobs | `bba55d42` | 2022-02-16 | :seedling: Parallelize builds | 1 |
 | `dependabot.yml` cron Dockerfile paths | `775a83a2` | 2021-03-22 | :seedling: update dependabot for cron and scripts | 4 |

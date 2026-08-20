@@ -40,6 +40,7 @@ client of the public `api.scorecard.dev`.
   - [Configuration](#configuration)
   - [As a `scorecard-mcp` backend](#as-a-scorecard-mcp-backend)
   - [Verifying end to end](#verifying-end-to-end)
+- [Batch scanning pipeline](#batch-scanning-pipeline)
 - [Development](#development)
 - [Roadmap](#roadmap)
 - [Community](#community)
@@ -356,12 +357,72 @@ real `scorecard-mcp` binary against this server and checks both a cache **HIT** 
 `fileblob` and a cache **MISS** that triggers a live scan, persists, and re-serves
 from cache.
 
+## Batch scanning pipeline
+
+This repository also hosts **`cron/`**, the batch scanning pipeline behind the
+weekly public Scorecard scan of 1M+ repositories. It was imported from
+[`ossf/scorecard`](https://github.com/ossf/scorecard) with its full commit
+history; [`cron/initial-graft.md`](cron/initial-graft.md) records the terms of
+that import.
+
+It is a separate system from the API server above. They share a repository and no
+code: there are no import edges in either direction. The pipeline is a GCP-bound
+*producer* of Scorecard results; the API server is a provider-agnostic *consumer*
+of them. Converging the two is the point of having them in one place, but it has
+not happened yet and should not happen incidentally.
+
+| Component | Path | Image |
+| --- | --- | --- |
+| PubSub batch controller | `cron/internal/controller/` | `scorecard-batch-controller` |
+| Batch scan worker | `cron/internal/worker/` | `scorecard-batch-worker` |
+| CII best-practices worker | `cron/internal/cii/` | `scorecard-cii-worker` |
+| BigQuery transfer | `cron/internal/bq/` | `scorecard-bq-transfer` |
+| Release webhook | `cron/internal/webhook/` | `scorecard-webhook-releasetest` |
+| GitHub token-pool server | `cron/internal/githubserver/` | `scorecard-github-server` |
+
+Deployment manifests are in `cron/k8s/`; image build configs in
+`cron/cloudbuild/`. `cron/internal/format/` owns the published BigQuery and JSON
+schema contract, verified against the Scorecard engine's data model by
+`schema_gen_test.go`.
+
+### Scan inventories
+
+The repositories scanned each week are listed in `cron/internal/data/`:
+
+| File | Scope |
+| --- | --- |
+| `projects.csv` | GitHub |
+| `gitlab-projects.csv` | GitLab |
+| `gitlab-projects-releasetest.csv` | GitLab release testing |
+
+To add a repository, edit the relevant file and run `make add-projects`, which
+normalizes the result. CI enforces both that the inventories are valid and that
+`add-projects` is a no-op against them, so a hand-edit the tooling would not
+produce fails the build.
+
+> [!NOTE]
+> These inventories previously lived in `ossf/scorecard`. If you followed a link
+> there, this is the right place now.
+
+### Pipeline targets
+
+```sh
+make help                  # every target, grouped
+make dockerbuild           # build all six images
+make ko-images             # the same six via ko
+make validate-projects     # validate the scan inventories
+make build-proto           # regenerate protobufs (requires protoc on PATH)
+```
+
+`ko` and `protoc` are expected on `PATH` rather than vendored; the Makefile
+explains why and fails with actionable errors when they are missing.
+
 ## Development
 
 ```sh
-go build ./...
-go test ./... -race
-golangci-lint run ./...        # config in .golangci.yml (aligned with ossf/scorecard)
+make build     # go build ./...
+make test      # go test ./... -race
+make lint      # golangci-lint run ./...   (config in .golangci.yml, aligned with ossf/scorecard)
 ```
 
 An S3-compatible integration test runs when `SCORECARD_TEST_S3_URL` is set (e.g. a

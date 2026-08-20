@@ -11,6 +11,23 @@ It is the detailed companion to design decision **D11** (and touches **D4**,
 **D7**, **D13**); the README and `AGENTS.md` point here. See
 `openspec/changes/archive/2026-08-06-add-scorecard-api-server/design.md`.
 
+## The batch pipeline is not a graft target
+
+One component in this repository travels the other way. `cron/` — the batch
+scanning pipeline — was imported *from* `ossf/scorecard`, with history, and is
+not headed back. Everything else on this page is incubating here to leave; the
+pipeline arrived here to stay.
+
+Do not read the rules below as applying to it. Its provenance and the terms of
+its import are recorded in [`cron/initial-graft.md`](../cron/initial-graft.md).
+
+The interesting question about the pipeline is not "where does it graft" but
+"when does it converge with the API server" — it is a GCP-bound producer writing
+Scorecard results to a bucket, sitting beside a provider-agnostic read-through
+cache that reads them from one. That convergence is deliberately deferred; see
+design **C11** in `openspec/changes/migrate-batch-pipeline/design.md`. Until it
+happens, keep the two trees free of import edges in either direction.
+
 ## Graft targets
 
 There are three homes for code in play:
@@ -28,7 +45,7 @@ There are three homes for code in play:
 ## Component graft map
 
 | Package         | Role                                              | Graft target                                | What the graft entails |
-|-----------------|---------------------------------------------------|---------------------------------------------|------------------------|
+| --- | --- | --- | --- |
 | `internal/store`   | `gocloud.dev/blob` store; backend-by-URL; the `{host}/{org}/{repo}[/{commit}]/results.json` key contract | **`scorecard-webapp`** (read path) | Parameterize the bucket URL (drop the hardcoded `gs://`); blank-import the non-GCS drivers. A small change that benefits the public server too. |
 | `internal/httpapi` — `/projects`, `/badge` | The webapp GET contract | **`scorecard-webapp`** | The contract already lives there; our handlers mirror it. Grafting is mostly reconciling routing/serialization, not new behavior. |
 | `internal/scan`    | Wraps `pkg/scorecard.Run`; reuses OSS-Fuzz/CII/vuln clients across scans, per-scan repo client (mirrors the cron `ScorecardWorker`) | **`ossf/scorecard`** (`scorecard serve`) | Teach `serve` to persist + reuse results instead of always computing fresh. The engine call itself is already upstream. |
@@ -38,6 +55,7 @@ There are three homes for code in play:
 | `internal/httpapi` — `/capabilities` | Server-advertised mode/coverage/freshness/caveats (**D7**) | **New endpoint** upstream + a reader in `scorecard-mcp` | Fixes the MCP hardcoding its provenance to the public cache. Follow-up lives in the `scorecard-mcp` repo, not here. |
 | `internal/model`   | Lean in-repo JSON2 mirror (**D13**) | **Does not graft** | Upstream already has `AsJSON2()` and the webapp's generated models. This mirror is a deliberate incubator-local convenience for introspection (`score`→badge; `repo.commit`+`date`→freshness) and passthrough; it stays here. |
 | `internal/config`  | 12-factor env config (**D10**) | **Does not graft** | Each upstream project has its own config surface; ours is incubator-local. |
+| `cron/`            | Batch scanning pipeline: controller, workers, BigQuery transfer, webhook, token-pool server, scan inventories | **Arrived from `ossf/scorecard`; does not graft back** | Direction of travel is inbound (**C6**/**C13**). Its future is convergence with `internal/store` and the GCP exit (**C11**), not a return upstream. |
 
 Rule of thumb when editing: keep `store` and the `/projects` handlers **thin and
 faithful to the webapp** so they lift out cleanly; keep `scan` a **thin adapter
