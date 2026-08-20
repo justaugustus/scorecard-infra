@@ -67,6 +67,11 @@ touch it; 3 files under `clients/githubrepo/roundtripper/tokens/server/`.
 - **Port the build and CI surface**: Makefile build/docker/ko/proto targets, the
   `docker_matrix` image job, the `add-projects` / `validate-projects` jobs, and
   the five cron Dockerfile paths in `dependabot.yml`.
+- **Pin the Scorecard engine to a release and add a `main` canary.** `go.mod`
+  pins a release, bumped automatically, so production builds are reproducible; a
+  separate scheduled job builds and tests the pipeline against `ossf/scorecard`'s
+  `main` to recover the PR-time breakage signal the split otherwise gives up. The
+  canary carries the schema-drift check too (**C7**/**C8**).
 - **Fix the already-stale protobuf `go_package`** in `cron/data/request.proto`
   and `cron/data/metadata.proto` — both declare
   `github.com/ossf/scorecard/cron/data`, missing even the current `/v5` suffix.
@@ -126,18 +131,23 @@ and is deliberately deferred (design C11).
   this module's dependency set.
 - **Build and CI:** six new image builds, `ko` targets, protobuf generation, and
   two inventory-validation jobs land in this repo's `presubmits.yml` (or a new
-  `docker.yml`). Expect a materially longer CI run.
+  `docker.yml`). Expect a materially longer CI run. One additional **scheduled,
+  non-blocking** job builds the pipeline against `ossf/scorecard`'s `main`
+  (**C7**/**C8**).
 - **External systems:** Cloud Build triggers in the `openssf` GCP project are
-  configured outside git and must be repointed by whoever holds admin there. This
-  is the one step no amount of repository preparation can cover.
+  configured outside git and must be repointed at cutover. The change author holds
+  admin there, so this is a scheduling constraint rather than a dependency on a
+  third party — but it remains the one step that is not reviewable as a diff and
+  not revertible by `git revert`.
 - **Upstream (`ossf/scorecard`):** loses `cron/`, the token server subdirectory,
   ~45 lines of Makefile, six `docker_matrix` entries, two CI jobs, five
   Dependabot paths, and a `.codecov.yml` ignore. Gains a redirect stub and
   updated `CONTRIBUTING.md` / `AGENTS.md` / `cloudbuild/README.md`.
 - **Compatibility:** `cron/data` and `cron/config` are public, non-`internal`
-  packages upstream today. Any external importer breaks. Phase 0 checks for known
-  consumers; if any exist, upstream removal needs a deprecation window instead of
-  a clean delete.
+  packages upstream today. Any external importer breaks. None are known and none
+  are presumed; Phase 0 verifies rather than discovers. If the check turns
+  something up, upstream removal needs a deprecation window instead of a clean
+  delete.
 - **Governance:** requires Scorecard Steering Committee sign-off, `openssf` GCP
   project admin sign-off on the trigger repointing specifically, and review from
   at least one non-Steering maintainer. The community meeting is notified before

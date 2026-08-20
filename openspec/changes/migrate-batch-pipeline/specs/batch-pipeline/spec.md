@@ -68,6 +68,30 @@ require any new API surface to be exported from `ossf/scorecard`.
   dependency bump, and a resulting build or test failure SHALL fail that bump
   rather than be reported as a warning
 
+### Requirement: Pre-release engine breakage is detected on a schedule
+
+Because the pipeline no longer builds against the engine in-tree, a scheduled job
+SHALL build and test it against the engine's development branch, so breakage is
+detected before it reaches a pinned release.
+
+#### Scenario: Unreleased engine change breaks the pipeline
+
+- **WHEN** the scheduled job builds and tests the pipeline against the engine's
+  development branch and the build or tests fail
+- **THEN** the failure SHALL be reported to a channel the maintainers monitor
+
+#### Scenario: The canary does not gate unrelated work
+
+- **WHEN** the scheduled job is failing because of an upstream change
+- **THEN** it SHALL NOT block pull requests in this repository, which build
+  against the pinned release
+
+#### Scenario: Production builds remain reproducible
+
+- **WHEN** a production image is built
+- **THEN** it SHALL build against the explicitly pinned engine release, not
+  against the development branch the scheduled job tracks
+
 ### Requirement: Pipeline code isolated from the API server capabilities
 
 The imported pipeline SHALL remain self-contained: it SHALL NOT import this
@@ -98,6 +122,13 @@ model of the Scorecard engine version it builds against.
 - **WHEN** an engine dependency bump introduces a data model change that the
   published schemas do not reflect
 - **THEN** the schema verification SHALL fail the bump
+
+#### Scenario: Drift surfaced on the engine's cadence
+
+- **WHEN** the scheduled job builds the pipeline against the engine's development
+  branch
+- **THEN** it SHALL run the schema verification against that branch's data model,
+  so drift is detected before the corresponding release is pinned
 
 ### Requirement: Protobuf package paths are correct for this module
 

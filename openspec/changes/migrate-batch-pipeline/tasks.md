@@ -6,25 +6,28 @@ for at least one full scan cycle** (**C10**).
 
 ## 0. Pre-work / decisions
 
-- [ ] 0.1 Resolve **C6**: confirm the GitHub token-pool server moves at all, and
-      confirm `cron/internal/githubserver/` as its destination
-- [ ] 0.2 Resolve **C7**: pin the Scorecard engine to a release (recommended, with
-      an automated bump) or track `main` — decided by the cron operations owner
-- [ ] 0.3 Resolve **C8**: confirm the dependency bump fails hard on schema drift,
-      and whether consolidating the duplicate `json.v2.schema` is a prerequisite
-      or a follow-on
-- [ ] 0.4 Confirm **C5** (top-level `cron/`), **C4** (tip-only import rewrite), and
-      **C9** (redirect stub upstream) with reviewers
-- [ ] 0.5 Identify who holds Cloud Build trigger edit rights in the `openssf` GCP
-      project; confirm availability for the cutover window
-- [ ] 0.6 Check for known external consumers of
-      `github.com/ossf/scorecard/v5/cron/data` and `.../cron/config`; if any
-      exist, plan a deprecation window instead of a delete
+- [x] 0.1 **C6** resolved: the GitHub token-pool server moves, to
+      `cron/internal/githubserver/`. Upstream builds no cron image after removal.
+- [x] 0.2 **C7** resolved: pin the engine to a release with an automated bump,
+      **plus** a scheduled canary building the pipeline against `ossf/scorecard`'s
+      `main` (implemented in 4.7)
+- [x] 0.3 **C8** resolved: accept cross-repo drift, fail the dependency bump hard
+      on it, and fold the schema check into the C7 canary. Consolidating the
+      duplicate `json.v2.schema` is a separate, non-blocking track.
+- [x] 0.4 **C4** (tip-only import rewrite), **C5** (top-level `cron/`), and **C9**
+      (redirect stub upstream, retained indefinitely) confirmed
+- [x] 0.5 Cloud Build trigger ownership resolved: the change author holds `openssf`
+      project admin. Remaining work is scheduling the cutover window (6.1) and
+      capturing the triggers' before-state for rollback (6.0).
+- [ ] 0.6 Verify there are no external consumers of
+      `github.com/ossf/scorecard/v5/cron/data` or `.../cron/config` — GitHub code
+      search plus `pkg.go.dev` importers. None are known or presumed; a positive
+      result changes upstream removal to a deprecation window.
 - [ ] 0.7 Install `git-filter-repo` (`brew install git-filter-repo`) and confirm
       `re` is available in its `--message-callback` context on a dry run (**C1**)
-- [ ] 0.8 Obtain approvals: Scorecard Steering Committee, `openssf` GCP project
-      admin (on the trigger repointing specifically), and at least one
-      non-Steering Scorecard maintainer
+- [ ] 0.8 Obtain approvals: Scorecard Steering Committee and at least one
+      non-Steering Scorecard maintainer. Ask the committee whether it wants a
+      standalone summary document rather than this OpenSpec change as the artifact.
 
 ## 1. History extraction, reviewed in isolation
 
@@ -70,8 +73,7 @@ for at least one full scan cycle** (**C10**).
       `github.com/ossf/scorecard/cron/data`, missing even `/v5`) and regenerate
       the `.pb.go` files
 - [ ] 3.3 `go mod tidy`; confirm the `github.com/ossf/scorecard/v5` requirement
-      resolves everything the pipeline needs, and apply the **C7** decision
-      (pinned release + automated bump, or pseudo-version)
+      resolves everything the pipeline needs, and pin it to a release per **C7**
 - [ ] 3.4 Reconcile upstream's `.golangci.yml` rules with this repo's; resolve new
       lint failures by adjusting config or code, not by exempting the tree
 - [ ] 3.5 Confirm no import edge exists in either direction between `cron/` and
@@ -96,6 +98,16 @@ for at least one full scan cycle** (**C10**).
       confirm the split introduced no behavioral change
 - [ ] 4.6 Measure the CI runtime increase; if the presubmit path is now
       unreasonable, split image builds into their own workflow
+- [ ] 4.7 Add the **scheduled `main` canary** (**C7**/**C8**): build and test the
+      pipeline against `ossf/scorecard`'s `main`, including `schema_gen_test.go`
+      so data-model drift surfaces on the engine's cadence. **Non-blocking** on
+      this repo's pull requests — it tests an upstream branch and must not gate
+      unrelated work
+- [ ] 4.8 Route canary failures somewhere a maintainer reads, and write down what
+      a sustained red canary means (talk to engine maintainers before the next
+      bump, not after). An unread canary manufactures confidence
+- [ ] 4.9 Configure the engine dependency bump to **fail hard** on schema
+      verification failure — a build break, never a warning on a dependency PR
 
 ## 5. Documentation and repository identity
 
@@ -109,6 +121,9 @@ for at least one full scan cycle** (**C10**).
 
 ## 6. Production cutover
 
+- [ ] 6.0 Capture the Cloud Build triggers' current configuration before changing
+      it, so rollback is a known state rather than a reconstruction — this config
+      is not in git and the cutover is not revertible by `git revert` (**C10**)
 - [ ] 6.1 Repoint the Cloud Build triggers in the `openssf` GCP project from
       `ossf/scorecard` to `ossf/scorecard-infra`
 - [ ] 6.2 Run a full pipeline cycle end to end: controller → PubSub → worker → GCS

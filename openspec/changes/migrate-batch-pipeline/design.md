@@ -54,6 +54,11 @@ itself, and convergence with the API server's store/cache paths.
 
 ## Decisions
 
+**Status:** C1–C12 are resolved. Two were settled against the initial
+recommendation during review and are marked below: **C7** gained a `main` canary,
+and **C8** gained a scheduled cross-repo schema check. The only Phase 0 item still
+genuinely open is the external-importer check (see *Open questions*).
+
 ### C1 — `git filter-repo`, not `git subtree split` or `filter-branch`
 
 `git filter-repo` is the upstream-recommended replacement for the deprecated
@@ -148,27 +153,41 @@ public parent, so it moves cleanly on its own.
 Destination `cron/internal/githubserver/` matches the existing
 `cron-github-server` make target and `scorecard-github-server` image name.
 
-Leaving it upstream is a legitimate alternative — it costs upstream one
-indefinitely-maintained cron image. Moving it is the recommendation; it needs
-explicit confirmation because it is the one path outside `cron/` that this change
-touches.
+Leaving it upstream was the alternative — it costs upstream one
+indefinitely-maintained cron image and leaves the split incomplete. **Decided:
+move it**, so upstream builds no cron image at all after removal.
 
-### C7 — Pin the engine dependency to a release, with an automated bump
+### C7 — Pin the engine to a release, with an automated bump *and* a `main` canary
 
 Today the cron worker builds against in-tree scorecard, so an engine change that
 breaks cron fails at PR time. After the split it builds against whatever `go.mod`
-pins (`v5.5.0` currently).
+pins (`v5.5.0` currently). Two things are worth having and they pull in opposite
+directions: reproducible production builds, and early warning when the engine
+breaks the pipeline.
 
-- **Pin to a release** (recommended), with a scheduled job or Dependabot rule
-  bumping to the latest tag. Production scans then run a known engine version,
-  which is arguably more correct than today's implicit tracking of `main`.
-- **Track `main`** via a pseudo-version. Preserves the tight feedback loop, at the
-  cost of non-reproducible production builds.
+The two obvious options each sacrifice one. Pinning to a release with an automated
+bump gives reproducibility but moves breakage discovery to bump time — a real
+regression in feedback latency, and the bump lands on whoever happens to be
+reviewing dependency PRs rather than on the author of the change. Tracking `main`
+via a pseudo-version keeps the feedback loop but makes production builds
+non-reproducible and lets an upstream `main` breakage reach the weekly scan.
 
-The trade-off is real and unavoidable: under the recommended option, an engine
-change that breaks cron surfaces at bump time rather than at PR time. Whoever
-owns cron operations makes this call — it is an operational preference, not a
-technical constraint.
+**Decided: take both halves.** `go.mod` pins a release and is bumped
+automatically, so production is reproducible and runs a known engine version.
+Separately, a **scheduled CI job builds and tests the pipeline against
+`ossf/scorecard`'s `main`**. That job does not gate this repository's pull
+requests — it is testing someone else's branch, and a red light caused by upstream
+work in progress must not block unrelated changes here. It does need to be
+visible: a canary nobody looks at is worse than no canary, because it manufactures
+confidence. Route its failures somewhere a maintainer actually reads, and treat a
+sustained red canary as a signal to talk to the engine maintainers before the
+next bump lands rather than after.
+
+This costs one non-blocking scheduled job and recovers most of what the split
+otherwise gives up. It does not fully restore PR-time feedback — an engine
+contributor still will not see cron break in their own PR — and closing that gap
+would require a check in `ossf/scorecard` itself, which is out of scope here and
+worth revisiting only if the canary proves noisy in practice.
 
 ### C8 — Schema contract ownership after the split
 
@@ -183,11 +202,24 @@ Note the duplication already exists: `pkg/scorecard/json_test.go` validates
 against its own copy of `json.v2.schema`. The split makes an existing seam
 visible rather than creating one.
 
-Accept the drift risk for now: `schema_gen_test.go` still catches mismatches, but
-at dependency-bump time rather than at engine-PR time. Consolidating the two
-`json.v2.schema` copies is tracked separately and is not a blocker. The decision
-that matters here is how loudly the dependency bump should fail — it should fail
-hard, as a build break, not as a warning.
+**Decided: accept the drift risk, fail hard on it, and detect it on the engine's
+cadence rather than the bump's.** Three parts:
+
+- `schema_gen_test.go` continues to verify the published schemas against the
+  engine data model, and a dependency bump that trips it **fails the bump** as a
+  build break, never as a warning. A soft signal on a dependency PR is a signal
+  that gets merged.
+- The **C7 canary carries the schema check too** — it already builds and tests the
+  pipeline against `ossf/scorecard`'s `main`, which runs `schema_gen_test.go`
+  against the unreleased data model. One scheduled job answers both "did the
+  engine break the pipeline" and "did the engine change the data model out from
+  under the published schema". They are the same question asked of different
+  files, and splitting them into two jobs would duplicate the setup for no
+  additional coverage.
+- Consolidating the two `json.v2.schema` copies stays a **separate, non-blocking
+  track**. Making it a prerequisite would add an upstream change with its own
+  review cycle in front of an extraction whose whole argument is that the coupling
+  window is open now.
 
 ### C9 — Redirect stub upstream, not a clean delete
 
@@ -296,15 +328,27 @@ reasonably expect interaction:
   misdirected PRs. Mitigated by the redirect stub, `CONTRIBUTING.md` rewrite, and
   issue-template callout (**C9**). This is the risk most likely to be
   underestimated, because its cost is diffuse and lands on whoever triages issues.
-- **Cloud Build triggers gate the cutover and are not in git.** If the person with
-  `openssf` project admin is unavailable, the migration stalls indefinitely at the
-  last reversible step. Identified and scheduled before any code moves — this is
-  the reason Phase 0 exists as a distinct phase.
+- **Cloud Build triggers gate the cutover and are not in git.** Substantially
+  reduced: the change author holds `openssf` project admin, so trigger repointing
+  is not blocked on a third party's availability. What remains is that the
+  triggers' configuration lives outside version control, so the cutover is not
+  reviewable as a diff and not revertible by `git revert` — only by repointing
+  them back (**C10**). Capture their before-state so the rollback is a known
+  configuration, not a reconstruction.
 - **External importers of `cron/data` or `cron/config` break.** Both are public
-  upstream today. Checked in Phase 0; if any consumer exists, upstream removal
-  becomes a deprecation window rather than a delete.
-- **Engine changes stop exercising the cron build at PR time.** Inherent to the
-  split, not to how it is done. See **C7**.
+  upstream today. No consumers are known and none are presumed; Phase 0 verifies
+  rather than discovers. If the check turns something up, upstream removal becomes
+  a deprecation window rather than a delete — which is another reason `cron/`
+  lands flat rather than under `internal/` (**C5**), since a deprecation window
+  needs those packages to stay importable from somewhere.
+- **Engine changes stop exercising the cron build at PR time.** Mitigated but not
+  eliminated by the `main` canary (**C7**): breakage is caught within a scheduled
+  interval rather than at the engine contributor's PR. The residual gap is real
+  and is accepted.
+- **Canary fatigue.** A scheduled job testing someone else's `main` will
+  eventually go red for reasons unrelated to this repository. If it is ignored, it
+  is worse than absent. See **C7** — route failures to a read channel and act on a
+  sustained red.
 - **Schema and data model split across repos with no compile-time guard.** See
   **C8**.
 - **Longer CI here.** Six image builds and protobuf generation land in a
@@ -315,14 +359,38 @@ reasonably expect interaction:
   as an API server. After this it is an API server *and* the batch pipeline. That
   documentation debt is real and is part of the change, not a follow-up.
 
+## Resolved during review
+
+- **C4** — Tip-only import rewrite. Confirmed.
+- **C5** — `cron/` lands at the top level; reorganization is a later, separate
+  rename commit. Confirmed.
+- **C6** — The token-pool server moves, to `cron/internal/githubserver/`. Upstream
+  therefore builds no cron image at all after removal.
+- **C7** — Pin to a release with an automated bump, **plus** a scheduled canary
+  building the pipeline against `ossf/scorecard`'s `main`. Both halves, rather
+  than trading reproducibility against feedback latency.
+- **C8** — Accept cross-repo drift, fail the dependency bump hard on it, and fold
+  the schema check into the C7 canary so drift surfaces on the engine's cadence.
+  Schema consolidation stays a separate, non-blocking track.
+- **C9** — Redirect stub at `cron/README.md` upstream, retained indefinitely, plus
+  the `CONTRIBUTING.md` rewrite and issue-template callout.
+- **Cloud Build triggers** — The change author holds `openssf` project admin;
+  cutover is not blocked on third-party availability. Scheduling the cutover
+  window is the remaining constraint.
+- **Scope** — Upstream removal (groups 6–7) stays inside this change rather than
+  splitting into a separate artifact, because the **C10** rollback contract spans
+  both repositories and would drift if tracked separately.
+
 ## Open questions
 
-- **C6:** Confirm the token server should move at all, and confirm
-  `cron/internal/githubserver/` as its destination.
-- **C7:** Pin-to-release or track-`main`? Needs the cron operations owner.
-- **C8:** Should the dependency bump fail hard on schema drift, and is
-  consolidating the duplicate `json.v2.schema` a prerequisite or a follow-on?
-- **Phase 0:** Who holds Cloud Build trigger edit rights in the `openssf` GCP
-  project, and are they available for the cutover window?
-- Are there known external consumers of `github.com/ossf/scorecard/v5/cron/data`
-  or `.../cron/config`?
+- **External importers.** No consumers of
+  `github.com/ossf/scorecard/v5/cron/data` or `.../cron/config` are known, and the
+  working assumption is that there are none. Phase 0 verifies this (GitHub code
+  search plus `pkg.go.dev` importers) rather than leaving it to be discovered at
+  removal time. A positive result changes upstream removal from a delete to a
+  deprecation window.
+- **Canary failure routing.** Where a red `main` canary should page or post is an
+  operational detail to settle when the job is built (task 4.7), not a blocker.
+- **Steering Committee format.** This change is the authoritative artifact. Whether
+  the committee wants a standalone summary document rather than an OpenSpec change
+  is worth asking before the approval request goes out.

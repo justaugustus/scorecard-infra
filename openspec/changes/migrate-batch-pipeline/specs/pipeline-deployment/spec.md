@@ -80,6 +80,13 @@ validated by a full end-to-end pipeline cycle.
   not been identified and scheduled
 - **THEN** cutover SHALL NOT be attempted
 
+#### Scenario: Prior trigger configuration captured
+
+- **WHEN** the build triggers are repointed
+- **THEN** their prior configuration SHALL have been recorded beforehand, since it
+  is not under version control and the change cannot be reverted from the
+  repository
+
 ### Requirement: Rollback is a configuration change until removal completes
 
 Until the pipeline is removed from `ossf/scorecard`, rollback SHALL require only
