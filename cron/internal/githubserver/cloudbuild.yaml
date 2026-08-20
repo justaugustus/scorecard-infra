@@ -17,5 +17,5 @@ steps:
   args: ['build', '.',
     '-t', 'gcr.io/openssf/scorecard-github-server:latest',
     '-t', 'gcr.io/openssf/scorecard-github-server:$COMMIT_SHA',
-    '-f', 'clients/githubrepo/roundtripper/tokens/server/Dockerfile']
+    '-f', 'cron/internal/githubserver/Dockerfile']
 images: ['gcr.io/openssf/scorecard-github-server']

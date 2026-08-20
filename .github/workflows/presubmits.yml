@@ -107,10 +107,23 @@ jobs:
         go-version: '1.25'
         check-latest: true
 
+    # Retried: these targets compile Go binaries and so hit the module proxy,
+    # which flakes (observed: "stream error ... INTERNAL_ERROR" from
+    # proxy.golang.org). Upstream wraps the equivalent jobs in a retry action;
+    # this is the same idea without taking a third-party action dependency.
     - name: add-projects is a no-op on a normalized inventory
       run: |
-        make add-projects
-        git diff --exit-code
+        for attempt in 1 2 3; do
+          if make add-projects; then
+            git diff --exit-code
+            exit $?
+          fi
+          echo "::warning::attempt $attempt failed, retrying"
+          git checkout -- cron/internal/data/ || true
+          sleep $((attempt * 15))
+        done
+        echo "::error::add-projects failed after 3 attempts"
+        exit 1
 
   validate-projects:
     name: validate-projects
@@ -133,5 +146,15 @@ jobs:
         go-version: '1.25'
         check-latest: true
 
+    # Retried for the same reason as add-projects above.
     - name: Validate the scan inventories
-      run: make validate-projects
+      run: |
+        for attempt in 1 2 3; do
+          if make validate-projects; then
+            exit 0
+          fi
+          echo "::warning::attempt $attempt failed, retrying"
+          sleep $((attempt * 15))
+        done
+        echo "::error::validate-projects failed after 3 attempts"
+        exit 1
