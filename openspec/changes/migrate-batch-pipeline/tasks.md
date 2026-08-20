@@ -85,27 +85,45 @@ for at least one full scan cycle** (**C10**).
 
 ## 3. Make it build
 
-- [ ] 3.1 One commit rewriting `github.com/ossf/scorecard/v5/cron/...` →
-      `github.com/ossf/scorecard-infra/cron/...` across the tree (**C4**). **Not
-      only `.go` files** — the ported `ko` recipes embed the module path too
-      (**C13**)
-- [ ] 3.2 Correct `go_package` in `cron/data/request.proto` and
-      `cron/data/metadata.proto` (both currently declare the stale
-      `github.com/ossf/scorecard/cron/data`, missing even `/v5`) and regenerate
-      the `.pb.go` files
-- [ ] 3.3 `go mod tidy`; confirm the `github.com/ossf/scorecard/v5` requirement
-      resolves everything the pipeline needs, and pin it to a release per **C7**
-- [ ] 3.4 Reconcile upstream's `.golangci.yml` rules with this repo's; resolve new
-      lint failures by adjusting config or code, not by exempting the tree
-- [ ] 3.5 Confirm no import edge exists in either direction between `cron/` and
-      this repo's `internal/` packages (**C11**)
-- [ ] 3.6 `go build ./...`, `go test ./... -race`, and `golangci-lint run ./...`
-      clean with the pipeline included
-- [ ] 3.7 Port the Makefile targets — build, docker, ko, proto, add-projects,
-      validate-projects — adjusting paths for this repository root. These are
-      hand-ported, not imported: they are fragments of a file shared with the
-      engine. Provenance is recorded in `cron/initial-graft.md` (**C13**).
-      Note there is no `.ko.yaml` content to port — upstream's has no cron entries.
+- [x] 3.1 Import paths rewritten in 26 Go files (`cea88c4`). The rewrite was
+      Go-only in practice: the only other files carrying the old path are the four
+      that *describe* the migration, which must keep it. The `ko` recipes noted in
+      **C13** were written fresh against the new path in 3.7 rather than rewritten.
+- [x] 3.2 `go_package` corrected in both `.proto` files (`b63e3a3`).
+      **`.pb.go` regeneration deliberately deferred** — the `go_package` string is
+      embedded in each file's `rawDesc` descriptor bytes, so regeneration is a real
+      change, but protoc is absent, upstream pins neither protoc nor
+      `protoc-gen-go` at the call site, and the checked-in files came from
+      `protoc-gen-go v1.28.1` while upstream's `tools/go.mod` now resolves
+      `v1.36.11`. Regenerating now would mix a one-line fix with eight minor
+      versions of pre-existing generator drift. Do it with `make build-proto`.
+- [x] 3.3 `go mod tidy` clean (`b63e3a3`). Engine requirement is `v5.5.0`, already
+      an explicit release pin per **C7**. Pipeline dependencies promoted to direct:
+      BigQuery, Pub/Sub, Stackdriver exporter, csvutil, go-jsonschema-generator,
+      gojsonschema, OpenCensus, protobuf, release-utils. **New indirect surface
+      worth noting:** `aws-sdk-go` v1 and Prometheus, arriving via the
+      BigQuery/Arrow and Stackdriver chains rather than from pipeline code.
+- [x] 3.4 Lint reconciled — 10 issues, all `gci`/`gofmt` import ordering caused by
+      the module prefix change, auto-fixed. The `.golangci.yml` `gci` prefix
+      already pointed at this module; no config change was needed and no linter
+      was disabled for the imported tree.
+- [x] 3.5 Verified clean both directions — `cron/` imports nothing from
+      `internal/`, and neither `internal/` nor `cmd/` imports `cron/` (**C11**)
+- [x] 3.6 `go build ./...`, `go test ./... -race`, and `golangci-lint run ./...`
+      all pass with the pipeline included. `cron/internal/format`'s
+      `Test_GenerateBQSchema` and `Test_GenerateJSONSchema` pass against the pinned
+      engine — **C8**'s drift check is green at `v5.5.0`.
+- [x] 3.7 Makefile written (`35c69e0`): six docker + six ko image targets, seven
+      pipeline binaries, `build-proto`, `add-projects`, `validate-projects`, and
+      `build`/`test`/`lint`. Hand-written against upstream's, not imported
+      (**C13**); provenance in `cron/initial-graft.md`. Three deliberate
+      divergences, all recorded in the commit and in file comments: build tools are
+      expected on PATH rather than vendored (a fresh `tools/` module does not
+      resolve, and `tool` directives would put ko's tree in the main module's
+      graph); protobuf generation is explicit rather than a file rule; `LDFLAGS` is
+      inlined rather than shelling out to a script goreleaser would have shared.
+      Verified: all seven binaries build, all three verify targets pass, and
+      `validate-projects` runs clean against all three real inventories.
 - [ ] 3.8 Merge the group 2 + group 3 PR
 
 ## 4. CI and image builds, in parallel with production
