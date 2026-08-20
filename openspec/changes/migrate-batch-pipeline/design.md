@@ -393,6 +393,22 @@ reasonably expect interaction:
   eventually go red for reasons unrelated to this repository. If it is ignored, it
   is worse than absent. See **C7** — route failures to a read channel and act on a
   sustained red.
+- **DCO versus imported history** — *discovered during the graft, not predicted.*
+  This repository gates pull requests on DCO, and the check inspects every commit
+  in the PR. 251 of the imported commits carry no `Signed-off-by`, so the import
+  fails DCO by construction. There is no honest code fix: a DCO trailer is a legal
+  certification by the commit's author, and adding one retroactively on another
+  person's behalf forges it. The resolution is administrative — override the check,
+  or scope the app — and it should be agreed *before* review rather than discovered
+  at merge time. Any migration that grafts history into a DCO-gated repository will
+  hit this.
+- **Relocation leaves stale references that no compiler catches.** `--path-rename`
+  moves files; it does not update paths written *inside* them. The token server's
+  Dockerfile and Cloud Build config both kept pointing at
+  `clients/githubrepo/roundtripper/tokens/server/` after the move. Go imports fail
+  loudly when stale, so they were fixed in the tip rewrite; strings in a Dockerfile
+  fail only when an image is actually built. Anything relocated during a filter
+  needs its non-Go references grepped explicitly.
 - **Schema and data model split across repos with no compile-time guard.** See
   **C8**.
 - **Longer CI here.** Six image builds and protobuf generation land in a

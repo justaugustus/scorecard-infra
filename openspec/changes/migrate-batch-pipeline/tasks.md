@@ -124,7 +124,24 @@ for at least one full scan cycle** (**C10**).
       inlined rather than shelling out to a script goreleaser would have shared.
       Verified: all seven binaries build, all three verify targets pass, and
       `validate-projects` runs clean against all three real inventories.
-- [ ] 3.8 Merge the group 2 + group 3 PR
+- [ ] 3.8 Merge the import PR — [#27](https://github.com/ossf/scorecard-infra/pull/27),
+      open, covering groups 2–5 as a single review.
+      **Every check passes except DCO** (see 3.9), including all six image builds,
+      `build`/`test`/`lint`, both inventory jobs, `zizmor`, and Kusari.
+- [ ] 3.9 **Resolve the DCO block — decision needed, no code fix exists.**
+      The DCO app checks every commit in a pull request. 251 of the 475 non-merge
+      commits lack a `Signed-off-by` trailer. All 251 are *imported upstream
+      history* (largely dependabot); all 12 authored commits are signed.
+      This is a structural consequence of grafting history into a DCO-gated
+      repository, and the migration plan did not anticipate it.
+      **Adding sign-off to those commits is not an option.** The DCO is a legal
+      certification made by a commit's author; retroactively adding a
+      `Signed-off-by` on someone else's behalf forges that attestation. It is also
+      unnecessary — these commits are already public in `ossf/scorecard` under
+      Apache-2.0, and importing them does not change their provenance.
+      Viable paths: merge with an administrative override (the check is
+      informational unless required); or configure the DCO app to scope its check.
+      Squashing the import would satisfy DCO by destroying the change's purpose.
 
 ## 4. CI and image builds, in parallel with production
 
@@ -135,11 +152,15 @@ for at least one full scan cycle** (**C10**).
       keeping here: this repo is markdown-heavy). Scoped to the pipeline only;
       upstream's `scorecard-docker` and `build-attestor-docker` entries are engine
       targets and stay there. `actionlint` and `zizmor` both clean.
-      **Not verified locally:** the docker build fails in this environment at
-      `go mod download` inside the container with an x509 unknown-authority error
-      — TLS interception whose root CA the build container lacks. The target is
-      wired correctly (docker invoked, Dockerfile resolved, 12 build steps
-      completed before the network call). CI is the real test.
+      **Verified in CI (PR #27): all six images build.** The local failure was
+      environmental (TLS interception breaking module downloads inside build
+      containers), not a defect.
+      CI also caught a real defect local builds could not: relocating the token
+      server (**C6**) moved its files but not the paths *inside* them — its
+      Dockerfile still copied from and set `ENTRYPOINT` to the old
+      `clients/githubrepo/...` path, and its `cloudbuild.yaml` pointed `-f` at the
+      old Dockerfile location. Go imports fail to compile when stale; strings in a
+      Dockerfile do not, so only an image build finds them. Fixed in `80a45d8`.
       The `ko` targets are in the Makefile but are **not** wired into CI: they
       duplicate the docker matrix's coverage and their value is at publish time,
       which is Cloud Build's job. Wire them if a ko-based publish path is chosen.
