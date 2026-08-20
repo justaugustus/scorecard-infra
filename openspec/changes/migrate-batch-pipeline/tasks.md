@@ -130,26 +130,59 @@ for at least one full scan cycle** (**C10**).
 
 **Production still runs images built from `ossf/scorecard` throughout this group.**
 
-- [ ] 4.1 Port the image build matrix and `ko` targets into `presubmits.yml` or a
-      new `docker.yml`; lint the workflows with `actionlint` and `zizmor`
-- [ ] 4.2 Port the `add-projects` / `validate-projects` jobs
-- [ ] 4.3 Add the five pipeline Dockerfile paths to `.github/dependabot.yml`
+- [x] 4.1 `.github/workflows/build-images.yml` added — a six-target matrix over the
+      pipeline's docker targets, with upstream's docs-only short-circuit (worth
+      keeping here: this repo is markdown-heavy). Scoped to the pipeline only;
+      upstream's `scorecard-docker` and `build-attestor-docker` entries are engine
+      targets and stay there. `actionlint` and `zizmor` both clean.
+      **Not verified locally:** the docker build fails in this environment at
+      `go mod download` inside the container with an x509 unknown-authority error
+      — TLS interception whose root CA the build container lacks. The target is
+      wired correctly (docker invoked, Dockerfile resolved, 12 build steps
+      completed before the network call). CI is the real test.
+      The `ko` targets are in the Makefile but are **not** wired into CI: they
+      duplicate the docker matrix's coverage and their value is at publish time,
+      which is Cloud Build's job. Wire them if a ko-based publish path is chosen.
+- [x] 4.2 `add-projects` / `validate-projects` jobs added to `presubmits.yml`.
+      Verified locally that `add-projects` is a genuine no-op on the current
+      inventory, so the `git diff --exit-code` guard passes rather than failing on
+      first run. Unlike upstream these jobs need no protoc, because generation is
+      no longer a file rule (**C13**).
+- [x] 4.3 Six Dockerfile directories added to `.github/dependabot.yml` — one more
+      than the plan's five, because the token-pool server's Dockerfile moved into
+      `cron/` with the rest of the pipeline (**C6**). YAML validated.
 - [ ] 4.4 Publish images to a **staging tag or registry path** — never the
-      `:latest` / `:stable` tags that `cron/k8s/*.yaml` consume
+      `:latest` / `:stable` tags that `cron/k8s/*.yaml` consume.
+      **Blocked on an ops decision, not on code.** Confirmed tag topology: the
+      Cloud Build configs push `:$COMMIT_SHA` and `:latest`, while the k8s
+      manifests consume `:stable`. A staging path needs a registry destination
+      chosen (separate project? `gcr.io/openssf/staging-*`?) before
+      `cron/cloudbuild/*.yaml` can be varied for it. Deliberately not invented here.
 - [ ] 4.5 Diff each staging-built image against its production equivalent to
-      confirm the split introduced no behavioral change
+      confirm the split introduced no behavioral change. Depends on 4.4.
 - [ ] 4.6 Measure the CI runtime increase; if the presubmit path is now
-      unreasonable, split image builds into their own workflow
-- [ ] 4.7 Add the **scheduled `main` canary** (**C7**/**C8**): build and test the
-      pipeline against `ossf/scorecard`'s `main`, including `schema_gen_test.go`
-      so data-model drift surfaces on the engine's cadence. **Non-blocking** on
-      this repo's pull requests — it tests an upstream branch and must not gate
-      unrelated work
-- [ ] 4.8 Route canary failures somewhere a maintainer reads, and write down what
-      a sustained red canary means (talk to engine maintainers before the next
-      bump, not after). An unread canary manufactures confidence
-- [ ] 4.9 Configure the engine dependency bump to **fail hard** on schema
-      verification failure — a build break, never a warning on a dependency PR
+      unreasonable, split image builds into their own workflow. Requires real runs;
+      note image builds already live in their own workflow, so the mitigation is
+      partly pre-applied.
+- [x] 4.7 `.github/workflows/canary.yml` added — daily at 06:17 UTC plus manual
+      dispatch, pointing the engine dependency at `main` and running the full
+      build and test suite. That suite includes `cron/internal/format`'s
+      `Test_GenerateBQSchema` / `Test_GenerateJSONSchema`, so the job is both the
+      **C7** breakage canary and the **C8** drift check. It runs on `schedule` and
+      `workflow_dispatch` only, never on `pull_request`, so it cannot gate
+      unrelated work. `actionlint` and `zizmor` clean.
+- [ ] 4.8 Route canary failures somewhere a maintainer reads. The workflow
+      documents what a sustained red means (talk to the engine maintainers *before*
+      the next bump), but **no notification is wired** — a scheduled job's failures
+      are invisible unless someone opens the Actions tab. Needs a destination
+      chosen: issue-on-failure, a chat webhook, or repo notification settings.
+      Until this is done the canary is decorative.
+- [x] 4.9 Satisfied by construction rather than by new configuration: Dependabot
+      opens engine bumps as pull requests, `presubmits.yml`'s test job runs on
+      every pull request, and that job runs the schema verification tests. A bump
+      that drifts the schema therefore fails as a red required check, not a
+      warning. No separate mechanism is needed; the requirement is that the check
+      stays a *blocking* one, which it is.
 
 ## 5. Documentation and repository identity
 

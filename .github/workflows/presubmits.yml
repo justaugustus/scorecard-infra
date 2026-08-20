@@ -82,3 +82,56 @@ jobs:
       uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
       with:
         version: v2.8.0
+
+  # Scan inventory checks for the batch pipeline. add-projects must be a no-op on
+  # an already-normalized inventory, so a non-empty diff means someone hand-edited
+  # the CSV into a state the tooling would not produce.
+  add-projects:
+    name: add-projects
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+      with:
+        egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: '1.25'
+        check-latest: true
+
+    - name: add-projects is a no-op on a normalized inventory
+      run: |
+        make add-projects
+        git diff --exit-code
+
+  validate-projects:
+    name: validate-projects
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+      with:
+        egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: '1.25'
+        check-latest: true
+
+    - name: Validate the scan inventories
+      run: make validate-projects
