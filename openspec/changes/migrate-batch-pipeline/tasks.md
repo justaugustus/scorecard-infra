@@ -78,7 +78,7 @@ for at least one full scan cycle** (**C10**).
       reviewable before anything reaches the remote.
 - [x] 2.6 Recorded the provenance of the build wiring that could **not** be
       imported — shared root files are fragments of engine-shared files and are
-      hand-ported in 3.7 / 4.1–4.3. See `docs/cron-build-provenance.md` (**C13**).
+      hand-ported in 3.7 / 4.1–4.3. See `cron/initial-graft.md` (**C13**).
       All Dockerfiles, Cloud Build configs, and k8s manifests *did* import with
       history; only the `Makefile`, `docker.yml`, `main.yml`, `dependabot.yml`,
       `.codecov.yml`, and `cloudbuild/README.md` fragments did not.
@@ -104,7 +104,7 @@ for at least one full scan cycle** (**C10**).
 - [ ] 3.7 Port the Makefile targets — build, docker, ko, proto, add-projects,
       validate-projects — adjusting paths for this repository root. These are
       hand-ported, not imported: they are fragments of a file shared with the
-      engine. Provenance is recorded in `docs/cron-build-provenance.md` (**C13**).
+      engine. Provenance is recorded in `cron/initial-graft.md` (**C13**).
       Note there is no `.ko.yaml` content to port — upstream's has no cron entries.
 - [ ] 3.8 Merge the group 2 + group 3 PR
 

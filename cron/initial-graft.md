@@ -1,14 +1,46 @@
-# Provenance of the ported cron build wiring
+# Initial graft of the batch pipeline from ossf/scorecard
 
-This file records where the batch pipeline's build and CI wiring came from in
-`ossf/scorecard`, because — unlike the pipeline's source, manifests, and
-Dockerfiles — that wiring could not be imported with its history.
+This tree was imported from [`ossf/scorecard`](https://github.com/ossf/scorecard),
+not written here. This file is the record of that import: what came across, what
+could not, and where to look for the history of the parts that could not.
 
-## Why this file exists
+## What the graft did
 
-The migration used `git filter-repo`, which selects content by **path**, not by
-hunk. Everything under `cron/` came across with full history. The build wiring
-did not, because it lives in files that are *shared with the scan engine*:
+Extracted with `git filter-repo` from `ossf/scorecard` `main` @ `d1fab88f`, then
+merged with `git merge --allow-unrelated-histories`.
+
+| | |
+|---|---|
+| Imported commits | 466 non-merge, plus 2 retained 2020-era merges |
+| History span | 2020-11-10 → 2026-08-07 |
+| Files | 131 — 128 from `cron/`, 3 from the relocated token server |
+| Tags imported | none (upstream's 48 release tags were stripped first) |
+
+Three things were done to the history during extraction:
+
+- `clients/githubrepo/roundtripper/tokens/server/` was relocated to
+  `cron/internal/githubserver/`. Its parent `tokens/` package stayed upstream —
+  it is imported by Scorecard's own round-tripper.
+- Pull-request references in commit messages were rewritten from `(#N)` to
+  `(ossf/scorecard#N)`, so they resolve to the repository they were opened
+  against rather than auto-linking to unrelated items here. 394 commits carry a
+  rewritten reference; the rest predate the squash-merge convention.
+- Import paths were **not** rewritten across history. Historical commits contain
+  the original `github.com/ossf/scorecard/v5/cron/...` paths, as authored. The
+  rewrite to this module's path is a single commit at the tip.
+
+`git log --follow` and `git blame` both work through the graft. Blame attributes
+to original authors, not to the merge commit.
+
+## Why the rest of this file exists
+
+The pipeline's source, Dockerfiles, Cloud Build configs, and Kubernetes manifests
+all came across with history. Its **build and CI wiring did not**, and that wiring
+was rewritten by hand. What follows is the trail that rewriting would otherwise
+have erased.
+
+`git filter-repo` selects content by **path**, not by hunk. The build wiring could
+not come across because it lives in files *shared with the scan engine*:
 
 | File | Cron content | Total |
 |---|---|---|
@@ -23,9 +55,6 @@ There is no way to extract "the 96 cron lines of the Makefile" with a path
 filter. It is the whole file or none of it, and the whole file is roughly 79%
 engine build targets. Importing it to recover a handful of recipes would have
 dragged the engine's entire build history along with it.
-
-So those fragments were **ported by hand**. This file is the trail that porting
-would otherwise have erased.
 
 Note that `.ko.yaml` is *not* in the list. Upstream's contains a single
 `scorecard` build id and nothing cron-related — the "cron ko targets" are

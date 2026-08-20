@@ -311,11 +311,13 @@ so a whole-file import would not have *collided*; the objection is semantic, not
 mechanical.
 
 **Decided: port by hand, and write down what the port erases.**
-[`docs/cron-build-provenance.md`](../../../docs/cron-build-provenance.md) records
-the originating commit for every ported target and job, the earlier lineage where
-the pickaxe is misleading, and how to run further archaeology upstream. It lives
-in `docs/` rather than inside this change so it outlives the change's archival —
-a provenance note filed where it gets archived defeats its own purpose.
+[`cron/initial-graft.md`](../../../cron/initial-graft.md) records the originating
+commit for every ported target and job, the earlier lineage where the pickaxe is
+misleading, and how to run further archaeology upstream. It sits **inside the
+imported tree**, next to the code it explains, rather than in `docs/` or inside
+this change: a provenance note filed where it gets archived defeats its own
+purpose, and someone running `git log` on a ported Makefile target will be looking
+at `cron/`, not at a docs index.
 
 The loss is real but modest, and smaller than it is for `cron/`'s source. A build
 recipe's history explains why a flag is set; it is not the load-bearing
@@ -423,7 +425,7 @@ reasonably expect interaction:
   splitting into a separate artifact, because the **C10** rollback contract spans
   both repositories and would drift if tracked separately.
 - **C13** — Shared root build files are ported by hand rather than imported whole,
-  with their provenance recorded in `docs/cron-build-provenance.md`. Raised during
+  with their provenance recorded in `cron/initial-graft.md`. Raised during
   extraction, not during the original review.
 
 ## Open questions
