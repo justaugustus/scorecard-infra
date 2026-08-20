@@ -19,7 +19,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/ossf/scorecard/v5/cron/data"
+	"github.com/ossf/scorecard-infra/cron/data"
 )
 
 // Validates data.Iterator used by production PubSub cron job.

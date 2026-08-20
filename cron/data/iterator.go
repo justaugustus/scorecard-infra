@@ -22,7 +22,6 @@ import (
 	"reflect"
 
 	"github.com/jszwec/csvutil"
-
 	"github.com/ossf/scorecard/v5/clients/githubrepo"
 	"github.com/ossf/scorecard/v5/clients/gitlabrepo"
 )

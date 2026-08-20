@@ -25,7 +25,7 @@ import (
 	//nolint:staticcheck // will fix in #4439
 	"cloud.google.com/go/pubsub/apiv1/pubsubpb"
 
-	"github.com/ossf/scorecard/v5/cron/data"
+	"github.com/ossf/scorecard-infra/cron/data"
 )
 
 const (

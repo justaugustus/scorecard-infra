@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-
 	sce "github.com/ossf/scorecard/v5/errors"
 )
 

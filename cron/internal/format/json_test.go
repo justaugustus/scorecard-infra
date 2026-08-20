@@ -23,12 +23,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xeipuuv/gojsonschema"
-
 	"github.com/ossf/scorecard/v5/checker"
 	"github.com/ossf/scorecard/v5/finding"
 	"github.com/ossf/scorecard/v5/log"
 	"github.com/ossf/scorecard/v5/pkg/scorecard"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 func jsonMockDocRead() *mockDoc {

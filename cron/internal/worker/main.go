@@ -27,27 +27,27 @@ import (
 	"strings"
 
 	"github.com/google/osv-scanner/v2/pkg/osvscanner"
-	"go.opencensus.io/stats/view"
-	"sigs.k8s.io/release-utils/version"
-
 	"github.com/ossf/scorecard/v5/checker"
 	"github.com/ossf/scorecard/v5/clients"
 	"github.com/ossf/scorecard/v5/clients/githubrepo"
 	githubstats "github.com/ossf/scorecard/v5/clients/githubrepo/stats"
 	"github.com/ossf/scorecard/v5/clients/gitlabrepo"
 	"github.com/ossf/scorecard/v5/clients/ossfuzz"
-	"github.com/ossf/scorecard/v5/cron/config"
-	"github.com/ossf/scorecard/v5/cron/data"
-	"github.com/ossf/scorecard/v5/cron/internal/cdn"
-	format "github.com/ossf/scorecard/v5/cron/internal/format"
-	"github.com/ossf/scorecard/v5/cron/monitoring"
-	"github.com/ossf/scorecard/v5/cron/worker"
 	docs "github.com/ossf/scorecard/v5/docs/checks"
 	sce "github.com/ossf/scorecard/v5/errors"
 	"github.com/ossf/scorecard/v5/log"
 	"github.com/ossf/scorecard/v5/pkg/scorecard"
 	"github.com/ossf/scorecard/v5/policy"
 	"github.com/ossf/scorecard/v5/stats"
+	"go.opencensus.io/stats/view"
+	"sigs.k8s.io/release-utils/version"
+
+	"github.com/ossf/scorecard-infra/cron/config"
+	"github.com/ossf/scorecard-infra/cron/data"
+	"github.com/ossf/scorecard-infra/cron/internal/cdn"
+	format "github.com/ossf/scorecard-infra/cron/internal/format"
+	"github.com/ossf/scorecard-infra/cron/monitoring"
+	"github.com/ossf/scorecard-infra/cron/worker"
 )
 
 const (

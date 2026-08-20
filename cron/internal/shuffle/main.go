@@ -20,7 +20,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/ossf/scorecard/v5/cron/data"
+	"github.com/ossf/scorecard-infra/cron/data"
 )
 
 func main() {

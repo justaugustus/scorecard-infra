@@ -27,7 +27,7 @@ import (
 	_ "gocloud.dev/pubsub/gcppubsub"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ossf/scorecard/v5/cron/data"
+	"github.com/ossf/scorecard-infra/cron/data"
 )
 
 type publishError struct {

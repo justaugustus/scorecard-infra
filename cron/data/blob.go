@@ -26,7 +26,7 @@ import (
 	_ "gocloud.dev/blob/fileblob" // Needed to read file:/// buckets. Intended primarily for testing, though needed here for tests outside the package.
 	_ "gocloud.dev/blob/gcsblob"  // Needed to link in GCP drivers.
 
-	"github.com/ossf/scorecard/v5/cron/config"
+	"github.com/ossf/scorecard-infra/cron/config"
 )
 
 const (

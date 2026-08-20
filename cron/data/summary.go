@@ -22,7 +22,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ossf/scorecard/v5/cron/config"
+	"github.com/ossf/scorecard-infra/cron/config"
 )
 
 // ShardSummary is a summary of information about a set of shards with the same

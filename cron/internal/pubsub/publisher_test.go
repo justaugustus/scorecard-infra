@@ -21,7 +21,7 @@ import (
 
 	"gocloud.dev/pubsub"
 
-	"github.com/ossf/scorecard/v5/cron/data"
+	"github.com/ossf/scorecard-infra/cron/data"
 )
 
 type mockSucceedTopic struct{}

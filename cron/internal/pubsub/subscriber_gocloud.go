@@ -23,7 +23,7 @@ import (
 	// Needed to link in GCP drivers.
 	_ "gocloud.dev/pubsub/gcppubsub"
 
-	"github.com/ossf/scorecard/v5/cron/data"
+	"github.com/ossf/scorecard-infra/cron/data"
 )
 
 type receiver interface {
