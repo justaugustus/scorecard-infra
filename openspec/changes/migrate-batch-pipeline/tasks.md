@@ -19,10 +19,13 @@ for at least one full scan cycle** (**C10**).
 - [x] 0.5 Cloud Build trigger ownership resolved: the change author holds `openssf`
       project admin. Remaining work is scheduling the cutover window (6.1) and
       capturing the triggers' before-state for rollback (6.0).
-- [ ] 0.6 Verify there are no external consumers of
-      `github.com/ossf/scorecard/v5/cron/data` or `.../cron/config` — GitHub code
-      search plus `pkg.go.dev` importers. None are known or presumed; a positive
-      result changes upstream removal to a deprecation window.
+- [x] 0.6 **Verified: no external Go importers.** `pkg.go.dev` reports 0 imported-by
+      for both `cron/data` and `cron/config`. GitHub code search returns only
+      `ossf/scorecard` (the source), `ossf/scorecard-infra` (this change's own
+      docs), and `epwqicelhf/oss-ecosystem-security` — which contains a vendored
+      file copy under `reference/scorecard-main/`, not a module dependency, and so
+      is unaffected by removal. **Clean delete is safe**; the deprecation-window
+      path in the `project-inventory` spec does not trigger.
 - [x] 0.7 `git-filter-repo` 2.47.0 installed; `--dry-run` confirmed `re` is
       available in the `--message-callback` context without an explicit import
       (**C1**)
@@ -89,14 +92,20 @@ for at least one full scan cycle** (**C10**).
       Go-only in practice: the only other files carrying the old path are the four
       that *describe* the migration, which must keep it. The `ko` recipes noted in
       **C13** were written fresh against the new path in 3.7 rather than rewritten.
-- [x] 3.2 `go_package` corrected in both `.proto` files (`b63e3a3`).
-      **`.pb.go` regeneration deliberately deferred** — the `go_package` string is
-      embedded in each file's `rawDesc` descriptor bytes, so regeneration is a real
-      change, but protoc is absent, upstream pins neither protoc nor
-      `protoc-gen-go` at the call site, and the checked-in files came from
-      `protoc-gen-go v1.28.1` while upstream's `tools/go.mod` now resolves
-      `v1.36.11`. Regenerating now would mix a one-line fix with eight minor
-      versions of pre-existing generator drift. Do it with `make build-proto`.
+- [x] 3.2 `go_package` corrected in both `.proto` files (`b63e3a3`) **and the
+      `.pb.go` files regenerated** via `make build-proto` with `protoc-gen-go`
+      pinned to `v1.36.11` — the version upstream's own `tools/go.mod` resolves, so
+      the output matches what upstream would produce today rather than what it
+      produced in 2022. `.proto` and generated output are now consistent.
+      The diff is 73+/144− across both files and is mostly generator
+      modernization (field reordering, `protogen:"open.v1"` tags, an `unsafe`
+      import) rather than the one-line semantic change; that pre-existing drift is
+      the cost of the checked-in output being eight minor versions stale.
+      Public API and wire format are unchanged; tests and lint pass.
+      `protoc` itself is unpinned upstream (`$(shell which protoc)`), so its
+      recorded version tracks whatever the regenerating machine has — here v7.35.1
+      against upstream's v3.21.6. Regenerate with `protoc-gen-go v1.28.1` instead
+      if reviewers prefer the minimal diff over toolchain currency.
 - [x] 3.3 `go mod tidy` clean (`b63e3a3`). Engine requirement is `v5.5.0`, already
       an explicit release pin per **C7**. Pipeline dependencies promoted to direct:
       BigQuery, Pub/Sub, Stackdriver exporter, csvutil, go-jsonschema-generator,
@@ -181,10 +190,16 @@ for at least one full scan cycle** (**C10**).
       `cron/cloudbuild/*.yaml` can be varied for it. Deliberately not invented here.
 - [ ] 4.5 Diff each staging-built image against its production equivalent to
       confirm the split introduced no behavioral change. Depends on 4.4.
-- [ ] 4.6 Measure the CI runtime increase; if the presubmit path is now
-      unreasonable, split image builds into their own workflow. Requires real runs;
-      note image builds already live in their own workflow, so the mitigation is
-      partly pre-applied.
+- [x] 4.6 **Measured from PR #27's runs. The presubmit path did not slow down.**
+      `presubmits` wall clock is unchanged at ~212s: the two new inventory jobs
+      (142s, 113s) run in parallel and finish before `test` (212s), which was
+      already the critical path. Image builds add a separate ~377s path
+      (`cron-controller-docker`, the slowest of six).
+      Net effect: PR feedback goes from ~3.5min to ~6.3min wall clock, while total
+      compute roughly triples (~594s → ~1878s). The mitigation this task
+      anticipated — moving image builds out of the presubmit path — was applied up
+      front, so nothing further is needed. If the ~6.3min becomes the complaint,
+      the lever is matrix parallelism or layer caching, not workflow splitting.
 - [x] 4.7 `.github/workflows/canary.yml` added — daily at 06:17 UTC plus manual
       dispatch, pointing the engine dependency at `main` and running the full
       build and test suite. That suite includes `cron/internal/format`'s
@@ -192,12 +207,18 @@ for at least one full scan cycle** (**C10**).
       **C7** breakage canary and the **C8** drift check. It runs on `schedule` and
       `workflow_dispatch` only, never on `pull_request`, so it cannot gate
       unrelated work. `actionlint` and `zizmor` clean.
-- [ ] 4.8 Route canary failures somewhere a maintainer reads. The workflow
-      documents what a sustained red means (talk to the engine maintainers *before*
-      the next bump), but **no notification is wired** — a scheduled job's failures
-      are invisible unless someone opens the Actions tab. Needs a destination
-      chosen: issue-on-failure, a chat webhook, or repo notification settings.
-      Until this is done the canary is decorative.
+- [x] 4.8 **Notification wired.** A `report-failure` job (`if: failure()`,
+      `issues: write`) opens a tracking issue when the canary fails, and comments
+      on the existing one rather than filing a new issue per run — a daily job that
+      files a daily issue trains people to mute it. The issue body states plainly
+      that the failure does *not* mean this repository is broken (pull requests
+      build against the pinned release) and what to do about it: raise it with the
+      engine maintainers before the next bump, while the change is still theirs to
+      adjust. Issue-on-failure was chosen over a chat webhook because it needs no
+      secret and leaves a durable, assignable record. The heredoc and
+      lookup-or-create logic were dry-run locally with a stubbed `gh` — a
+      notification path that only executes on failure is the worst place to
+      discover a shell bug. `actionlint` and `zizmor` clean.
 - [x] 4.9 Satisfied by construction rather than by new configuration: Dependabot
       opens engine bumps as pull requests, `presubmits.yml`'s test job runs on
       every pull request, and that job runs the schema verification tests. A bump

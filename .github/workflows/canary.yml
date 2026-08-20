@@ -87,3 +87,59 @@ jobs:
       - name: Report the go.mod delta
         if: always()
         run: git diff --no-color go.mod || true
+
+  # Without this, the canary is decorative: a scheduled job's failures are
+  # invisible unless someone thinks to open the Actions tab, and a signal nobody
+  # receives is worse than no signal because it manufactures confidence.
+  #
+  # Deliberately one issue, reopened and commented rather than a new issue per
+  # run. A daily job that files a daily issue trains people to mute it.
+  report-failure:
+    name: report canary failure
+    needs: build-against-engine-main
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+      - name: Open or update the canary issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: 'canary: batch pipeline fails against ossf/scorecard main'
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" \
+              --body "Still failing as of $(date -u +%Y-%m-%d). Run: $RUN_URL"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" --body "$(cat <<BODY
+          The scheduled canary builds this repository's batch pipeline against
+          \`ossf/scorecard\`'s \`main\` branch, ahead of the pinned release. It failed.
+
+          Run: $RUN_URL
+
+          **This does not mean this repository is broken.** Pull requests here build
+          against the pinned engine release and are unaffected. What it means is that
+          an unreleased engine change is incompatible with the pipeline, or has moved
+          the data model out from under the published BigQuery/JSON schema.
+
+          Act on it *before* the next dependency bump rather than after: raise it with
+          the engine maintainers while the change is still theirs to adjust. Left
+          alone, it resurfaces as a red dependency bump with less context and less
+          room to negotiate.
+
+          This issue is reused for subsequent failures. Close it once the canary is
+          green again.
+          BODY
+          )"
+          fi
