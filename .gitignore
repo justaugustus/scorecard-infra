@@ -1,3 +1,14 @@
 /scorecard-api
 .env
 /data/
+
+# Batch pipeline build artifacts (see Makefile "Pipeline binaries")
+/cron/internal/bq/data-transfer
+/cron/internal/cii/cii-worker
+/cron/internal/controller/controller
+/cron/internal/data/add/add
+/cron/internal/data/validate/validate
+/cron/internal/githubserver/github-auth-server
+/cron/internal/shuffle/shuffle
+/cron/internal/webhook/webhook
+/cron/internal/worker/worker
