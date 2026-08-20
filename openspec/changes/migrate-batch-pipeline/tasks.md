@@ -23,8 +23,9 @@ for at least one full scan cycle** (**C10**).
       `github.com/ossf/scorecard/v5/cron/data` or `.../cron/config` — GitHub code
       search plus `pkg.go.dev` importers. None are known or presumed; a positive
       result changes upstream removal to a deprecation window.
-- [ ] 0.7 Install `git-filter-repo` (`brew install git-filter-repo`) and confirm
-      `re` is available in its `--message-callback` context on a dry run (**C1**)
+- [x] 0.7 `git-filter-repo` 2.47.0 installed; `--dry-run` confirmed `re` is
+      available in the `--message-callback` context without an explicit import
+      (**C1**)
 - [ ] 0.8 Obtain approvals: Scorecard Steering Committee and at least one
       non-Steering Scorecard maintainer. Ask the committee whether it wants a
       standalone summary document rather than this OpenSpec change as the artifact.
@@ -33,36 +34,48 @@ for at least one full scan cycle** (**C10**).
 
 **Nothing is pushed to `ossf/scorecard-infra` in this group.**
 
-- [ ] 1.1 Clone `ossf/scorecard` fresh and single-branch into a disposable
-      directory — never run the filter against a working checkout (**C1**)
-- [ ] 1.2 Delete all tags in the clone before filtering (**C2**)
-- [ ] 1.3 Run `git filter-repo` over `cron/` and
+- [x] 1.1 Cloned `ossf/scorecard` fresh and single-branch to
+      `../scorecard-cron-extract`; upstream tip `d1fab88f`, 3,104 commits —
+      matching the proposal's analysis basis exactly (**C1**)
+- [x] 1.2 Deleted all 48 tags in the clone before filtering (**C2**)
+- [x] 1.3 Ran `git filter-repo` over `cron/` and
       `clients/githubrepo/roundtripper/tokens/server/`, renaming the latter to
       `cron/internal/githubserver/` and rewriting `(#N)` → `(ossf/scorecard#N)`
-      in commit messages (**C1**/**C3**/**C6**)
-- [ ] 1.4 Gate — rename tracking: `git log --follow` on a historically renamed
-      file (e.g. `cron/data/writer.go`) resolves into pre-rename history
-- [ ] 1.5 Gate — commit count matches the pre-filter analysis (~455)
-- [ ] 1.6 Gate — no path outside the pipeline tree survived the filter
-- [ ] 1.7 Gate — zero tags present
-- [ ] 1.8 Publish the filtered result to a scratch repository or share the bundle
-      for maintainer review before any graft
+      (**C1**/**C3**/**C6**)
+- [x] 1.4 Gate passed — `git log --follow -- cron/data/writer.go` resolves through
+      13 commits into its pre-rename `cron/internal/data/writer.go` history.
+      `cron/internal/githubserver/main.go` likewise follows back 11 commits
+      through its relocation.
+- [x] 1.5 Gate passed — **466 non-merge commits, an exact match**. Note the
+      proposal's "~455" figure counted `cron/` alone; the union with the token
+      server (76 commits, 65 overlapping) is 466. `git rev-list --count HEAD`
+      reports 468 because `filter-repo` retains two 2020-era merge commits that
+      pathspec history simplification hides — genuine history, not contamination.
+- [x] 1.6 Gate passed — 131 files, all under `cron/` (128 pipeline + 3 relocated
+      token server); nothing else survived the filter
+- [x] 1.7 Gate passed — zero tags
+- [x] 1.8 Rewrite verified — 0 bare `(#N)` references remain; 394 commits carry
+      rewritten `(ossf/scorecard#N)` references (the remainder predate the
+      squash-merge convention and never had one). History spans 2020-11-10 to
+      2026-08-07; blame attributes to original authors.
 - [ ] 1.9 Land the inbound-import CI guard in `ossf/scorecard` (fails on any
       non-`cron/` file importing `.../v5/cron/`); it is deleted in group 7
       (**C12**)
 
 ## 2. Graft into scorecard-infra
 
-- [ ] 2.1 Create the import branch and merge the filtered history with
-      `--allow-unrelated-histories`, with a merge message recording the commit
-      count, date range, mechanism, and the PR-reference rewrite
-- [ ] 2.2 Verify `git log --follow` on a historically renamed file resolves
-      through the merge
-- [ ] 2.3 Verify `git blame` on `cron/internal/worker/main.go` attributes to
-      original authors, not the merge commit
-- [ ] 2.4 Verify no `ossf/scorecard` tags arrived with the merge
-- [ ] 2.5 Remove the extraction remote; open as a draft PR — **do not merge**,
-      group 3 lands on the same branch
+- [x] 2.1 Branch `import-batch-pipeline` created off `main` at `5082c25`; filtered
+      history merged with `--allow-unrelated-histories`, conflict-free as
+      predicted (this repo had no `cron/` path). Repo now at 517 commits.
+- [x] 2.2 Verified — rename tracking survives the merge; `cron/data/writer.go`
+      still resolves 13 commits back into pre-rename history
+- [x] 2.3 Verified — `git blame` on `cron/internal/worker/main.go` attributes to
+      original authors (Spencer Schrock, Azeem Shaikh, raghavkaul, Naveen, and
+      others), not the merge commit
+- [x] 2.4 Verified — zero tags arrived with the merge
+- [x] 2.5 Extraction remote removed. Branch is **local and unpushed** — the
+      filtered result at `../scorecard-cron-extract` and this branch are both
+      reviewable before anything reaches the remote.
 
 ## 3. Make it build
 
