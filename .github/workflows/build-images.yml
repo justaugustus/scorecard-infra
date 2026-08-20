@@ -99,6 +99,20 @@ jobs:
           check-latest: true
           cache: false # building happens in Docker; this cache would evict more useful entries
 
+      # Retried: each image runs `go mod download` inside its build container,
+      # and six of them run at once, so this hammers the module proxy. Observed
+      # repeatedly: "stream error ... INTERNAL_ERROR" from proxy.golang.org,
+      # failing an otherwise good build. BuildKit's layer cache makes a retry
+      # cheap -- it resumes at the failed layer rather than rebuilding.
       - name: docker build
         if: (needs.docs_only_check.outputs.docs_only != 'true')
-        run: make ${{ matrix.target }}
+        run: |
+          for attempt in 1 2 3; do
+            if make ${{ matrix.target }}; then
+              exit 0
+            fi
+            echo "::warning::attempt $attempt failed, retrying"
+            sleep $((attempt * 20))
+          done
+          echo "::error::${{ matrix.target }} failed after 3 attempts"
+          exit 1
