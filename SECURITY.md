@@ -1,9 +1,19 @@
 # Security Policies and Procedures
 
-The scorecard-api maintainers take all security issues seriously.
-Thank you for improving the security of scorecard-api.
+The OpenSSF Scorecard infra maintainers take all security issues seriously.
+Thank you for improving the security of scorecard-infra.
 We appreciate your efforts and responsible disclosure
 and will make every effort to acknowledge your contributions.
+
+This repository holds OpenSSF Scorecard's hosted infrastructure: the batch
+scanning pipeline behind the weekly public scan of 1M+ repositories (`cron/`)
+and a self-hostable results API server (`cmd/scorecard-api`). Reports against
+either are in scope, as are the scan inventories and deployment manifests.
+
+Vulnerabilities in the Scorecard **engine** itself — checks, probes, scoring, or
+output formats — belong to
+[`ossf/scorecard`](https://github.com/ossf/scorecard/security/policy). If you are
+unsure which applies, report it here and we will route it.
 
 ## Reporting a Vulnerability
 
