@@ -40,39 +40,21 @@ updates:
 # Batch pipeline container images. Six, not the five the migration plan
 # anticipated: the GitHub token-pool server's Dockerfile moved into cron/ with
 # the rest of the pipeline (C6), so it is covered here rather than upstream.
+#
+# All six pin identical base images, so six per-directory entries produced
+# twelve PRs to carry two distinct bumps. One entry with a `directories` glob
+# covers them instead; `group-by` then collapses each bump into a single PR
+# spanning all six directories, one per image rather than one per directory.
+# The glob also picks up any future pipeline image without a config change.
 - package-ecosystem: "docker"
-  directory: "/cron/internal/bq"
+  directories:
+    - "/cron/internal/*"
   schedule:
     interval: "weekly"
   cooldown:
     default-days: 7
-- package-ecosystem: "docker"
-  directory: "/cron/internal/cii"
-  schedule:
-    interval: "weekly"
-  cooldown:
-    default-days: 7
-- package-ecosystem: "docker"
-  directory: "/cron/internal/controller"
-  schedule:
-    interval: "weekly"
-  cooldown:
-    default-days: 7
-- package-ecosystem: "docker"
-  directory: "/cron/internal/githubserver"
-  schedule:
-    interval: "weekly"
-  cooldown:
-    default-days: 7
-- package-ecosystem: "docker"
-  directory: "/cron/internal/webhook"
-  schedule:
-    interval: "weekly"
-  cooldown:
-    default-days: 7
-- package-ecosystem: "docker"
-  directory: "/cron/internal/worker"
-  schedule:
-    interval: "weekly"
-  cooldown:
-    default-days: 7
+  groups:
+    pipeline-images:
+      patterns:
+        - "*"
+      group-by: "dependency-name"
