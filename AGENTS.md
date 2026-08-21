@@ -1,24 +1,31 @@
 # AGENTS.md
 
 Guidance for AI coding agents (and humans) working in this repository. Read this
-alongside [`docs/bootstrap.md`](docs/bootstrap.md), which onboards a fresh session
-with the full project context.
+alongside [`README.md`](README.md), which explains what the repository holds and
+how the parts relate.
 
 ## What this project is
 
-Two systems, deliberately adjacent:
+**OpenSSF Scorecard's hosted infrastructure**, and the work to make it
+provider-agnostic. `ossf/scorecard` is the engine; this is everything around it.
+Three parts:
 
-1. A cloud-agnostic, self-hosted OpenSSF Scorecard results **API server**: a
+1. The **batch scanning pipeline** (`cron/`), imported with history from
+   `ossf/scorecard`: the PubSub controller, batch and CII workers, BigQuery
+   transfer, release webhook, GitHub token-pool server, and the `projects.csv`
+   scan inventories behind the weekly public scan of 1M+ repositories. The
+   **producer** — production, GCP-bound, mid-migration.
+2. A cloud-agnostic, self-hosted Scorecard results **API server**: a
    read-through cache over an in-process scan engine ("hybrid"). It serves
    pre-computed results from any object store and generates them live on demand.
    It speaks the `ossf/scorecard-webapp` GET contract so it is a drop-in
-   `--base-url` target for `uwu-tools/scorecard-mcp`.
-2. The **batch scanning pipeline** (`cron/`), imported with history from
-   `ossf/scorecard`: the PubSub controller, batch and CII workers, BigQuery
-   transfer, release webhook, GitHub token-pool server, and the `projects.csv`
-   scan inventories behind the weekly public scan of 1M+ repositories.
+   `--base-url` target for `uwu-tools/scorecard-mcp`. The **serving tier** — v0,
+   provider-agnostic, incubating to graft upstream.
+3. The **provider-agnostic design** (`docs/research/`): a reference design for
+   running Scorecard's hosted data services on any cloud or self-hosted target.
+   Proposal-flavored; nothing in it is committed.
 
-They share a repository and nothing else — no import edges in either direction,
+The first two share a repository and nothing else — no import edges in either direction,
 enforced by task 3.5 and design **C11**. That is intentional for now. The
 pipeline is a GCP-bound producer writing Scorecard results to a bucket; the API
 server is a provider-agnostic consumer reading them from one. Converging them —
@@ -29,27 +36,40 @@ tracked separately.
 **Do not "tidy" this by wiring the two together.** Any convergence needs its own
 spec; a behavior-preserving migration is what keeps the split revertible.
 
-**Status:** 45/46 OpenSpec tasks done. The v0 core (groups 0–7) is implemented and
-tested — model, store, scan/tokens, orchestrator, HTTP contract, config, and the
-wired binary — plus docs (group 10) and the group 8 acceptance: a real
-`scorecard-mcp` binary (stdio, `-base-url`) verified against a live server for both
-a cache HIT and a MISS→live-scan→persist→HIT on `fileblob` and, via the local
-Docker Compose dev environment, on a self-hosted S3-compatible store too
-(9.3 — see `docs/acceptance.md`).
-The change has since been archived (11.3): the canonical specs now live under
-`openspec/specs/`, and the original proposal, design, and tasks are preserved
-under `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
+## Status
+
+| Change | State |
+| --- | --- |
+| `archive/2026-08-06-add-scorecard-api-server` | **Done** (45/46), archived. Canonical specs now live under `openspec/specs/`; the original proposal, design, and tasks are preserved under the archive path. |
+| `add-upstream-fallback` | 26/27 — implemented; see `internal/fallback`. |
+| `add-feature-flagging` | 14/15 — implemented; see `internal/flags`. |
+| `migrate-batch-pipeline` | **39/64 — in flight.** Import and build/CI wiring landed; staging image diff, Cloud Build trigger cutover, a clean scan cycle, and upstream removal remain. |
+
+The API server's v0 core is implemented and tested — model, store, scan/tokens,
+orchestrator, HTTP contract, config, and the wired binary — plus the acceptance
+gate: a real `scorecard-mcp` binary (stdio, `-base-url`) verified against a live
+server for both a cache HIT and a MISS→live-scan→persist→HIT on `fileblob` and,
+via the local Docker Compose dev environment, on a self-hosted S3-compatible
+store too (see `docs/acceptance.md`).
+
+The pipeline is **not** finished migrating. Until cutover completes it stays
+behavior-frozen — see [The batch pipeline (cron/)](#the-batch-pipeline-cron).
 
 ## Where to start
 
-1. Read [`docs/bootstrap.md`](docs/bootstrap.md).
+1. Read [`README.md`](README.md) for what the repository is and how the parts
+   relate.
 2. Read the canonical specs: `openspec list --specs`, then read
-   `openspec/specs/{api-server,result-store,result-cache,live-scan}/spec.md`. The
-   original proposal, design, and tasks are archived under
-   `openspec/changes/archive/2026-08-06-add-scorecard-api-server/`.
+   `openspec/specs/{api-server,result-store,result-cache,live-scan}/spec.md`.
 3. Read [`openspec/config.yaml`](openspec/config.yaml) for durable project context.
-4. For new work, propose a new OpenSpec change under `openspec/changes/`, keeping
+4. Read the active changes under `openspec/changes/` before starting anything —
+   `migrate-batch-pipeline` in particular constrains what may be touched.
+5. For new work, propose a new OpenSpec change under `openspec/changes/`, keeping
    the specs in `openspec/specs/` and the code in sync.
+
+[`docs/bootstrap.md`](docs/bootstrap.md) is a **historical record** of the v0
+design brief, not onboarding — it predates the repository's widening and some of
+its instructions are superseded. Read it for *why* v0 is shaped the way it is.
 
 ## Architecture (internal/)
 
@@ -175,9 +195,14 @@ freshness, and completeness. A score of `-1` is inconclusive, not failing.
 
 ## Commit and PR conventions
 
-- **DCO sign-off** on every commit: `git commit -s`.
+- **DCO sign-off** on every commit: `git commit -s`. This is the *human's*
+  certification — an AI agent must **never** add its own `Signed-off-by:`.
+- **AI attribution** for assisted work, following the Linux kernel
+  [coding-assistants convention](https://docs.kernel.org/process/coding-assistants.html):
+  an `Assisted-by: AGENT:MODEL` trailer (e.g. `Assisted-by: Claude Code:claude-opus-5`).
+  Not `Co-Authored-By:` — earlier docs in this repo specified that and were wrong.
 - Single **atomic commit** per logical change, with a detailed body explaining the
-  *why* (reference design decisions, e.g. **D5**, and OpenSpec tasks).
+  *why* (reference design decisions, e.g. **D5**/**C11**, and OpenSpec tasks).
 - Work on **feature branches**; never commit directly to `main`. Do not open PRs
   unless explicitly asked.
 - **No employer/internal references** in files or commits. Internal deployment

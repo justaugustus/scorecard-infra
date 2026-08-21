@@ -3,13 +3,185 @@ Copyright 2026 OpenSSF Scorecard Authors.
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# scorecard-api
+# OpenSSF Scorecard Infrastructure
 
+[![Presubmits](https://github.com/ossf/scorecard-infra/actions/workflows/presubmits.yml/badge.svg?branch=main)](https://github.com/ossf/scorecard-infra/actions/workflows/presubmits.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ossf/scorecard-infra/badge)](https://scorecard.dev/viewer/?uri=github.com/ossf/scorecard-infra)
+[![Contributor-Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-fbab2c.svg)](CODE_OF_CONDUCT.md)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](go.mod)
 
-A cloud-agnostic, self-hosted [OpenSSF Scorecard](https://github.com/ossf/scorecard)
-results **API server**. It serves pre-computed Scorecard results from any object
+The infrastructure that runs [OpenSSF Scorecard](https://github.com/ossf/scorecard)
+as a service — and the work to make it run anywhere.
+
+> **Scorecard results are heuristic signals, not a verdict.** Nothing here asserts
+> that a repository "is secure" or "is insecure"; every result declares its source,
+> freshness, and completeness. A score of `-1` means *inconclusive*, not failing.
+
+## Contents
+
+- [About The Project](#about-the-project)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage](#usage)
+  - [Batch scanning pipeline](#batch-scanning-pipeline)
+  - [Results API server](#results-api-server)
+  - [Provider-agnostic migration](#provider-agnostic-migration)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
+- [Acknowledgements](#acknowledgements)
+
+## About The Project
+
+`ossf/scorecard` is the **engine**: checks, probes, scoring, output formats. This
+repository is what surrounds it — the batch pipeline that scans 1M+ repositories
+every week, a results API server that serves what the pipeline produces, and the
+design for moving that stack off any single cloud provider.
+
+| | Path | Role | State |
+| --- | --- | --- | --- |
+| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production. GCP-bound. Mid-migration from `ossf/scorecard`. |
+| **Results API server** | `cmd/scorecard-api`, `internal/` | **Serving tier** — serves stored results over the public GET contract, and scans live on a cache miss | v0 complete. Provider-agnostic. Incubating to graft upstream. |
+| **Provider-agnostic design** | `docs/research/` | **The plan** — a reference design for running Scorecard's hosted data services on any cloud or self-hosted target | Reference design; not yet an official artifact. |
+
+These are one system's present and future, not two unrelated projects. The
+pipeline is a GCP-bound *producer* writing Scorecard results to a bucket; the API
+server is a provider-agnostic *consumer* reading them from one.
+
+Today they share a repository and **no code** — there are no import edges in
+either direction, and that is deliberate. The pipeline is **behavior-frozen**
+until its production cutover completes, because equivalence with what
+`ossf/scorecard` builds is both the migration's acceptance test and its rollback
+path. Converging the two is the point of landing them together; it has not
+happened yet and should not happen incidentally (design **C11** in
+[`openspec/changes/migrate-batch-pipeline/design.md`](openspec/changes/migrate-batch-pipeline/design.md)).
+
+## Getting Started
+
+### Prerequisites
+
+Common to everything here:
+
+- **Go** matching [`go.mod`](go.mod) (1.25.x). If builds fail with a Go tool
+  version mismatch across many stdlib packages, a stray `GOROOT` is the cause —
+  prefix commands with `env -u GOROOT`.
+
+To run the **results API server**:
+
+- An **object store** reachable by a `gocloud.dev/blob` URL — a local directory
+  (`file://…`) is enough to start; see [Storage backends](#storage-backends).
+- For **live scans only**: network egress (the engine calls the SCM API and
+  Scorecard's auxiliary data sources) and an **SCM token** (`GITHUB_AUTH_TOKEN`).
+  Serving already-cached results needs neither.
+
+To build the **batch pipeline** images or regenerate its protobufs:
+
+- **`ko`** and **`protoc`** on `PATH`. They are expected rather than vendored;
+  the Makefile explains why and fails with actionable errors when they are
+  missing.
+- Running the pipeline itself additionally requires its GCP dependencies (PubSub,
+  GCS, BigQuery) and the cluster described in [`cron/k8s/README.md`](cron/k8s/README.md).
+
+### Installation
+
+Clone the repository:
+
+```sh
+git clone https://github.com/ossf/scorecard-infra
+cd scorecard-infra
+```
+
+Build the API server:
+
+```sh
+go build -o scorecard-api ./cmd/scorecard-api
+```
+
+Or, once a version is tagged, install the binary directly:
+
+```sh
+go install github.com/ossf/scorecard-infra/cmd/scorecard-api@latest
+```
+
+Build the pipeline binaries and images with `make build-controller`,
+`make build-worker`, …, or `make dockerbuild` for all six images. Run
+`make help` for the full, grouped list of targets.
+
+## Usage
+
+### Batch scanning pipeline
+
+`cron/` is the batch scanning pipeline behind the weekly public Scorecard scan of
+1M+ repositories. It was imported from
+[`ossf/scorecard`](https://github.com/ossf/scorecard) with its full commit history
+— 466 commits dating to 2020 — because the operational history *is* the runbook:
+quota workarounds, shard sizing, PubSub ack deadlines, and BigQuery schema
+migrations exist only as commit messages.
+[`cron/initial-graft.md`](cron/initial-graft.md) records the terms of that import,
+including what could not come across and where to trace it.
+
+Read it before working in this tree. Two rules apply here and nowhere else in the
+repository: the tree is behavior-frozen until cutover, and `cron/internal/format`
+serializes a data model that lives upstream, so a schema edit here without the
+corresponding engine change breaks the published contract silently
+(`schema_gen_test.go` is what catches it).
+
+#### Pipeline components
+
+| Component | Path | Image |
+| --- | --- | --- |
+| PubSub batch controller | `cron/internal/controller/` | `scorecard-batch-controller` |
+| Batch scan worker | `cron/internal/worker/` | `scorecard-batch-worker` |
+| CII best-practices worker | `cron/internal/cii/` | `scorecard-cii-worker` |
+| BigQuery transfer | `cron/internal/bq/` | `scorecard-bq-transfer` |
+| Release webhook | `cron/internal/webhook/` | `scorecard-webhook-releasetest` |
+| GitHub token-pool server | `cron/internal/githubserver/` | `scorecard-github-server` |
+
+Deployment manifests are in `cron/k8s/`; image build configs in
+`cron/cloudbuild/`. `cron/internal/format/` owns the published BigQuery and JSON
+schema contract, verified against the Scorecard engine's data model by
+`schema_gen_test.go`.
+
+#### Scan inventories
+
+The repositories scanned each week are listed in `cron/internal/data/`:
+
+| File | Scope |
+| --- | --- |
+| `projects.csv` | GitHub |
+| `gitlab-projects.csv` | GitLab |
+| `gitlab-projects-releasetest.csv` | GitLab release testing |
+
+To add a repository, edit the relevant file and run `make add-projects`, which
+normalizes the result. CI enforces both that the inventories are valid and that
+`add-projects` is a no-op against them, so a hand-edit the tooling would not
+produce fails the build. See [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-repositories-to-the-weekly-scan)
+for the full contribution path.
+
+> [!NOTE]
+> These inventories previously lived in `ossf/scorecard`. If you followed a link
+> there, this is the right place now.
+
+#### Pipeline targets
+
+```sh
+make help                  # every target, grouped
+make dockerbuild           # build all six images
+make ko-images             # the same six via ko
+make validate-projects     # validate the scan inventories
+make build-proto           # regenerate protobufs (requires protoc on PATH)
+```
+
+`ko` and `protoc` are expected on `PATH` rather than vendored; the Makefile
+explains why and fails with actionable errors when they are missing.
+
+### Results API server
+
+A cloud-agnostic, self-hosted OpenSSF Scorecard results **API server**
+(`cmd/scorecard-api`). It serves pre-computed Scorecard results from any object
 store and **generates them live on demand** when the cache misses — a read-through
 cache over an in-process scan engine ("hybrid").
 
@@ -18,35 +190,7 @@ GET contract, so it is a drop-in `--base-url` target for
 [`uwu-tools/scorecard-mcp`](https://github.com/uwu-tools/scorecard-mcp) and any
 client of the public `api.scorecard.dev`.
 
-> **Scorecard results are heuristic signals, not a verdict.** This server never
-> asserts that a repository "is secure" or "is insecure"; every response declares
-> its source, freshness, and completeness. A score of `-1` means *inconclusive*,
-> not failing. See [`/capabilities`](#get-capabilities).
-
-## Contents
-
-- [About](#about)
-- [How it works](#how-it-works)
-- [Components](#components)
-- [Getting started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-- [Usage](#usage)
-  - [Run the server](#run-the-server)
-  - [Endpoints](#endpoints)
-  - [Provenance headers](#provenance-headers)
-  - [`GET /capabilities`](#get-capabilities)
-  - [Storage backends](#storage-backends)
-  - [Configuration](#configuration)
-  - [As a `scorecard-mcp` backend](#as-a-scorecard-mcp-backend)
-  - [Verifying end to end](#verifying-end-to-end)
-- [Batch scanning pipeline](#batch-scanning-pipeline)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Community](#community)
-- [License](#license)
-
-## About
+#### Why it exists
 
 The public Scorecard API only covers repositories that opted in via
 `publish_results: true`, and its production stack is wedded to Google Cloud. Teams
@@ -55,7 +199,11 @@ scan, or on **non-GCP** infrastructure have no first-class option. This server
 fills that gap: it serves the same contract from **any** object store and computes
 results on demand.
 
-## How it works
+It is also the provider-agnostic serving tier the pipeline's own migration needs —
+the same reason it is structured to graft upstream rather than to persist as a
+third, divergent HTTP server.
+
+#### How it works
 
 Every request flows through a single **read-through cache** (the orchestrator),
 which decides serve-vs-scan:
@@ -97,7 +245,7 @@ flowchart TD
   Results are immediately reusable by this server, the public webapp, and
   `scorecard-mcp`.
 
-## Components
+#### Server components
 
 The binary wires nine focused packages: `config → store + scanner + flags →
 orchestrator (+ optional fallback) → HTTP`.
@@ -134,42 +282,14 @@ of these.
 | **config** | `internal/config` | 12-factor environment configuration with fail-fast validation. |
 | **flags** | `internal/flags` | Runtime feature-flag seam over OpenFeature; in-process env-seeded static provider with fail-safe defaults (gates the upstream fallback's `enabled`/`mode`). |
 
-This is an **incubator, not a permanent fork**. The durable pieces are structured
-to graft upstream over time — the contract + blob read path into
+This server is an **incubator, not a permanent fork**. Its durable pieces are
+structured to graft upstream over time — the contract + blob read path into
 `ossf/scorecard-webapp`, and the live scan + HTTP surface into `ossf/scorecard`'s
 `scorecard serve`. See [`docs/upstream-graft.md`](docs/upstream-graft.md) for the
-per-component graft map and the `scorecard serve` reconciliation status.
+per-component graft map and the `scorecard serve` reconciliation status. (The
+batch pipeline travels the other way and is not a graft target.)
 
-## Getting started
-
-### Prerequisites
-
-- **Go** matching [`go.mod`](go.mod) (1.25.x).
-- An **object store** reachable by a `gocloud.dev/blob` URL — a local directory
-  (`file://…`) is enough to start; see [Storage backends](#storage-backends).
-- For **live scans only**: network egress (the engine calls the SCM API and
-  Scorecard's auxiliary data sources) and an **SCM token** (`GITHUB_AUTH_TOKEN`).
-  Serving already-cached results needs neither.
-
-### Installation
-
-Build from source:
-
-```sh
-git clone https://github.com/ossf/scorecard-infra
-cd scorecard-infra
-go build -o scorecard-api ./cmd/scorecard-api
-```
-
-Or, once a version is tagged, install the binary directly:
-
-```sh
-go install github.com/ossf/scorecard-infra/cmd/scorecard-api@latest
-```
-
-## Usage
-
-### Run the server
+#### Run the server
 
 ```sh
 export SCORECARD_RESULTS_BUCKET_URL="file:///tmp/scorecard"   # required
@@ -180,7 +300,7 @@ export GITHUB_AUTH_TOKEN="ghp_..."                            # only for live sc
 The server logs its listen address (default `:8080`) and the resolved bucket URL,
 then serves until it receives `SIGINT`/`SIGTERM`.
 
-### Endpoints
+#### Endpoints
 
 | Method & path | Returns |
 | --- | --- |
@@ -214,7 +334,7 @@ continues in the background and populates the cache for your next request.
 Malformed refs return `400`, unreachable/blocked repos `404`, and scan failures
 `502`.
 
-### Provenance headers
+#### Provenance headers
 
 Result bodies are canonical JSON2, served verbatim so webapp-compatible clients
 parse them unchanged. Provenance is carried in response headers instead:
@@ -227,7 +347,7 @@ parse them unchanged. Provenance is carried in response headers instead:
 | `X-Scorecard-Version` | Scorecard engine version |
 | `X-Scorecard-Complete` | Whether every check produced a conclusive score |
 
-### `GET /capabilities`
+#### `GET /capabilities`
 
 Exists so clients report provenance from the server instead of assuming
 public-cache behavior:
@@ -247,7 +367,7 @@ public-cache behavior:
 }
 ```
 
-### Storage backends
+#### Storage backends
 
 Results are persisted through [`gocloud.dev/blob`](https://gocloud.dev/), so the
 backend is selected entirely by a URL — nothing cloud-specific is compiled in.
@@ -278,7 +398,7 @@ the public webapp and readable by `scorecard-mcp`:
 {host}/{org}/{repo}/{commit}/results.json   # pinned (immutable)
 ```
 
-### Configuration
+#### Configuration
 
 All configuration comes from the environment. Only the bucket URL is required.
 
@@ -306,7 +426,7 @@ egress and an SCM token (`GITHUB_AUTH_TOKEN`, or `SCORECARD_GITHUB_TOKENS` which
 is fed into Scorecard's token rotation). Serving already-cached results needs
 neither.
 
-### Upstream result fallback
+#### Upstream result fallback
 
 Optionally, the server can reuse an existing result from an upstream Scorecard API
 (e.g. `api.scorecard.dev`) instead of always scanning locally. It is **off by
@@ -336,7 +456,7 @@ Commit-pinned requests never use the upstream (it answers only `latest`), and
 `/capabilities` reports mode `cached+upstream+live` with these caveats when the
 fallback is enabled.
 
-### As a `scorecard-mcp` backend
+#### As a `scorecard-mcp` backend
 
 [`scorecard-mcp`](https://github.com/uwu-tools/scorecard-mcp) is an MCP server
 that reads Scorecard results. Point it at this server with `-base-url`, and its
@@ -350,85 +470,14 @@ scorecard-mcp -base-url http://localhost:8080
 Configure it in an MCP host (Claude Desktop/Code, VS Code) the same way, setting
 the base URL to your server. See the `scorecard-mcp` README for host wiring.
 
-### Verifying end to end
+#### Verifying end to end
 
 [`docs/acceptance.md`](docs/acceptance.md) is a reproducible runbook that drives a
 real `scorecard-mcp` binary against this server and checks both a cache **HIT** on
 `fileblob` and a cache **MISS** that triggers a live scan, persists, and re-serves
 from cache.
 
-## Batch scanning pipeline
-
-This repository also hosts **`cron/`**, the batch scanning pipeline behind the
-weekly public Scorecard scan of 1M+ repositories. It was imported from
-[`ossf/scorecard`](https://github.com/ossf/scorecard) with its full commit
-history; [`cron/initial-graft.md`](cron/initial-graft.md) records the terms of
-that import.
-
-It is a separate system from the API server above. They share a repository and no
-code: there are no import edges in either direction. The pipeline is a GCP-bound
-*producer* of Scorecard results; the API server is a provider-agnostic *consumer*
-of them. Converging the two is the point of having them in one place, but it has
-not happened yet and should not happen incidentally.
-
-| Component | Path | Image |
-| --- | --- | --- |
-| PubSub batch controller | `cron/internal/controller/` | `scorecard-batch-controller` |
-| Batch scan worker | `cron/internal/worker/` | `scorecard-batch-worker` |
-| CII best-practices worker | `cron/internal/cii/` | `scorecard-cii-worker` |
-| BigQuery transfer | `cron/internal/bq/` | `scorecard-bq-transfer` |
-| Release webhook | `cron/internal/webhook/` | `scorecard-webhook-releasetest` |
-| GitHub token-pool server | `cron/internal/githubserver/` | `scorecard-github-server` |
-
-Deployment manifests are in `cron/k8s/`; image build configs in
-`cron/cloudbuild/`. `cron/internal/format/` owns the published BigQuery and JSON
-schema contract, verified against the Scorecard engine's data model by
-`schema_gen_test.go`.
-
-### Scan inventories
-
-The repositories scanned each week are listed in `cron/internal/data/`:
-
-| File | Scope |
-| --- | --- |
-| `projects.csv` | GitHub |
-| `gitlab-projects.csv` | GitLab |
-| `gitlab-projects-releasetest.csv` | GitLab release testing |
-
-To add a repository, edit the relevant file and run `make add-projects`, which
-normalizes the result. CI enforces both that the inventories are valid and that
-`add-projects` is a no-op against them, so a hand-edit the tooling would not
-produce fails the build.
-
-> [!NOTE]
-> These inventories previously lived in `ossf/scorecard`. If you followed a link
-> there, this is the right place now.
-
-### Pipeline targets
-
-```sh
-make help                  # every target, grouped
-make dockerbuild           # build all six images
-make ko-images             # the same six via ko
-make validate-projects     # validate the scan inventories
-make build-proto           # regenerate protobufs (requires protoc on PATH)
-```
-
-`ko` and `protoc` are expected on `PATH` rather than vendored; the Makefile
-explains why and fails with actionable errors when they are missing.
-
-## Development
-
-```sh
-make build     # go build ./...
-make test      # go test ./... -race
-make lint      # golangci-lint run ./...   (config in .golangci.yml, aligned with ossf/scorecard)
-```
-
-An S3-compatible integration test runs when `SCORECARD_TEST_S3_URL` is set (e.g. a
-local self-hosted S3-compatible store), and is skipped otherwise.
-
-### Running locally with Docker Compose
+#### Running locally with Docker Compose
 
 ```sh
 cp .env.example .env   # set GITHUB_AUTH_TOKEN for live scans
@@ -449,20 +498,39 @@ S3-compatible store and creates the bucket:
 docker compose -f docker-compose.yml -f docker-compose.s3.yml up --build
 ```
 
-This repository is developed spec-first with
-[OpenSpec](https://github.com/Fission-AI/OpenSpec); see
-[`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md) for conventions,
-and [`docs/bootstrap.md`](docs/bootstrap.md) plus the change under
-[`openspec/`](openspec/) for the full design.
+### Provider-agnostic migration
+
+Scorecard's hosted infrastructure is being migrated to a new home. The purpose of
+the work in `docs/research/` is to make that migration **provider-agnostic** —
+portable across any cloud or self-hosted target rather than tied to a single
+provider — with the smallest reliable footprint.
+
+- [`docs/research/data-infra.md`](docs/research/data-infra.md) — the reconciled
+  reference design: object store, serving tier, interchange format, public
+  dataset, and cost transparency. Written to be proposable to the Scorecard
+  **Infrastructure Working Group**; it is not an official artifact yet, and
+  nothing in it is committed.
+- [`docs/research/infra-seed-0.md`](docs/research/infra-seed-0.md) and
+  [`infra-seed-1.md`](docs/research/infra-seed-1.md) — the two research passes it
+  reconciles (component-selection breadth; correctness/protocol critique and data
+  model).
+
+This is the arc that gives the two systems above a shared destination. Getting the
+pipeline out of `ossf/scorecard` is the precondition for it, not the work itself.
 
 ## Roadmap
 
-Delivered in v0: the blob store (all drivers), the read-through cache
-(single-flight + sync/async), the live scan engine, the token/rate manager, the
-HTTP contract (`/projects`, `/badge`, `/capabilities`, `/health`, `/readyz`), and
-acceptance against `scorecard-mcp` on `fileblob`.
+**Batch pipeline.** The migration out of `ossf/scorecard` is underway: the import
+landed with full history and the build, CI, and image targets are ported. Still
+ahead — staging image builds diffed against their production equivalents,
+repointing the Cloud Build triggers, a full clean scan cycle on infra-built
+images, and only then removal from upstream. Tracked in
+[`openspec/changes/migrate-batch-pipeline/`](openspec/changes/migrate-batch-pipeline/).
 
-Planned / deferred:
+**API server.** Delivered in v0: the blob store (all drivers), the read-through
+cache (single-flight + sync/async), the live scan engine, the token/rate manager,
+the HTTP contract (`/projects`, `/badge`, `/capabilities`, `/health`, `/readyz`),
+and acceptance against `scorecard-mcp` on `fileblob`. Planned or deferred:
 
 - S3-compatible leg of the smoke test in CI (the store already has a gated integration
   test).
@@ -474,17 +542,61 @@ Planned / deferred:
 - Grafting the durable pieces upstream (see
   [`docs/upstream-graft.md`](docs/upstream-graft.md)).
 
-## Community
+**Convergence.** Putting `gocloud.dev/blob` under the pipeline and letting the
+orchestrator serve batch-produced results is what landing the two together makes
+possible. It needs its own spec and is deliberately deferred (**C11**).
 
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security Policy](SECURITY.md)
-- [Support](SUPPORT.md)
-- [Maintainers](MAINTAINERS.md)
+## Contributing
+
+Contributions are welcome. For detailed contributing guidelines — including how
+to add a repository to the weekly scan, and the rules that apply to the
+behavior-frozen `cron/` tree — please see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+```sh
+make build     # go build ./...
+make test      # go test ./... -race
+make lint      # golangci-lint run ./...   (config in .golangci.yml, aligned with ossf/scorecard)
+make help      # every target, grouped — including the pipeline targets
+```
+
+An S3-compatible integration test runs when `SCORECARD_TEST_S3_URL` is set (e.g. a
+local self-hosted S3-compatible store), and is skipped otherwise.
+
+This repository is developed spec-first with
+[OpenSpec](https://github.com/Fission-AI/OpenSpec); see [`AGENTS.md`](AGENTS.md)
+for conventions and [`openspec/`](openspec/) for the specs and change proposals.
+
+Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-Apache 2.0 — see [`LICENSE`](LICENSE).
+Distributed under the Apache-2.0 License. See [LICENSE](LICENSE) for more
+information.
 
 Data served from Scorecard is licensed under
 [CDLA Permissive 2.0](https://github.com/ossf/scorecard#scorecard-rest-api).
+
+## Contact
+
+- **Maintainers** — [MAINTAINERS.md](MAINTAINERS.md)
+- **Questions and help** — [SUPPORT.md](SUPPORT.md), or
+  [open an issue](https://github.com/ossf/scorecard-infra/issues/new/choose)
+- **Security vulnerabilities** — [SECURITY.md](SECURITY.md). Please do **not**
+  open a public issue; escalation goes to
+  [scorecard-steering@lists.openssf.org](mailto:scorecard-steering@lists.openssf.org).
+
+Project Link:
+[https://github.com/ossf/scorecard-infra](https://github.com/ossf/scorecard-infra)
+
+## Acknowledgements
+
+- The batch scanning pipeline was imported from
+  [`ossf/scorecard`](https://github.com/ossf/scorecard) with its full commit
+  history. `git blame` attributes to its original authors, not to the merge —
+  see [`cron/initial-graft.md`](cron/initial-graft.md).
+- The results API server mirrors the GET contract and blob layout defined by
+  [`ossf/scorecard-webapp`](https://github.com/ossf/scorecard-webapp), and uses
+  [`uwu-tools/scorecard-mcp`](https://github.com/uwu-tools/scorecard-mcp) as its
+  reference client and acceptance test.
+- This README was adapted from
+  [https://github.com/bloomberg/oss-template](https://github.com/bloomberg/oss-template).
