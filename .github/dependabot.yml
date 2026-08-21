@@ -58,3 +58,19 @@ updates:
       patterns:
         - "*"
       group-by: "dependency-name"
+
+# The API server image. Kept separate from the pipeline glob above rather than
+# folded into it: both trees build from `golang`, so a shared group keyed on
+# dependency name would pull this Dockerfile's alpine variant into the same PR
+# as the pipeline's bookworm one despite the two tracking different tags.
+- package-ecosystem: "docker"
+  directory: "/"
+  schedule:
+    interval: "weekly"
+  cooldown:
+    default-days: 7
+  groups:
+    api-server-image:
+      patterns:
+        - "*"
+      group-by: "dependency-name"
