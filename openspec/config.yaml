@@ -1,24 +1,42 @@
 schema: spec-driven
 
 context: |
-  Project: Two adjacent systems in one repository.
+  Project: Scorecard's hosted infrastructure, consolidated into one repository.
 
-  (1) A cloud-agnostic, self-hosted (non-OpenSSF) OpenSSF Scorecard results
-  API server. It serves pre-computed Scorecard results and generates them live on
-  demand — a read-through cache over an in-process scan engine ("hybrid").
-
-  (2) The batch scanning pipeline (cron/), imported with full history from
+  (1) The batch scanning pipeline (cron/), imported with full history from
   ossf/scorecard: PubSub controller, batch + CII workers, BigQuery transfer,
   release webhook, GitHub token-pool server, and the projects.csv scan
-  inventories behind the weekly public scan of 1M+ repositories. It is
-  behavior-frozen until production cutover completes, and shares no import edges
-  with the API server in either direction (design C11). Converging the two — a
-  GCP-bound producer and a provider-agnostic consumer of the same results — is
-  deferred to its own change; do not wire them together opportunistically.
+  inventories behind the weekly public scan of 1M+ repositories.
   See openspec/changes/migrate-batch-pipeline/ and cron/initial-graft.md.
 
-  Note the pipeline is the one component whose direction of travel is INBOUND.
-  Everything else here incubates to graft upstream; cron/ arrived to stay.
+  (2) The results API (api/), imported with full history from
+  ossf/scorecard-webapp: the service behind api.scorecard.dev. GET results and
+  badge, the Sigstore-verified signed-upload POST path, and the openapi.yaml
+  contract they are generated from. THIS IS THE SERVER THAT SHIPS.
+  See openspec/changes/migrate-api/ and api/initial-graft.md.
+
+  (3) A cloud-agnostic results API server (internal/, cmd/scorecard-api), built
+  here: a read-through cache over an in-process scan engine ("hybrid"). It
+  implements the same contract as (2) and is currently NOT the deployment path
+  (design W10). Retained and building; do not add new API surface here expecting
+  it to ship. Revisitable, but not ambiguous.
+
+  Both imported trees are BEHAVIOR-FROZEN until their production cutovers
+  complete, and share no import edges with each other or with internal/ in any
+  direction (designs C11 and W10, enforced by presubmits.yml's import-edges job).
+  Converging the two serving-tier implementations is the point of landing them
+  together; it is deferred to its own change. Do not wire them together
+  opportunistically.
+
+  Direction of travel is INBOUND. This repository was originally framed as an
+  incubator whose pieces would graft upstream; two of those three graft targets
+  have since been imported here instead. Consolidation replaced grafting.
+  See docs/upstream-graft.md, which records what still genuinely grafts out.
+
+  Quarantined in the frozen trees, and deliberately not "fixed": api/ hardcodes
+  three gs:// bucket URLs, api/openapi.yaml carries an x-google-backend block
+  (it is both the published contract and gateway deployment config), and cron/
+  keeps its own GCS write path.
 
   Language & stack: Go. HTTP server (net/http; chi optional). Imports the Scorecard
   library directly: github.com/ossf/scorecard/v5/pkg (in-process entrypoint

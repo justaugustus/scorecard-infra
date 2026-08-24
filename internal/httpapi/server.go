@@ -24,6 +24,20 @@ limitations under the License.
 // (source, resolved commit, date, version, completeness) is carried in response
 // headers so the JSON2 body stays webapp-compatible for clients like
 // scorecard-mcp (design D4/D12).
+//
+// # Status: not the deployment path
+//
+// This package is not what ships. The results API imported from
+// ossf/scorecard-webapp (api/) implements the same contract and is the code
+// already serving api.scorecard.dev, so re-hosting it is a lift-and-shift and it
+// is the implementation that deploys (design W10).
+//
+// This package is retained deliberately, not abandoned: it builds, its tests
+// run, and internal/store's configurable-backend seam is the most likely shape
+// of the eventual provider exit. But do not add new API surface here expecting
+// it to ship. The decision is revisitable — see docs/upstream-graft.md — and the
+// honest options at the next decision point are to converge this with api/ or to
+// remove it, not to maintain it indefinitely as a study.
 package httpapi
 
 import (

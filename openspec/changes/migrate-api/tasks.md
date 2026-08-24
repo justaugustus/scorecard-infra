@@ -105,11 +105,14 @@ selected the wrong thing.
 - [x] 2.4 Extraction remote removed. Branch is **local and unpushed** — the
       filtered result at `../scorecard-api-extract` and this branch are both
       reviewable before anything reaches the remote.
-- [ ] 2.5 Record what could not be imported and why, in
-      `api/initial-graft.md`: the linter config (**W7**), the CI fragments
-      (**W8**), and the originating commits for each. Follows the batch
-      pipeline's `cron/initial-graft.md` precedent (**C13**) — the note lives
-      inside the imported tree, next to the code it explains.
+- [x] 2.5 `api/initial-graft.md` written, following `cron/initial-graft.md`.
+      Records the import's terms and stats, the per-file reason each unimported
+      thing stayed behind — which differs from the pipeline's case, where the
+      obstacle was uniformly "shared with the engine" — and the originating
+      commits. Notes that `main.yml` and `.golangci.yml` landed upstream on the
+      same day in June 2022, six months after the repository was created: the API
+      ran without CI or a linter for its first several months, which is worth
+      knowing before reading an early commit's style as deliberate.
 
 ## 3. Make it build
 
@@ -197,11 +200,19 @@ selected the wrong thing.
 
 **Production still runs images built from `ossf/scorecard-webapp` throughout.**
 
-- [ ] 4.1 `api-docker` added to `build-images.yml`'s matrix. **Not verified:**
-      Docker is unavailable in this environment, so the Dockerfile path fixes
-      from 3.2 are unproven. This is precisely the defect class the batch
-      pipeline hit — a stale path inside a Dockerfile compiles fine and fails
-      only when an image is built — so this stays open until CI builds it.
+- [ ] 4.1 `api-docker` added to `build-images.yml`'s matrix. **Attempted and
+      blocked environmentally, so still unverified.** The Docker daemon cannot
+      reach `registry-1.docker.io` — TLS handshake timeout on a direct `docker
+      pull` of the base image, with nothing cached — which is the same TLS
+      interception the pipeline import hit locally. The failure is upstream of
+      the Dockerfile: BuildKit never got as far as reading it.
+      What *is* exercised locally is the step the image runs inside the builder:
+      `make api-build` does exactly `make -C api scorecard-webapp` from the
+      repository root and succeeds, and the `COPY --from=builder` source path
+      follows from where that writes the binary. That is reasoning, not a test.
+      This is precisely the defect class the batch pipeline hit — a stale path
+      in a Dockerfile compiles fine and fails only at image build — so it stays
+      open until CI builds it.
 - [x] 4.2 `license-headers` job added, using `-check` (report, don't rewrite)
       rather than upstream's rewrite-then-`git diff` pair. **Scoped to `api/`:**
       run repository-wide it flags four pre-existing files —
@@ -246,29 +257,38 @@ selected the wrong thing.
 
 ## 5. Documentation and repository identity
 
-- [ ] 5.1 Rewrite `docs/upstream-graft.md` around consolidation rather than
-      amending its incubator framing (**W10**). Two of **D11**'s three graft
-      targets are now in-tree, so the document's central claim — that the durable
-      pieces here travel outward — is wrong, and a reader who trusts it will do
-      the wrong work. State what is genuinely still graftable, and record the
-      rationales that stopped holding rather than deleting them silently.
-- [ ] 5.2 Update `AGENTS.md`: four parts rather than three, an `api/` component
-      map, the behavior-freeze rule, an **imperative** statement that the
-      hardcoded `gs://` constants and `openapi.yaml`'s `x-google-backend` block
-      are quarantined and must not be "fixed", and which of the two servers is on
-      the deployment path (**W10**).
-- [ ] 5.3 Update `openspec/config.yaml` context: the imported API, the
-      two-servers-one-contract state, which one ships, and the deferred
-      convergence.
-- [ ] 5.4 Add a `README.md` section for the imported API: endpoints, the
-      contract's role, the image, the deployment surface, and where the website
-      that consumes it lives.
-- [ ] 5.5 Record the deprioritization where it will be read, not only here: a
-      note in `internal/httpapi` stating that it is off the deployment path, why,
-      and that the decision is revisitable (**W10**). A package nobody deploys and
-      nobody has told is how stale code gets written against.
-- [ ] 5.6 Note in `internal/model`'s design record that **D13**'s rationale
-      changed — the webapp's generated models are now in-tree (**W10**).
+- [x] 5.1 `docs/upstream-graft.md` rewritten around consolidation. Opens by
+      saying what it used to claim and why that inverted, so a returning reader
+      is not left reconciling two documents from memory. States which server
+      ships and why; narrows the still-graftable list to `/capabilities` (**D7**)
+      plus a deferred cache seam; and keeps a *Rationales that stopped holding*
+      section rather than deleting the arguments that expired — including
+      **D13**'s and "keep the handlers thin so they lift out cleanly", which now
+      has nowhere to lift out to.
+- [x] 5.2 `AGENTS.md` updated: four parts in a table, a "Which API server
+      ships" section, a **Quarantined: do not "fix" these** section naming the
+      `gs://` constants, the `x-google-backend` block, `cron/`'s GCS write path,
+      and the scoped linter block. Plus an `api/` tree section covering the
+      hand-owned `configure_scorecard.go`, the thin end-to-end coverage, and why
+      the binary names are inverted.
+- [x] 5.3 `openspec/config.yaml` context rewritten for the three code trees,
+      which one ships, the enforced import-edge rule, the inbound direction of
+      travel, and the quarantined violations.
+- [x] 5.4 `README.md` gains a **Results API (api.scorecard.dev)** section —
+      tree map, endpoints, make targets, the ghcr publish path — and its
+      *About The Project* table now lists four parts with accurate states. The
+      pre-existing "This server is an incubator, not a permanent fork" claim
+      above the API-server section was false as written and is replaced with a
+      note that it is not the deployment path.
+- [x] 5.5 `internal/httpapi`'s package doc gains a **Status: not the deployment
+      path** section — what ships instead, why, that the package is retained
+      deliberately rather than abandoned, and that the honest options later are to
+      converge or remove it rather than maintain it indefinitely.
+- [x] 5.6 `internal/model`'s doc records that **half of D13's premise expired**:
+      the generated models are no longer only upstream, and go-openapi is a direct
+      dependency of this module now regardless. The remaining argument is narrower
+      and stated as such — depending on those models would couple the cache path
+      to a tree CI forbids importing.
 - [ ] 5.7 **Remove the `api/` linter-exclusion block from `.golangci.yml` when
       the behavior freeze lifts**, and fix what it surfaces. The block is scoped
       to `api/` and annotated with a pointer to this task; it exists because the

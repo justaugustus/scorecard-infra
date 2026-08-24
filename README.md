@@ -26,6 +26,7 @@ as a service — and the work to make it run anywhere.
   - [Installation](#installation)
 - [Usage](#usage)
   - [Batch scanning pipeline](#batch-scanning-pipeline)
+  - [Results API (api.scorecard.dev)](#results-api-apiscorecarddev)
   - [Results API server](#results-api-server)
   - [Provider-agnostic migration](#provider-agnostic-migration)
 - [Roadmap](#roadmap)
@@ -38,26 +39,31 @@ as a service — and the work to make it run anywhere.
 
 `ossf/scorecard` is the **engine**: checks, probes, scoring, output formats. This
 repository is what surrounds it — the batch pipeline that scans 1M+ repositories
-every week, a results API server that serves what the pipeline produces, and the
-design for moving that stack off any single cloud provider.
+every week, the API that serves what it produces, and the design for moving that
+stack off any single cloud provider.
 
 | | Path | Role | State |
 | --- | --- | --- | --- |
-| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production. GCP-bound. Mid-migration from `ossf/scorecard`. |
-| **Results API server** | `cmd/scorecard-api`, `internal/` | **Serving tier** — serves stored results over the public GET contract, and scans live on a cache miss | v0 complete. Provider-agnostic. Incubating to graft upstream. |
+| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production. GCP-bound. Imported from `ossf/scorecard`; behavior-frozen. |
+| **Results API** | `api/` | **Serving tier** — the service behind `api.scorecard.dev` | Production. GCP-bound. Imported from `ossf/scorecard-webapp`; behavior-frozen. **This is what ships.** |
+| **Results API server** | `cmd/scorecard-api`, `internal/` | A provider-agnostic implementation of the same contract, with a read-through cache and live scanning | v0 complete. Not currently the deployment path. |
 | **Provider-agnostic design** | `docs/research/` | **The plan** — a reference design for running Scorecard's hosted data services on any cloud or self-hosted target | Reference design; not yet an official artifact. |
 
-These are one system's present and future, not two unrelated projects. The
-pipeline is a GCP-bound *producer* writing Scorecard results to a bucket; the API
-server is a provider-agnostic *consumer* reading them from one.
+These are one system's present and future, not four unrelated projects. The
+pipeline is a *producer* writing Scorecard results to a bucket; the API is the
+*consumer* reading them back out over HTTP. Both arrived here from elsewhere, so
+that the whole hosted data path lives in one place — which is the precondition
+for moving it, and for eventually reconciling the two implementations of the
+serving tier into one.
 
-Today they share a repository and **no code** — there are no import edges in
-either direction, and that is deliberate. The pipeline is **behavior-frozen**
-until its production cutover completes, because equivalence with what
-`ossf/scorecard` builds is both the migration's acceptance test and its rollback
-path. Converging the two is the point of landing them together; it has not
-happened yet and should not happen incidentally (design **C11** in
-[`openspec/changes/migrate-batch-pipeline/design.md`](openspec/changes/migrate-batch-pipeline/design.md)).
+They share a repository and **no code**. There are no import edges in any
+direction, enforced by CI, and that is deliberate: both imported trees are
+**behavior-frozen** until their production cutovers complete, because equivalence
+with what they replaced is both the acceptance test and the rollback path.
+Converging them is the point of landing them together; it has not happened yet
+and should not happen incidentally (designs **C11** and **W10**, in
+[`migrate-batch-pipeline`](openspec/changes/migrate-batch-pipeline/design.md) and
+[`migrate-api`](openspec/changes/migrate-api/design.md)).
 
 ## Getting Started
 
@@ -178,6 +184,54 @@ make build-proto           # regenerate protobufs (requires protoc on PATH)
 `ko` and `protoc` are expected on `PATH` rather than vendored; the Makefile
 explains why and fails with actionable errors when they are missing.
 
+### Results API (api.scorecard.dev)
+
+The service behind `api.scorecard.dev` and `api.securityscorecards.dev`,
+imported from [`ossf/scorecard-webapp`](https://github.com/ossf/scorecard-webapp)
+with its full history. **This is the API that ships.** It is what every live
+consumer already talks to: the project website's result viewer,
+`img.shields.io`, the Scorecard GitHub Action's upload path, and `scorecard-mcp`.
+
+The website that consumed it stays in `ossf/scorecard-webapp`, which remains its
+home; only the Go API moved.
+
+| Path | Contents |
+| --- | --- |
+| `api/openapi.yaml` | The published contract. Also the API gateway's deployment configuration, so editing it changes a deployed service. |
+| `api/app/server/` | Hand-written handlers: results retrieval, badge redirect, the signed-upload publish path, workflow verification, CDN purge. |
+| `api/app/generated/` | go-swagger output derived from the contract. `configure_scorecard.go` is hand-owned despite living here. |
+| `api/main.go` | Entry point. Builds as `scorecard-webapp` — see the note below. |
+| `api/initial-graft.md` | What the import brought across, what it could not, and why. |
+
+Endpoints, unchanged by the migration:
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /projects/{platform}/{org}/{repo}` | Published result; `?commit=` for a pinned one |
+| `GET /projects/{platform}/{org}/{repo}/badge` | `302` to `img.shields.io` (a redirect — it renders nothing itself) |
+| `POST /projects/{platform}/{org}/{repo}` | Publish a result, after verifying its Sigstore certificate, transparency-log entry, and originating workflow |
+
+Make targets:
+
+```sh
+make api-build     # build the binary (api/scorecard-webapp)
+make api-swagger   # regenerate server and client from api/openapi.yaml
+make api-docker    # build the container image
+```
+
+The image is published to `ghcr.io` by `publish-api-image.yml` on an `api/v*`
+tag. Deploy the digest it reports, not a tag.
+
+Two things that look like mistakes and are not:
+
+- **The binary is named `scorecard-webapp`** while this repository's own server
+  binary is `scorecard-api` — which inverts what each one actually is. Renaming
+  changes image contents, and image equivalence is the migration's cutover gate,
+  so it is deferred until after cutover.
+- **The tree hardcodes `gs://` bucket URLs**, which the cloud-agnostic rules
+  elsewhere in this repository forbid. It is behavior-frozen until cutover
+  completes; making storage configurable is a separate, planned change.
+
 ### Results API server
 
 A cloud-agnostic, self-hosted OpenSSF Scorecard results **API server**
@@ -282,12 +336,15 @@ of these.
 | **config** | `internal/config` | 12-factor environment configuration with fail-fast validation. |
 | **flags** | `internal/flags` | Runtime feature-flag seam over OpenFeature; in-process env-seeded static provider with fail-safe defaults (gates the upstream fallback's `enabled`/`mode`). |
 
-This server is an **incubator, not a permanent fork**. Its durable pieces are
-structured to graft upstream over time — the contract + blob read path into
-`ossf/scorecard-webapp`, and the live scan + HTTP surface into `ossf/scorecard`'s
-`scorecard serve`. See [`docs/upstream-graft.md`](docs/upstream-graft.md) for the
-per-component graft map and the `scorecard serve` reconciliation status. (The
-batch pipeline travels the other way and is not a graft target.)
+> **This server is not currently the deployment path.** It was built here as a
+> provider-agnostic implementation of the results contract, on the assumption
+> that its durable pieces would graft outward into `ossf/scorecard-webapp` and
+> `ossf/scorecard`. Both of those graft targets have since been imported into
+> this repository instead — see [Results API](#results-api-apiscorecarddev)
+> below — so what ships is the code already serving production. This package set
+> is retained and still builds; it is not where new API surface should go.
+> [`docs/upstream-graft.md`](docs/upstream-graft.md) explains the reversal and
+> what still genuinely grafts upstream.
 
 #### Run the server
 

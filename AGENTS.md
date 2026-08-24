@@ -5,15 +5,47 @@ Guidance for AI coding agents (and humans) working in this repository. **Read
 the parts relate, and why. This file holds only what README and the code don't
 already cover: active constraints, gotchas, and conventions.
 
-This repository has three parts, sharing a repo and nothing else — no import
-edges either direction: the **batch scanning pipeline** (`cron/`, production,
-GCP-bound, mid-migration), the **results API server** (`internal/`, v0,
-provider-agnostic, incubating to graft upstream), and the **provider-agnostic
-design** (`docs/research/`, proposal-flavored).
+This repository has four parts, sharing a repo and nothing else — no import
+edges in any direction:
 
-**Do not "tidy" this by wiring the pipeline and the API server together.** Any
-convergence needs its own spec (design **C11**); a behavior-preserving migration
-is what keeps the current split revertible.
+| Part | What it is |
+| --- | --- |
+| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. Production, GCP-bound, **behavior-frozen**. |
+| `api/` | **The results API** serving `api.scorecard.dev`. Imported from `ossf/scorecard-webapp` with history. Production, GCP-bound, **behavior-frozen**. This is the server that ships. |
+| `internal/`, `cmd/` | **A provider-agnostic hybrid API server**, built here. Implements the same contract as `api/`. Currently **off the deployment path** — see below. |
+| `docs/research/` | The provider-agnostic design. Proposal-flavored. |
+
+**Do not "tidy" this by wiring the three code trees together.** Any convergence
+needs its own spec (designs **C11** and **W10**); behavior-preserving migrations
+are what keep the imports revertible. The missing import edges are deliberate,
+not an oversight, and `presubmits.yml`'s `import-edges` job enforces them.
+
+## Which API server ships (read before touching either)
+
+`api/` and `internal/httpapi` both implement the results contract. **`api/` is
+what deploys.** It is the code already serving production against every live
+consumer, and re-hosting it is a lift-and-shift, not a refactor.
+
+`internal/httpapi` and its supporting packages are not deleted and not
+unmaintained — but they are not the forward path today. Do not add new API
+surface there on the assumption it will ship. The decision is revisitable; it is
+not ambiguous. See [`docs/upstream-graft.md`](docs/upstream-graft.md).
+
+## Quarantined: do not "fix" these
+
+Both frozen trees violate rules stated further down this file. That is
+deliberate, and reverting the violation breaks the migration's acceptance test,
+which is that the deployed behavior did not change.
+
+- **`api/app/server` hardcodes three `gs://` bucket URLs.** They stay until the
+  freeze lifts. Making them configurable is a separate, already-planned change.
+- **`api/openapi.yaml` carries an `x-google-backend` block.** It is both the
+  published contract and the API gateway's deployment configuration. Editing it
+  changes a deployed service.
+- **`cron/` retains its own GCS write path.** Same reasoning (**C11**).
+- **`.golangci.yml` applies a narrower linter set to `api/`.** The imported tree
+  ran a different config upstream; the block is scoped to `api/` and marked for
+  removal when the freeze lifts, not a general relaxation.
 
 ## Current state
 
@@ -64,6 +96,34 @@ builds, because that equivalence is the migration's acceptance test and its
 rollback path. And `cron/internal/format` serializes a data model that lives
 upstream, so a schema edit here without the corresponding engine change breaks
 the contract silently — `schema_gen_test.go` is what catches it.
+
+## The results API (api/)
+
+Imported from `ossf/scorecard-webapp` with full history. Read
+[`api/initial-graft.md`](api/initial-graft.md) before working in this tree.
+
+Upstream's layout is intact inside it — `api/app/server/` is hand-written,
+`api/app/generated/` is derived from `api/openapi.yaml` by go-swagger — so paths
+stay 1:1 with upstream while both copies exist. It keeps its own `Makefile`,
+whose recipes are relative to `api/`; the root Makefile delegates via
+`api-build`, `api-swagger`, and `api-docker`.
+
+Three things to know before editing:
+
+- **`api/app/generated/restapi/configure_scorecard.go` is hand-owned** despite
+  living in the generated tree. It holds the handler wiring, CORS setup, and JSON
+  producer config, and is excluded from `SWAGGER_GEN`. A regeneration that
+  overwrites it silently reverts routing.
+- **The end-to-end specs reach the network**, and their coverage is thinner than
+  it looks. The GitHub-API specs need a token (CI supplies one). The five Sigstore
+  verification specs **skip unconditionally** — they depend on Rekor's
+  search-by-hash index, which Rekor v2 removed. So the publish path's certificate
+  verification has no working end-to-end coverage today, here or upstream. Do not
+  read a green test run as covering it.
+- **The binary is still called `scorecard-webapp`** while this repository's own is
+  `scorecard-api`, which inverts what each one actually is. Deliberate: renaming
+  changes image contents, and image equivalence is the cutover gate. It gets fixed
+  after cutover, not before.
 
 ## Build, test, lint
 

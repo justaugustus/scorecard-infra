@@ -21,7 +21,18 @@ limitations under the License.
 //
 // Per design decision D13, this package deliberately does NOT import the
 // go-swagger-generated models from ossf/scorecard-webapp (which drag in the full
-// go-openapi runtime). Live results are formatted via pkg/scorecard.AsJSON2()
+// go-openapi runtime).
+//
+// Note that half of D13's premise has expired: those generated models are no
+// longer only upstream. They were imported into this repository as
+// api/app/generated/models, and the go-openapi runtime is now a direct
+// dependency of this module regardless of what this package does. The remaining
+// argument is narrower but still holds — this package exists to unmarshal a
+// handful of fields, and depending on the generated models to do it would couple
+// the cache path to the frozen tree that presubmits.yml forbids importing.
+// Revisit when the two serving-tier implementations converge (design W10).
+//
+// Live results are formatted via pkg/scorecard.AsJSON2()
 // and cached bytes are passed through unchanged; [Result] exists only to
 // unmarshal the fields the server must introspect (score for the badge; repo
 // commit, date, and version for freshness and provenance). It mirrors the
