@@ -69,6 +69,24 @@ that does not apply here.
 - **WHEN** this repository's tags are listed after the import
 - **THEN** no `ossf/scorecard-webapp` release tag SHALL be present
 
+### Requirement: Source repository release tags remain published
+
+Not importing the source repository's release tags SHALL NOT be confused with
+retiring them. They remain the resolution path for consumers pinned to a released
+version of the retired module, so they SHALL remain published in the source
+repository after the code is removed.
+
+#### Scenario: A pinned dependency still resolves after removal
+
+- **WHEN** a consumer pinned to a released version of the source module
+  downloads it after the code has been removed upstream
+- **THEN** the download SHALL succeed
+
+#### Scenario: Removal does not prune tags
+
+- **WHEN** the source repository is cleaned up following removal
+- **THEN** its release tags SHALL be retained
+
 ### Requirement: Historical pull-request references are disambiguated to their source
 
 Pull-request references in imported commit subjects SHALL be rewritten during

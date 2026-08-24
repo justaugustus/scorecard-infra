@@ -10,21 +10,40 @@ selected the wrong thing.
 
 ## 0. Pre-work / decisions
 
-- [ ] 0.1 Verify no external Go importers of `github.com/ossf/scorecard-webapp`,
-      checking `app/generated/models` specifically — the published request and
-      response types are the plausible consumer (**W12**). Use `pkg.go.dev`
-      importers plus code search. A positive result turns Phase 7's deletion into
-      a deprecation window and must be resolved before approval, not after.
+- [x] 0.1 **One external importer found, and it does not block a clean delete.**
+      `jetstack/tally` imports `app/generated/models` from four of its packages —
+      the predicted consumer (**W12**). Nothing imports the generated client, the
+      `restapi` package, or the module root. But tally depends on
+      `github.com/ossf/scorecard-webapp v1.0.5`, a *released version*, and the
+      module proxy holds all 20 published versions immutably
+      (`v1.0.5` resolves with its commit hash, independent of the repository's
+      state). Deleting `go.mod` from upstream `main` therefore breaks
+      `@latest`/`@main` resolution and new consumers, not pinned builds. tally is
+      also dormant — last push 2023-11-13, still on `scorecard/v4`.
+      **Conclusion: clean delete is safe, with one added obligation — upstream's
+      release tags must not be deleted** (task 7.9). No deprecation window.
 - [ ] 0.2 Confirm `git-filter-repo` is installed and that `re` is available in
       the `--message-callback` context without an explicit import (**W1**).
 - [ ] 0.3 Dry-run the filter and confirm the prefix-matching behavior of
       `--path Makefile` / `--path-rename Makefile:api/Makefile` selects and
       relocates `Makefile.swagger` as intended, and selects nothing else (**W1**).
-- [ ] 0.4 Decide generator pinning for go-swagger regeneration: pin to the
-      version that produced the checked-in tree, or regenerate current. Record
-      the choice and its reason; it determines the size of the Phase 3 diff.
-- [ ] 0.5 Decide the DCO resolution — administrative override or scoped check —
-      **before** review opens, and record who agreed it (**W13**).
+- [x] 0.4 **Decided: match the checked-in tree.** Regeneration must be a no-op,
+      so the Phase 3 diff stays empty and the import stays a pure relocation.
+      Toolchain currency is a separate concern from a migration whose acceptance
+      test is that nothing changed.
+- [ ] 0.4a **Recover the generator version, because nobody wrote it down.** The
+      generated files carry no version stamp and the webapp pins go-swagger
+      nowhere — its `Makefile` invokes whatever `swagger` is on `PATH`, the same
+      unpinned-tool problem the pipeline import hit with `protoc`. Bisect
+      go-swagger releases current around 2026-02-05 (`395f1f1`, the last commit
+      to regenerate the tree) until `make swagger` produces no diff, then pin
+      that version where CI enforces it. If no release reproduces the tree
+      exactly, say so and escalate to 0.4 rather than accepting a small diff
+      quietly — a tree nobody can regenerate is a tree nobody can safely change.
+- [x] 0.5 **Decided: administrative override.** 37 imported commits carry no
+      sign-off and no honest code fix exists (**W13**). Same resolution the
+      pipeline import reached, agreed in advance this time rather than at merge.
+      Record who applied it and on which pull request.
 - [ ] 0.6 Confirm ownership and admin access for every external system to be
       repointed: Cloud Build trigger, Cloud Run service, Cloud Endpoints service
       configuration, domain mapping, Fastly, and the `scorecard-web` OSS-Fuzz
@@ -138,8 +157,16 @@ selected the wrong thing.
       that guards `cron/`.
 - [ ] 4.8 Measure the presubmit wall-clock and total-compute change, as was done
       for the pipeline import. Report the numbers rather than an impression.
-- [ ] 4.9 Decide and record the release-trigger convention (open question): keep
-      upstream's tag-triggered deploy, replace it, or run both.
+- [ ] 4.9 Adopt the release-trigger sequence in **W15**: inherit upstream's
+      tag-triggered build and deploy unchanged at cutover, and tag
+      `api/vX.Y.Z` rather than `vX.Y.Z`. The namespace is the part that must be
+      right before the *first* tag — renaming a release namespace later is worse
+      than choosing it awkwardly now.
+- [ ] 4.10 File the follow-up for **W15** step 3 — move image build and publish
+      into GitHub Actions producing a digest-addressed image, leaving the
+      provider-specific step as "deploy this digest". Not in this change; it is
+      the seam the GCP exit needs, and it should exist as a tracked item rather
+      than as a paragraph in a design document.
 
 ## 5. Documentation and repository identity
 
@@ -204,6 +231,15 @@ selected the wrong thing.
 - [ ] 7.7 Confirm the site still builds and deploys, and that its viewer still
       resolves against the API.
 - [ ] 7.8 Confirm nothing in the remaining tree references the removed paths.
+- [ ] 7.9 **Do not delete `ossf/scorecard-webapp`'s release tags.** Deleting the
+      code is safe; deleting `v1.0.5` is what breaks `jetstack/tally`, the one
+      external consumer (0.1, **W12**). This change strips those same tags from
+      the *import* (**W2**) — the operations look alike and have opposite
+      consequences, so state the distinction in the removal pull request rather
+      than trusting it to be obvious.
+- [ ] 7.10 Verify the obligation holds rather than assuming it: after removal,
+      confirm `go mod download github.com/ossf/scorecard-webapp@v1.0.5` still
+      resolves.
 
 ## 8. Change closeout
 

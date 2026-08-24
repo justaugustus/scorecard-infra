@@ -65,7 +65,7 @@ coupling, reconciling the imported API with `internal/`, restructuring into
 
 ## Decisions
 
-**Status:** W1–W14 are proposed; none is implemented. W10 is the one a reviewer
+**Status:** W1–W16 are proposed; none is implemented. W10 is the one a reviewer
 should push on hardest — it is where this migration diverges from the batch
 pipeline's, and where an approval commits the repository to a direction rather
 than to a mechanical move. W14 is the one whose cost compounds silently.
@@ -376,13 +376,30 @@ maintained `README.md` to rewrite rather than a bare 404 to apologize for.
 
 What removal actually retires is the Go module. Deleting `app/`, `main.go`, and
 the build wiring leaves no Go code, so `go.mod` and `go.sum` go too, and
-`github.com/ossf/scorecard-webapp` stops resolving as a module. The plausible
-external consumer is `app/generated/models` — the published API's request and
-response types, which are exactly the sort of thing a downstream tool imports
-rather than redeclares. Phase 0 verifies this against `pkg.go.dev` importers and
-code search. A positive result turns removal from a delete into a deprecation
-window, and is a reason the tree lands importable at `api/` rather than under
-`internal/` (**W5**).
+`github.com/ossf/scorecard-webapp` stops resolving at `@latest` or `@main`.
+
+**There is one external consumer, and it survives.** `jetstack/tally` imports
+`app/generated/models` from four of its packages — the predicted consumer,
+found by task 0.1. Nothing imports the generated client, the `restapi` package,
+or the module root. What makes this a non-blocker is *how* tally depends on it:
+`require github.com/ossf/scorecard-webapp v1.0.5`, a released version. The Go
+module proxy holds all 20 published versions immutably and independently of the
+repository's working tree, so a pinned build keeps resolving after the code is
+deleted. Removal breaks `@latest` resolution and new consumers, not existing
+pinned ones. tally is also dormant — last pushed 2023-11-13, still on
+`scorecard/v4`.
+
+This adds exactly one obligation, and it is a prohibition rather than work:
+**upstream's release tags must not be deleted.** Deleting the code is safe;
+deleting `v1.0.5` is what would actually break someone. Worth stating explicitly
+because "clean up the repository" plausibly includes pruning tags that no longer
+trigger anything, and because this change strips those same tags from the
+*import* (**W2**) — the two operations look similar and have opposite
+consequences.
+
+A deprecation window is therefore not needed. The tree still lands importable at
+`api/` rather than under `internal/` (**W5**), which keeps the option open if a
+consumer surfaces later.
 
 ### W13 — DCO versus imported history, again
 
@@ -416,6 +433,78 @@ whole-repository `git log` as a merge of three streams rather than a narrative.
 It is worth noticing, though, that this is the second time; a third import should
 prompt the question of whether the repository is accumulating a monorepo by
 default rather than by decision.
+
+### W15 — Inherit the release trigger at cutover; decouple build from deploy after
+
+Upstream releases the production API by pushing a `v1.x` tag, which fires a Cloud
+Build trigger that builds the image and deploys it to Cloud Run; `openapi.yaml`
+changes on `main` reach staging only, and the Cloud Endpoints service
+configuration is deployed by hand (upstream's own README calls this a TODO). This
+repository, by contrast, has no tags at all: `cron/`'s images are built by
+repository-scoped Cloud Build triggers, and CI builds images without publishing
+them. So there is no existing convention here to inherit into.
+
+The complication is that the obvious inheritance deepens exactly the coupling
+this repository exists to remove. Recommended sequence:
+
+**1. At cutover, inherit the mechanism unchanged, repointed at this repository.**
+The cutover already changes where the source lives and who builds the image;
+changing how a release is triggered in the same step means a failure has two
+candidate causes instead of one. Lift-and-shift applies to the release path too.
+
+**2. Scope tags to the component from the first one: `api/vX.Y.Z`, not
+`vX.Y.Z`.** This repository now holds two independently deployable systems and
+will likely hold more. A bare `v1.2.3` here would claim the whole repository for
+one component, collide with any future module-level versioning of
+`scorecard-infra` itself, and read ambiguously next to upstream's `v1.0.x`, which
+must keep resolving for the one external consumer (**W12**). Component-scoped
+tags are also what Go's own submodule convention expects, so the namespace stays
+usable if `api/` ever becomes its own module. This is the one piece worth
+deciding *before* the first tag, because renaming a release namespace afterwards
+is worse than choosing it awkwardly now.
+
+**3. After the hold period, split building from deploying.** Move image *build
+and publish* into GitHub Actions, producing a digest-addressed image in a
+registry; leave the provider-specific step as "deploy this digest." That is the
+portability seam. It shrinks the GCP-specific surface from a build system plus a
+deploy system to a single deploy step, and it makes the artifact — an OCI image
+identified by digest — the thing that moves between providers, rather than a
+build configuration that has to be reimplemented against each one.
+
+**4. Do not adopt deploy-on-merge for the API.** The pipeline's images can
+rebuild on whatever cadence suits them; a public API serving badges and result
+lookups should have an explicit, nameable release. Keeping the trigger a
+deliberate act is also what makes step 3's digest pinning meaningful.
+
+A corollary worth recording even though it is out of scope: deployments should
+consume immutable digests rather than floating tags. `cron/k8s/*.yaml` currently
+consumes `:stable`, which means a rollback there is not a configuration change
+with a known target. That is a pre-existing weakness in the pipeline, not
+something this change introduces or fixes, but the API's cutover contract
+(**W11**) depends on being able to name a prior artifact exactly — so the API
+should start out doing it properly rather than inheriting the habit.
+
+### W16 — Regeneration matches the checked-in tree, and the version must be recovered
+
+Between pinning the generator to whatever produced the checked-in generated tree
+and regenerating with a current go-swagger, **match the checked-in tree.** A
+migration whose acceptance test is "nothing changed" should not carry a few
+hundred lines of generator modernization through it, and toolchain currency is a
+real concern that deserves its own change rather than a ride on this one.
+
+The awkward part is that the version is not recorded anywhere. The generated
+files carry `// Code generated by go-swagger; DO NOT EDIT.` and no version, and
+the webapp's `Makefile` invokes whatever `swagger` happens to be on `PATH`. This
+is the same unpinned-tool problem the pipeline import hit with `protoc`, and it
+has the same consequence: the checked-in tree's provenance is whatever was
+installed on the last regenerating machine.
+
+So the decision has a prerequisite (task 0.4a): bisect go-swagger releases around
+2026-02-05 — the last commit to touch the generated tree — until `make swagger`
+produces no diff, then pin that version somewhere CI enforces. If no release
+reproduces the tree exactly, that is a finding to escalate rather than absorb: it
+means the checked-in output cannot be reproduced by any released tool, and the
+choice becomes regenerate-current-and-accept-the-diff with that fact stated.
 
 ## Relationship to the existing API server and pipeline
 
@@ -457,13 +546,11 @@ interaction:
   during the move breaks a page nobody thought to test. The response-diff gate
   (**W11**, step 3) is the mitigation; the site's viewer path should be in the
   fixed request set.
-- **Generated-code regeneration produces a large diff.** The pipeline's import
-  hit this with protobuf: regenerating with a current toolchain produced 200+
-  changed lines of generator modernization around a one-line semantic change.
-  go-swagger will behave the same way. Decide before Phase 3 whether to pin the
-  generator to the version that produced the checked-in tree (minimal diff, stale
-  toolchain) or regenerate current (large diff, reproducible going forward), and
-  record the choice.
+- **The generated tree's provenance is unrecorded.** Settled in favour of
+  matching the checked-in output (**W16**), which leaves the question of which
+  go-swagger produced it — a question nobody wrote down and CI never enforced.
+  The residual risk is that no released version reproduces it, in which case the
+  tree cannot be regenerated by anyone and the decision reopens.
 - **`configure_scorecard.go` is hand-owned inside a generated tree.** It is
   excluded from `SWAGGER_GEN` and holds the handler wiring, the CORS setup, and
   the JSON producer configuration. A regeneration that overwrites it silently
@@ -485,23 +572,26 @@ interaction:
 
 ## Open questions
 
-- **External importers.** Whether anything imports
-  `github.com/ossf/scorecard-webapp/app/generated/models` or any other package in
-  the module. Phase 0 verifies via `pkg.go.dev` importers and code search. A
-  positive result changes upstream removal from a delete to a deprecation window.
 - **Where production runs after cutover.** The destination for the hosted API is
   being settled outside this change. Phases 0–5 are independent of that outcome;
   Phase 6 is sequenced against it, and Phase 7 must not begin until it is
   settled.
-- **Whether the tag-triggered release convention moves.** Upstream deploys the
-  production API by pushing a `v1.x` tag. This repository does not currently tag
-  releases at all, and the batch pipeline's images are built by Cloud Build
-  triggers rather than tags. Adopting the tag convention, replacing it, or
-  running both are all viable; decide at task 4.4 rather than inheriting it by
-  accident.
-- **Generator pinning for regeneration.** See the risk above; decide before
-  Phase 3.
+- **Which go-swagger version produced the checked-in tree.** **W16** decided to
+  match it; nobody recorded what it was. Recovering it is task 0.4a, and the
+  answer could be "no release reproduces it exactly", which reopens **W16**.
 - **Steering Committee artifact format.** This change is the authoritative
   artifact. Whether the committee wants a standalone summary instead is worth
   asking before the approval request goes out — the same question the pipeline's
   migration left open.
+
+## Resolved during review
+
+- **External importers (W12).** One found: `jetstack/tally` imports
+  `app/generated/models` from four packages. It pins the released version
+  `v1.0.5`, which the module proxy holds immutably, so upstream removal does not
+  break it — provided upstream's tags survive. Clean delete, no deprecation
+  window, one new obligation. See **W12**.
+- **Generator pinning (W16).** Match the checked-in tree, not toolchain currency.
+- **DCO (W13).** Administrative override, agreed in advance.
+- **Release triggers (W15).** Inherit unchanged at cutover, decouple build from
+  deploy after the hold.

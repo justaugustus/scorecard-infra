@@ -112,6 +112,18 @@ commits, spanning 2021-12-29 to 2026-08-07, across 12 authors.
   service configuration deployed from `openapi.yaml`, the domain mapping, and
   the OSS-Fuzz project (`scorecard-web`), whose build configuration in
   `google/oss-fuzz` names the source repository.
+- **Inherit the release trigger, then decouple it** (**W15**). Upstream deploys
+  production by pushing a `v1.x` tag into a Cloud Build trigger; that mechanism
+  moves unchanged at cutover, because changing how a release fires in the same
+  step that changes where the source lives gives a failure two candidate causes.
+  Two things do change: releases are tagged `api/vX.Y.Z`, since this repository
+  now holds more than one deployable and upstream's `v1.0.x` must keep resolving;
+  and after the hold, image build and publish move to GitHub Actions producing a
+  digest-addressed artifact, shrinking the provider-specific surface to a single
+  deploy step. That split is the seam the eventual GCP exit needs.
+- **Match the checked-in generated tree rather than regenerating current**
+  (**W16**), so the import stays a pure relocation. The go-swagger version that
+  produced it was never recorded and has to be recovered and pinned.
 - **Cut over in stages** (**W11**): build the image here to a staging tag,
   deploy it to a non-production Cloud Run revision, compare responses against
   production for a fixed request set, then repoint. Nothing is deleted upstream
@@ -180,11 +192,13 @@ batch pipeline (C11).
   loses the API tree, the Go module, the Go CI, the Dockerfile, the fuzzing
   integration, and the API half of its DNS documentation. Its release tags stop
   meaning "deploy the API".
-- **Compatibility:** deleting `go.mod` upstream retires the
-  `github.com/ossf/scorecard-webapp` module. Any external importer of
-  `app/generated/models` — a plausible consumer, since those are the published
-  API's request and response types — breaks. Phase 0 verifies rather than
-  discovers.
+- **Compatibility:** deleting `go.mod` upstream stops
+  `github.com/ossf/scorecard-webapp` resolving at `@latest`. One external
+  consumer exists — `jetstack/tally` imports `app/generated/models` — and it
+  survives, because it pins the released `v1.0.5` and the module proxy holds
+  published versions immutably. The obligation this creates is a prohibition:
+  upstream's release tags must not be deleted (**W12**). No deprecation window
+  is needed.
 - **Governance:** requires Scorecard Steering Committee sign-off, admin sign-off
   on the GCP project hosting the API, and review from at least one non-Steering
   maintainer. The community is notified before cutover and again before upstream

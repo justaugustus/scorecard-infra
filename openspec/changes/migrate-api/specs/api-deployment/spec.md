@@ -19,6 +19,25 @@ at deploy time.
 - **THEN** an image build SHALL be run to catch path references that no compiler
   checks
 
+### Requirement: Releases are identified per component and by immutable artifact
+
+Because this repository hosts more than one independently deployable system, a
+release SHALL identify which component it releases rather than claiming the
+repository as a whole. Deployments SHALL be able to name the exact artifact they
+run, so that a rollback targets a known build rather than a moving reference.
+
+#### Scenario: Release identifies its component
+
+- **WHEN** a release of the API is tagged
+- **THEN** the tag SHALL identify the API specifically, and SHALL NOT be
+  ambiguous with a repository-wide or another component's release
+
+#### Scenario: A deployed artifact can be named exactly
+
+- **WHEN** a deployment is made or rolled back
+- **THEN** the artifact SHALL be identifiable by an immutable reference rather
+  than only by a mutable tag
+
 ### Requirement: Cutover is staged and verified against production before traffic moves
 
 The migrated service SHALL be deployed to a non-production destination and
