@@ -197,36 +197,52 @@ selected the wrong thing.
 
 **Production still runs images built from `ossf/scorecard-webapp` throughout.**
 
-- [ ] 4.1 Add the API image target to `build-images.yml` alongside the pipeline's
-      six. Verify in CI, not locally — the batch pipeline's equivalent defect was
-      a stale path inside a Dockerfile that only an image build could catch
-      (**W4**).
-- [ ] 4.2 Add the `addlicense` header check to `presubmits.yml` with the ignore
-      globs corrected for the new paths (**W8**).
-- [ ] 4.3 Supply a GitHub token to the test job so the imported end-to-end specs
-      run rather than fail or silently skip (**W9**).
-- [ ] 4.4 Add the go-swagger regeneration check as a blocking presubmit, asserting
-      both that generated output matches `openapi.yaml` and that
-      `configure_scorecard.go` is untouched (**W8**).
-- [ ] 4.5 Port `cifuzz.yml` (**W8**). The OSS-Fuzz project itself is repointed at
-      cutover (6.4), not here — porting the workflow without repointing the
-      project leaves fuzzing running against the old source.
-- [ ] 4.6 Add the Dockerfile directory to `.github/dependabot.yml`, and confirm
-      the gomod group picks up the newly direct dependencies.
-- [ ] 4.7 Add the import-edge CI check for `api/` (**W10**), matching the one
-      that guards `cron/`.
-- [ ] 4.8 Measure the presubmit wall-clock and total-compute change, as was done
-      for the pipeline import. Report the numbers rather than an impression.
-- [ ] 4.9 Adopt the release-trigger sequence in **W15**: inherit upstream's
-      tag-triggered build and deploy unchanged at cutover, and tag
-      `api/vX.Y.Z` rather than `vX.Y.Z`. The namespace is the part that must be
-      right before the *first* tag — renaming a release namespace later is worse
-      than choosing it awkwardly now.
-- [ ] 4.10 File the follow-up for **W15** step 3 — move image build and publish
-      into GitHub Actions producing a digest-addressed image, leaving the
-      provider-specific step as "deploy this digest". Not in this change; it is
-      the seam the GCP exit needs, and it should exist as a tracked item rather
-      than as a paragraph in a design document.
+- [ ] 4.1 `api-docker` added to `build-images.yml`'s matrix. **Not verified:**
+      Docker is unavailable in this environment, so the Dockerfile path fixes
+      from 3.2 are unproven. This is precisely the defect class the batch
+      pipeline hit — a stale path inside a Dockerfile compiles fine and fails
+      only when an image is built — so this stays open until CI builds it.
+- [x] 4.2 `license-headers` job added, using `-check` (report, don't rewrite)
+      rather than upstream's rewrite-then-`git diff` pair. **Scoped to `api/`:**
+      run repository-wide it flags four pre-existing files —
+      `.github/dependabot.yml` and three workflows — that have no header and
+      nothing to do with this import. Widening it is a separate change.
+- [x] 4.3 `GITHUB_AUTH_TOKEN: ${{ github.token }}` added to the test job,
+      fixing the rate-limit flake in 3.8a. The comment states plainly that this
+      does **not** un-skip the Sigstore specs (3.8b) — no credential restores a
+      removed Rekor endpoint, and a reader who assumes otherwise will believe
+      the publish path is covered when it is not.
+- [ ] 4.4 Blocked on 0.4a, same as 3.7: there is no pinned generator to check
+      against yet.
+- [ ] 4.5 Deferred with the OSS-Fuzz repointing, per the scope call for this
+      week. Porting the workflow alone would leave fuzzing pointed at the old
+      source anyway.
+- [x] 4.6 `/api` added to `.github/dependabot.yml` as its own docker entry.
+      Kept separate from the pipeline glob and the API server's root entry for
+      the reason those two are already separate: it is a third `golang` tag
+      lineage, and a shared group keyed on dependency name would collapse
+      unrelated bumps into one pull request.
+- [x] 4.7 `import-edges` job added — **there was no existing check to match.**
+      The task assumed one guarded `cron/`; what exists is a checkbox in the
+      pull-request template, which is a promise rather than a guard. The job
+      covers both frozen trees and both directions, since excluding `cron/`
+      from the same three-line script would have been artificial. Verified twice:
+      it passes on the current tree, and it exits 1 on a planted violation. A
+      guard that has never been seen to fail is not yet a guard.
+- [ ] 4.8 Needs CI runs to measure; nothing has been pushed.
+- [x] 4.9 Release trigger is `api/vX.Y.Z`, implemented in
+      `publish-api-image.yml` and documented in its header with the reasoning —
+      two deployables here, and upstream's `v1.x` must keep resolving for the
+      module's remaining consumer, so a bare version tag would be ambiguous in
+      two directions.
+- [x] 4.10 **Pulled forward rather than filed as a follow-up**, because the
+      cutover is now a handoff rather than a GCP-to-GCP repoint: the image has to
+      be pullable by an operator with no access to the GCP project that builds it
+      today. `publish-api-image.yml` builds and pushes to `ghcr.io` on an
+      `api/v*` tag or manual dispatch, with provenance and an SBOM, and writes
+      the digest to the job summary so a handoff can quote it rather than
+      rediscover it. Deploy the digest, not a tag.
+      **Not verified:** no push has happened, so this workflow has never run.
 
 ## 5. Documentation and repository identity
 

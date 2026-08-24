@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Builds the batch pipeline's container images. These builds do not push:
-# publication is Cloud Build's job (cron/cloudbuild/*.yaml). This workflow only
-# proves the images still build from this repository.
+# Builds this repository's container images. These builds do not push: the
+# pipeline's images are published by Cloud Build (cron/cloudbuild/*.yaml) and the
+# results API's by publish-api-image.yml. This workflow only proves the images
+# still build from this repository.
 
 name: build-images
 
@@ -69,6 +70,10 @@ jobs:
           - 'cron-bq-transfer-docker'
           - 'cron-webhook-docker'
           - 'cron-github-server-docker'
+          # The results API. Its Dockerfile builds from the repository root
+          # because go.mod lives there, so a stale path inside it fails here and
+          # nowhere else -- which is the whole reason this job covers it.
+          - 'api-docker'
     name: ${{ matrix.target }}
     runs-on: ubuntu-latest
     permissions:

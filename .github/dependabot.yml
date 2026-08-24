@@ -74,3 +74,18 @@ updates:
       patterns:
         - "*"
       group-by: "dependency-name"
+
+# The imported results API's image (api/Dockerfile). Separate again, for the
+# same reason: it builds both its stages from `golang` pinned by digest, which
+# is a third tag lineage distinct from the pipeline's and the API server's.
+- package-ecosystem: "docker"
+  directory: "/api"
+  schedule:
+    interval: "weekly"
+  cooldown:
+    default-days: 7
+  groups:
+    results-api-image:
+      patterns:
+        - "*"
+      group-by: "dependency-name"

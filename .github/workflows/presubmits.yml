@@ -51,7 +51,18 @@ jobs:
         go-version: '1.25'
         check-latest: true
 
+    # The imported results API's end-to-end specs call api.github.com. Without a
+    # token they share the 60/hour unauthenticated per-IP limit with every other
+    # runner and fail intermittently -- observed locally as green in isolation
+    # and red one run in three under the full suite. Supplying the token is the
+    # fix; gating the specs off would drop coverage of the publish path's
+    # verification logic instead (design W9).
+    #
+    # Note this does NOT un-skip the Sigstore specs: those skip on Rekor's
+    # removed search-by-hash index, which no credential restores. See task 3.8b.
     - name: Test
+      env:
+        GITHUB_AUTH_TOKEN: ${{ github.token }}
       run: go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
 
     - name: Upload code coverage
@@ -82,6 +93,83 @@ jobs:
       uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
       with:
         version: v2.8.0
+
+  # License headers on the imported results API, matching the check
+  # ossf/scorecard-webapp ran before the migration. Scoped to api/ rather than
+  # run repository-wide: four pre-existing files here (.github/dependabot.yml
+  # and three workflows) have no header, and fixing those is unrelated to this
+  # import. Widening the scope is a separate change.
+  license-headers:
+    name: license-headers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+      with:
+        egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: '1.25'
+        check-latest: true
+
+    # -check reports rather than rewrites, so a miss fails the job instead of
+    # producing a diff nobody looks at. Upstream ran addlicense then
+    # `git diff --exit-code`; same outcome, one fewer step.
+    - name: Check license headers
+      run: |
+        go run github.com/google/addlicense@2fe3ee94479d08be985a84861de4e6b06a1c7208 \
+          -check \
+          -ignore "api/app/server/testdata/**" \
+          -ignore "api/app/generated/**" \
+          -l apache -c 'OpenSSF Scorecard Authors' \
+          ./api
+
+  # The imported API and the batch pipeline are behavior-frozen and must stay
+  # self-contained: no import edges to or from this repository's own packages,
+  # in either direction (designs W10 and C11). The pull-request template has
+  # asserted this for cron/ since the pipeline landed, but nothing enforced it.
+  import-edges:
+    name: import-edges
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+      with:
+        egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: No import edges between the frozen trees and internal/
+      run: |
+        rc=0
+        check() {
+          # $1 = human description, $2 = grep pattern, $3.. = paths to search
+          desc="$1"; pattern="$2"; shift 2
+          if hits=$(grep -rnE "$pattern" --include="*.go" "$@" 2>/dev/null); then
+            echo "::error::$desc"
+            echo "$hits"
+            rc=1
+          fi
+        }
+        check "api/ must not import this repository's own packages" \
+          '"github\.com/ossf/scorecard-infra/(internal|cmd|cron)' api
+        check "cron/ must not import this repository's own packages" \
+          '"github\.com/ossf/scorecard-infra/(internal|cmd|api)' cron
+        check "internal/ and cmd/ must not import the frozen trees" \
+          '"github\.com/ossf/scorecard-infra/(api|cron)' internal cmd
+        exit $rc
 
   # Scan inventory checks for the batch pipeline. add-projects must be a no-op on
   # an already-normalized inventory, so a non-empty diff means someone hand-edited
