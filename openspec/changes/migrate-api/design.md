@@ -32,6 +32,11 @@ That is the reason to do this, and simultaneously the largest hazard in doing it
 after the graft, one repository holds two HTTP servers that answer the same
 contract, and the temptation to merge them mid-migration will be strong.
 
+The current priority settles which one wins in the meantime. This is a
+**lift-and-shift** — re-host running infrastructure without changing it — so the
+imported implementation is the preferred one and the one that gets redeployed,
+and `internal/httpapi` stays in place but off the deployment path (**W10**).
+
 The hard parts are therefore not the Go code. They are the shared root files,
 the generated-code toolchain, the external systems that are configured outside
 git — Cloud Build, Cloud Run, Cloud Endpoints, DNS, and OSS-Fuzz — and holding
@@ -50,6 +55,8 @@ the line on behavior freeze while the obvious refactor sits in the same tree.
   revision, not a code restoration.
 - Leave `ossf/scorecard-webapp` a coherent website repository rather than a
   half-emptied one.
+- Redeploy the imported service as-is, and leave `internal/httpapi` in place but
+  off the deployment path, without deleting it (**W10**).
 - Keep each phase independently reviewable and independently revertible.
 
 **Non-Goals** (see proposal): behavior or contract changes, removing the GCP
@@ -58,10 +65,10 @@ coupling, reconciling the imported API with `internal/`, restructuring into
 
 ## Decisions
 
-**Status:** W1–W14 are proposed; none is implemented. W10 and W14 are the two
-that a reviewer should push on hardest — they are where this migration diverges
-from the batch pipeline's, and where an approval commits the repository to
-something structural.
+**Status:** W1–W14 are proposed; none is implemented. W10 is the one a reviewer
+should push on hardest — it is where this migration diverges from the batch
+pipeline's, and where an approval commits the repository to a direction rather
+than to a mechanical move. W14 is the one whose cost compounds silently.
 
 ### W1 — `git filter-repo` against a disposable clone, with mandatory renames
 
@@ -86,12 +93,12 @@ git filter-repo \
   --path COPYRIGHT.txt \
   --path Dockerfile \
   --path docs/dns.md \
-  --path-rename app/:webapp/app/ \
-  --path-rename main.go:webapp/main.go \
-  --path-rename openapi.yaml:webapp/openapi.yaml \
-  --path-rename Makefile:webapp/Makefile \
-  --path-rename COPYRIGHT.txt:webapp/COPYRIGHT.txt \
-  --path-rename Dockerfile:webapp/Dockerfile \
+  --path-rename app/:api/app/ \
+  --path-rename main.go:api/main.go \
+  --path-rename openapi.yaml:api/openapi.yaml \
+  --path-rename Makefile:api/Makefile \
+  --path-rename COPYRIGHT.txt:api/COPYRIGHT.txt \
+  --path-rename Dockerfile:api/Dockerfile \
   --message-callback '
       return re.sub(rb"\(#([0-9]+)\)", rb"(ossf/scorecard-webapp#\1)", message)
   '                                                  # W3
@@ -101,8 +108,8 @@ Two mechanical cautions, both verifiable on the dry run rather than trusted:
 
 - **`--path` and `--path-rename` match by prefix, not by exact filename.**
   `--path Makefile` also selects `Makefile.swagger`, and
-  `--path-rename Makefile:webapp/Makefile` also relocates it to
-  `webapp/Makefile.swagger`. That is the desired outcome here, and it is the
+  `--path-rename Makefile:api/Makefile` also relocates it to
+  `api/Makefile.swagger`. That is the desired outcome here, and it is the
   reason `Makefile.swagger` does not appear in the list — but the same property
   would silently pull in an unrelated `Dockerfile.debug` if one existed. The file
   count gate (117) is what catches a mistake.
@@ -111,7 +118,7 @@ Two mechanical cautions, both verifiable on the dry run rather than trusted:
   repository's DNS rather than the imported tree's internals (**W6**).
 
 Grafting uses `git merge --allow-unrelated-histories`, conflict-free by
-construction: nothing here occupies `webapp/` or `docs/dns.md`.
+construction: nothing here occupies `api/` or `docs/dns.md`.
 
 ### W2 — Strip the release tags before the graft
 
@@ -154,23 +161,38 @@ are therefore enumerated up front:
 `//go:embed static` in the same file is path-relative and survives the move; it
 is listed here only so a reviewer does not have to work that out.
 
-### W5 — Land under `webapp/`; reorganize later, separately
+### W5 — Land under `api/`, upstream layout intact; reorganize later, separately
 
-The imported tree lands under a single top-level `webapp/`, matching how `cron/`
-landed. The name is deliberate: `api/` would be ambiguous in a repository whose
-existing capability is already called `api-server`, and `webapp/` records where
-the code came from.
+The imported tree lands under a single top-level `api/`, alongside `cron/`, with
+its internal layout untouched: `api/app/server/`, `api/app/generated/`,
+`api/main.go`, `api/openapi.yaml`.
 
-Reorganizing into `internal/` + `cmd/` — the layout this repository otherwise
-uses — is a later, separate rename commit that both `git blame` and `--follow`
-track and that can be reviewed and reverted on its own. This is the batch
-pipeline's **C5** applied unchanged: separating "move it" from "reorganize it" is
-worth one interim inconsistency.
+The name is the plain one on purpose. A provenance name like `webapp/` would
+mirror how `cron/` records where it came from, but it names a thing this tree is
+not — the actual web application stays upstream — and it frames the import as a
+guest at exactly the moment the repository stops treating it as one (**W10**).
+The apparent collision with the existing `api-server` capability and
+`cmd/scorecard-api` resolves the same way: the imported code *is* what serves
+`api.scorecard.dev` today, deployed as the Cloud Run service named
+`scorecard-api-prod`. The incubator borrowed the name; the import brings the
+thing the name refers to.
 
-One consequence worth stating because it looks like an oversight: after the
-graft, `go build ./...` produces two server binaries — `scorecard-api` from
-`cmd/` and `scorecard-webapp` from `webapp/` — that answer overlapping routes.
-That is the expected state until **W10**'s convergence change, not a defect.
+The redundant `app/` level is kept rather than flattened. `--path-rename
+app/:api/` would be exactly as mechanical as `app/:api/app/` and produces a
+tidier tree, but it is a structural opinion baked into a history import, and it
+breaks the 1:1 path correspondence with upstream during the window where both
+trees exist and are being diffed against each other (**W11**). Flatten it later,
+in the same separate reorganization commit that **C5** already defers the
+`internal/` + `cmd/` question to.
+
+**Binary names stay as they are through cutover.** `go build ./...` will produce
+two servers answering overlapping routes: `scorecard-api` from `cmd/`, and
+`scorecard-webapp` from `api/`. The names invert reality — the "webapp" one is
+the production API — and fixing that is tempting because the `Dockerfile` is
+being rewritten anyway (**W4**). Resist it until cutover completes: renaming the
+built binary changes the contents of the image whose equivalence to production is
+the cutover gate. Rename in the reorganization commit, when nothing depends on
+sameness.
 
 ### W6 — The shared DNS document is imported whole and trimmed at both ends
 
@@ -189,10 +211,10 @@ document the same DNS zones — closed in Phase 7.
 ### W7 — The linter configuration is reconciled by hand, not imported
 
 `golangci-lint run ./...` reads one configuration, the nearest to the working
-directory. A `webapp/.golangci.yml` would therefore be dead file — present,
+directory. An `api/.golangci.yml` would therefore be a dead file — present,
 plausible-looking, and ignored. The webapp's config is excluded from the
 extraction set and reconciled by hand into this repository's root config, with
-its provenance recorded in `webapp/initial-graft.md`.
+its provenance recorded in `api/initial-graft.md`.
 
 Expect real divergence rather than a clean union. This repository's config is a
 near-verbatim port of `ossf/scorecard`'s; the webapp's is its own lineage, and
@@ -245,55 +267,77 @@ than an absent one. If they prove flaky in practice, the fix is narrowing the
 skip conditions to specific typed errors, as the Rekor guard already does, not
 widening them.
 
-### W10 — Behavior freeze, quarantined GCP coupling, and deferred convergence
+### W10 — Lift-and-shift: the imported server is the one that ships
 
-This is the decision the rest of the change rests on, and it is a harder version
-of the batch pipeline's **C11** because the overlap here is genuine rather than
-merely thematic. After the graft this repository will contain:
+This is the decision the rest of the change rests on, and it is where this
+migration stops resembling the batch pipeline's. After the graft this repository
+will contain two implementations of one contract:
 
-- `webapp/app/server/get_results.go` — reads `gs://ossf-scorecard-results`, falls
-  back to `gs://ossf-scorecard-cron-results`, serves the webapp GET contract;
+- `api/app/server/get_results.go` — reads `gs://ossf-scorecard-results`, falls
+  back to `gs://ossf-scorecard-cron-results`, and is the code currently serving
+  `api.scorecard.dev` in production;
 - `internal/store` + `internal/httpapi` — reads a configurable
-  `gocloud.dev/blob` backend under the same key contract, serves a deliberate
-  mirror of that same GET contract;
-- `cron/` — writes the bucket the first one reads.
+  `gocloud.dev/blob` backend under the same key contract, a deliberate
+  incubator-built mirror of that same GET contract that has never served
+  production traffic;
 
-Merging them is the point of having them in one repository. Merging them *in this
-change* would make the change unreviewable and, worse, unrevertible: the argument
-for a staged cutover is that the imported service behaves identically to the
-deployed one, and that argument evaporates the moment the code stops being the
-same code.
+with `cron/` writing the bucket the first one reads.
 
-Three concrete constraints follow, and they should be read as prohibitions:
+**The imported implementation is preferred, and it is what gets redeployed.**
+The immediate objective is to re-host running infrastructure without changing it
+— a lift-and-shift — not to arrive at the better architecture. Between two
+implementations of one contract, the one with production behavior already proven
+against every live consumer wins by default, and it wins *especially* during a
+migration whose acceptance test is that nothing changed.
 
-- **No import edges** between `webapp/` and `internal/` in either direction, and
-  none between `webapp/` and `cron/`. CI enforces this the same way it does for
-  the pipeline.
+That leaves `internal/httpapi` and its supporting packages in place, unbuilt
+against, and not on the deployment path. Not deleted: the decision is explicitly
+revisitable, the packages are what the provider-agnostic work was learned in, and
+`internal/store`'s configurable-backend seam is the most likely shape of the
+eventual GCP exit. But nobody should read the two servers as peers awaiting a
+merge on the merits. One is running; the other is a study.
+
+Three constraints follow, and they should be read as prohibitions for the
+duration of the freeze:
+
+- **No import edges** between `api/` and `internal/` in either direction, and
+  none between `api/` and `cron/`. CI enforces this the same way it does for the
+  pipeline. This is not a statement that the two servers are equals — it is what
+  keeps the imported tree byte-comparable to what production runs.
 - **The hardcoded `gs://` constants stay.** This repository's cloud-agnostic
   rules are non-negotiable *for this repository's own code*; the imported tree is
   behavior-frozen until cutover completes, exactly as `cron/`'s GCS write path
   is. A future agent reading `AGENTS.md` will find three rule violations in
-  `webapp/` and want to fix them. `AGENTS.md` must say, in the imperative, that
-  they are quarantined and why.
+  `api/` and want to fix them. `AGENTS.md` must say, in the imperative, that they
+  are quarantined and why.
 - **`openapi.yaml` is not edited.** It is simultaneously the published contract
   and the Cloud Endpoints deployment configuration, including an
   `x-google-backend` address. Changing it changes a deployed service.
 
-**The inversion of D11.** `docs/upstream-graft.md` currently names
-`ossf/scorecard-webapp` as the graft target for `internal/store` and the
-`/projects` handlers, and describes this repository as an incubator whose durable
-pieces travel outward. After this import that is wrong in a way an amendment
-cannot fix: the destination is now in-tree. The graft does not disappear — it
-becomes an in-repository convergence, which is strictly easier to land and
-strictly easier to review — but the document must be rewritten to say so, and
-`internal/model`'s "does not graft" rationale (**D13**, "the webapp's generated
-models live upstream") needs revisiting now that those generated models are here.
+**D11 is not inverted, it is retired.** `docs/upstream-graft.md` describes this
+repository as an incubator whose durable pieces graft outward — `internal/store`
+and the `/projects` handlers to `ossf/scorecard-webapp`, the live-scan path to
+`scorecard serve`. Two of those three targets are now here, and the code they
+were meant to improve on arrived with them. The document is rewritten, not
+amended, around what the repository has actually become: the unified home for
+Scorecard's infrastructure, where consolidation happens by moving code in rather
+than by grafting it out.
 
-The endgame is unchanged and worth restating so the deferral does not read as
-abandonment: one server, serving the published contract, reading a configurable
-backend, optionally scanning live, fed by a producer that writes through the same
-store. This change assembles the parts in one place. A later change makes them
-one thing.
+Two consequences to record while rewriting it, because they are rationales that
+quietly stopped holding rather than decisions anyone made:
+
+- `internal/model` (**D13**) was justified partly by the webapp's generated
+  models living upstream. They do not any more.
+- What remains genuinely graftable upstream is narrower than D11 claims —
+  realistically the `/capabilities` endpoint (**D7**) and whatever of the
+  orchestrator survives, and only once there is one server here rather than two.
+
+The endgame is unchanged and worth restating so that preferring the imported code
+does not read as abandoning the rest: one server, serving the published contract,
+reading a configurable backend, optionally scanning live, fed by a producer that
+writes through the same store. This change assembles the parts in one place and
+keeps the lights on. A later change makes them one thing — and that change starts
+from the code that is running, not from the code that was designed.
 
 ### W11 — Cutover before deletion, with a response diff and a hold period
 
@@ -337,7 +381,7 @@ external consumer is `app/generated/models` — the published API's request and
 response types, which are exactly the sort of thing a downstream tool imports
 rather than redeclares. Phase 0 verifies this against `pkg.go.dev` importers and
 code search. A positive result turns removal from a delete into a deprecation
-window, and is a reason the tree lands importable at `webapp/` rather than under
+window, and is a reason the tree lands importable at `api/` rather than under
 `internal/` (**W5**).
 
 ### W13 — DCO versus imported history, again
@@ -366,7 +410,7 @@ bisecting across the whole tree becomes meaningless.
 This is a real cost and it is accepted, because the alternative is worse in
 proportion: squashing either import to keep `git log` tidy destroys exactly the
 operational record the imports exist to preserve. The mitigations are
-conventional — read history per-path (`git log -- webapp/`), and treat
+conventional — read history per-path (`git log -- api/`), and treat
 whole-repository `git log` as a merge of three streams rather than a narrative.
 
 It is worth noticing, though, that this is the second time; a third import should
@@ -378,13 +422,15 @@ default rather than by decision.
 Stated explicitly against the areas where a reader would reasonably expect
 interaction:
 
-- **`internal/httpapi`** — unchanged. It continues to serve its mirror of the
-  contract on its own binary and port. The imported server does not learn about
-  it and it does not learn about the imported server.
+- **`internal/httpapi`** — unchanged in code, changed in status. It keeps
+  building, keeps its tests, and stops being the forward path: the imported
+  server is what deploys (**W10**). Neither learns about the other. Do not
+  develop new API surface here on the assumption it will be the one that ships.
 - **`internal/store`** (**D3/D4**) — unchanged. The imported API keeps its own
   direct `gocloud.dev/blob` calls with hardcoded bucket URLs. Putting the store
   underneath it is the convergence work this move enables (**W10**), not part of
-  the move.
+  the move — and the direction of that work is now "teach the running server the
+  configurable backend", not "adopt the incubator's server".
 - **`internal/model`** (**D13**) — unchanged, but its rationale weakens: it was
   justified partly by the webapp's generated models living upstream, and they no
   longer will. Revisit in the convergence change, not here.
@@ -398,11 +444,15 @@ interaction:
 
 ## Risks / trade-offs
 
-- **Two servers answering one contract in one repository, both behavior-frozen
-  for different reasons.** The failure mode is not a bad merge; it is a
-  well-intentioned tidy-up. Mitigated by an explicit prohibition in `AGENTS.md`,
-  a CI import-edge check, and this document — the same three mechanisms the
-  pipeline's **C11** uses, which have held so far.
+- **Two servers answering one contract in one repository.** The failure mode is
+  not a bad merge; it is a well-intentioned tidy-up. Mitigated by an explicit
+  prohibition in `AGENTS.md`, a CI import-edge check, and this document — the
+  same three mechanisms the pipeline's **C11** uses, which have held so far.
+- **A deprioritized package rots quietly.** `internal/httpapi` keeps compiling
+  and keeps passing tests while nothing depends on it, which is exactly the state
+  in which code stops being true without anything going red. Accepted for now
+  (**W10**); the honest options at the next decision point are to converge it or
+  to delete it, not to leave it indefinitely as a maintained study.
 - **The website is a live client of the moved service.** Any contract drift
   during the move breaks a page nobody thought to test. The response-diff gate
   (**W11**, step 3) is the mitigation; the site's viewer path should be in the

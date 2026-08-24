@@ -18,7 +18,7 @@ selected the wrong thing.
 - [ ] 0.2 Confirm `git-filter-repo` is installed and that `re` is available in
       the `--message-callback` context without an explicit import (**W1**).
 - [ ] 0.3 Dry-run the filter and confirm the prefix-matching behavior of
-      `--path Makefile` / `--path-rename Makefile:webapp/Makefile` selects and
+      `--path Makefile` / `--path-rename Makefile:api/Makefile` selects and
       relocates `Makefile.swagger` as intended, and selects nothing else (**W1**).
 - [ ] 0.4 Decide generator pinning for go-swagger regeneration: pin to the
       version that produced the checked-in tree, or regenerate current. Record
@@ -43,20 +43,20 @@ selected the wrong thing.
       `../scorecard-api-extract`; record the tip SHA and total commit count and
       confirm they match the analysis basis (**W1**).
 - [ ] 1.2 Delete all 20 tags in the clone before filtering (**W2**).
-- [ ] 1.3 Run `git filter-repo` over the API path set with the `webapp/` renames
+- [ ] 1.3 Run `git filter-repo` over the API path set with the `api/` renames
       and the `(#N)` → `(ossf/scorecard-webapp#N)` rewrite (**W1**/**W3**).
       `docs/dns.md` is retained unrenamed (**W6**).
 - [ ] 1.4 Gate: **150 commits**, **0 merge commits** — the webapp squash-merges,
       so any merge commit in the result means the filter kept something
       unexpected.
-- [ ] 1.5 Gate: **117 files**, all under `webapp/` except `docs/dns.md`.
+- [ ] 1.5 Gate: **117 files**, all under `api/` except `docs/dns.md`.
 - [ ] 1.6 Gate: **0 tags**.
-- [ ] 1.7 Gate: `git log --follow -- webapp/app/server/get_results.go` resolves
+- [ ] 1.7 Gate: `git log --follow -- api/app/server/get_results.go` resolves
       through the 2022 go-swagger restructure into its pre-rename
       `app/get_results.go` history, and
-      `webapp/app/server/post_results_test.go` follows back through
+      `api/app/server/post_results_test.go` follows back through
       `app/signing_test.go`.
-- [ ] 1.8 Gate: `git blame` on `webapp/app/server/post_results.go` attributes to
+- [ ] 1.8 Gate: `git blame` on `api/app/server/post_results.go` attributes to
       original authors, not to the filter.
 - [ ] 1.9 Gate: **0 bare `(#N)` references remain**; 140 commits carry rewritten
       `(ossf/scorecard-webapp#N)` references. History spans 2021-12-29 to
@@ -69,14 +69,14 @@ selected the wrong thing.
 
 - [ ] 2.1 Create a branch off `main`; merge the filtered history with
       `--allow-unrelated-histories`. Expect conflict-free — nothing here occupies
-      `webapp/` or `docs/dns.md`.
+      `api/` or `docs/dns.md`.
 - [ ] 2.2 Verify rename tracking and blame survive the merge (re-run 1.7/1.8
       against the merged branch).
 - [ ] 2.3 Verify zero tags arrived with the merge.
 - [ ] 2.4 Remove the extraction remote. The branch stays **local and unpushed**
       until the extraction has been reviewed.
 - [ ] 2.5 Record what could not be imported and why, in
-      `webapp/initial-graft.md`: the linter config (**W7**), the CI fragments
+      `api/initial-graft.md`: the linter config (**W7**), the CI fragments
       (**W8**), and the originating commits for each. Follows the batch
       pipeline's `cron/initial-graft.md` precedent (**C13**) — the note lives
       inside the imported tree, next to the code it explains.
@@ -84,7 +84,7 @@ selected the wrong thing.
 ## 3. Make it build
 
 - [ ] 3.1 Rewrite import paths at the tip: `github.com/ossf/scorecard-webapp/app/`
-      → `github.com/ossf/scorecard-infra/webapp/app/` (**W4**).
+      → `github.com/ossf/scorecard-infra/api/app/` (**W4**).
 - [ ] 3.2 Fix every non-Go reference in the **W4** table — Dockerfile build
       context and make target, Makefile prerequisites and output path, swagger
       generate paths, the `SWAGGER_GEN` find expression, the `//go:generate`
@@ -96,10 +96,10 @@ selected the wrong thing.
 - [ ] 3.4 Reconcile `go.mod` / `go.sum`. Confirm `gocloud.dev` resolves to a
       single version across the pipeline, the API server, and the import.
 - [ ] 3.5 Reconcile `.golangci.yml` by hand (**W7**). Exclusions for the
-      generated tree must be scoped to `webapp/app/generated/`; no linter is
+      generated tree must be scoped to `api/app/generated/`; no linter is
       disabled repository-wide to accommodate the import.
-- [ ] 3.6 Verify no import edges: `webapp/` imports nothing from `internal/`,
-      `cmd/`, or `cron/`, and none of them imports `webapp/` (**W10**).
+- [ ] 3.6 Verify no import edges: `api/` imports nothing from `internal/`,
+      `cmd/`, or `cron/`, and none of them imports `api/` (**W10**).
 - [ ] 3.7 Regenerate from `openapi.yaml` with the generator chosen in 0.4 and
       confirm the tree is reproducible — `make swagger` followed by
       `git diff --exit-code` is clean, and `configure_scorecard.go` is unchanged.
@@ -109,6 +109,10 @@ selected the wrong thing.
 - [ ] 3.9 Verify the imported binary still starts and serves: run it locally
       against a `fileblob`- or `memblob`-backed fixture where possible, and
       record which endpoints cannot be exercised without GCS credentials.
+- [ ] 3.10 Confirm the imported binary is still named `scorecard-webapp` and the
+      incubator's is still `scorecard-api` (**W5**). The names invert reality and
+      renaming is tempting while the Dockerfile is open — but it changes image
+      contents, and image equivalence is the cutover gate. Rename after 6.7.
 
 ## 4. CI and image builds, in parallel with production
 
@@ -130,7 +134,7 @@ selected the wrong thing.
       project leaves fuzzing running against the old source.
 - [ ] 4.6 Add the Dockerfile directory to `.github/dependabot.yml`, and confirm
       the gomod group picks up the newly direct dependencies.
-- [ ] 4.7 Add the import-edge CI check for `webapp/` (**W10**), matching the one
+- [ ] 4.7 Add the import-edge CI check for `api/` (**W10**), matching the one
       that guards `cron/`.
 - [ ] 4.8 Measure the presubmit wall-clock and total-compute change, as was done
       for the pipeline import. Report the numbers rather than an impression.
@@ -139,20 +143,28 @@ selected the wrong thing.
 
 ## 5. Documentation and repository identity
 
-- [ ] 5.1 Rewrite `docs/upstream-graft.md` rather than amending it (**W10**). The
-      graft target for `internal/store` and the `/projects` handlers is now
-      in-tree; the document currently says otherwise, and a reader who trusts it
-      will do the wrong thing.
-- [ ] 5.2 Update `AGENTS.md`: four parts rather than three, a `webapp/` component
-      map, the behavior-freeze rule, and an **imperative** statement that the
+- [ ] 5.1 Rewrite `docs/upstream-graft.md` around consolidation rather than
+      amending its incubator framing (**W10**). Two of **D11**'s three graft
+      targets are now in-tree, so the document's central claim — that the durable
+      pieces here travel outward — is wrong, and a reader who trusts it will do
+      the wrong work. State what is genuinely still graftable, and record the
+      rationales that stopped holding rather than deleting them silently.
+- [ ] 5.2 Update `AGENTS.md`: four parts rather than three, an `api/` component
+      map, the behavior-freeze rule, an **imperative** statement that the
       hardcoded `gs://` constants and `openapi.yaml`'s `x-google-backend` block
-      are quarantined and must not be "fixed" (**W10**).
-- [ ] 5.3 Update `openspec/config.yaml` context to describe the imported API,
-      the two-servers-one-contract state, and the deferred convergence.
+      are quarantined and must not be "fixed", and which of the two servers is on
+      the deployment path (**W10**).
+- [ ] 5.3 Update `openspec/config.yaml` context: the imported API, the
+      two-servers-one-contract state, which one ships, and the deferred
+      convergence.
 - [ ] 5.4 Add a `README.md` section for the imported API: endpoints, the
       contract's role, the image, the deployment surface, and where the website
       that consumes it lives.
-- [ ] 5.5 Note in `internal/model`'s design record that **D13**'s rationale
+- [ ] 5.5 Record the deprioritization where it will be read, not only here: a
+      note in `internal/httpapi` stating that it is off the deployment path, why,
+      and that the decision is revisitable (**W10**). A package nobody deploys and
+      nobody has told is how stale code gets written against.
+- [ ] 5.6 Note in `internal/model`'s design record that **D13**'s rationale
       changed — the webapp's generated models are now in-tree (**W10**).
 
 ## 6. Production cutover

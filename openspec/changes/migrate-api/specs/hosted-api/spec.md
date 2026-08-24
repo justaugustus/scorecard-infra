@@ -82,6 +82,31 @@ a new result is published.
 - **WHEN** a new result is published for a project
 - **THEN** the cached response for that project SHALL be invalidated
 
+### Requirement: The imported implementation is the one that is deployed
+
+Where this repository contains more than one implementation of the published
+results contract, the imported one SHALL be the implementation that is built,
+released, and deployed. The pre-existing implementation SHALL remain in the
+repository, buildable and tested, but off the deployment path.
+
+#### Scenario: Deployment uses the imported implementation
+
+- **WHEN** the results API is built and deployed from this repository
+- **THEN** the imported implementation SHALL be the one deployed
+
+#### Scenario: The superseded implementation is retained, not removed
+
+- **WHEN** the imported implementation becomes the deployment path
+- **THEN** the pre-existing implementation SHALL remain present and SHALL
+  continue to build and pass its tests
+
+#### Scenario: The status of each implementation is discoverable
+
+- **WHEN** a contributor reads this repository's guidance or the superseded
+  packages themselves
+- **THEN** they SHALL find which implementation is deployed, and that the choice
+  is revisitable
+
 ### Requirement: The imported API stays isolated from this repository's other systems
 
 The imported API SHALL remain free of source dependencies on this repository's

@@ -26,12 +26,13 @@ Four things make now the moment:
    source-level edge in either direction: the site is JavaScript, the API is Go,
    and the site's only reference to the API is the deployed URL its viewer
    fetches. That single fact is what makes this a mechanical move.
-2. **The graft target moved.** Design **D11** (`docs/upstream-graft.md`) named
-   `ossf/scorecard-webapp` as the destination for `internal/store` and the
-   `/projects` handlers, on the assumption that the webapp would remain the
-   ecosystem's canonical read path. Importing the API here does not cancel that
-   convergence; it relocates it from a cross-repository graft to an in-repository
-   one, where it is reviewable as a diff.
+2. **Consolidation has replaced grafting as the strategy.** Design **D11**
+   (`docs/upstream-graft.md`) treats this repository as an incubator whose
+   durable pieces travel outward, naming `ossf/scorecard-webapp` as the
+   destination for `internal/store` and the `/projects` handlers. Two of those
+   graft targets are now arriving here instead. Unifying the infrastructure in
+   one repository is simpler than grafting between three, and it is what this
+   change commits to (**W10**).
 3. **The API is a disproportionate share of the webapp's maintenance surface.**
    88 of the 150 API commits are Dependabot; the Go module, the go-swagger
    toolchain, the Docker image, the OSS-Fuzz integration, and the CodeQL Go
@@ -58,7 +59,7 @@ commits, spanning 2021-12-29 to 2026-08-07, across 12 authors.
   `git filter-repo` to extract and `git merge --allow-unrelated-histories` to
   graft. The merge is conflict-free by construction, because every imported path
   is renamed under a prefix this repository does not have.
-- **Land everything under one top-level `webapp/` directory** (**W5**). Unlike
+- **Land everything under one top-level `api/` directory** (**W5**). Unlike
   the batch pipeline, the API is not already namespaced upstream: `main.go`,
   `openapi.yaml`, `Makefile`, `Makefile.swagger`, `COPYRIGHT.txt`, and
   `Dockerfile` live at the webapp's repository root, and three of those collide
@@ -75,26 +76,37 @@ commits, spanning 2021-12-29 to 2026-08-07, across 12 authors.
   references in 140 commit subjects to `(ossf/scorecard-webapp#N)` (**W3**).
 - **Rewrite paths at the tip only** (**W4**): one commit taking
   `github.com/ossf/scorecard-webapp/app/...` to
-  `github.com/ossf/scorecard-infra/webapp/app/...`, plus the non-Go references
+  `github.com/ossf/scorecard-infra/api/app/...`, plus the non-Go references
   that no compiler catches — the Dockerfile's build context and `make` target,
   the Makefile's source prerequisites and output path, the `//go:generate` and
   `swagger generate --target/--spec` paths, and the `addlicense` ignore globs.
   The batch pipeline's migration discovered this class of breakage only when an
   image build failed; here it is enumerated in advance.
 - **Reconcile the linter and CI by hand, not by import** (**W7**/**W8**). A
-  second `.golangci.yml` under `webapp/` would be silently ignored by
+  second `.golangci.yml` under `api/` would be silently ignored by
   `golangci-lint run ./...`, so upstream's config is merged into this
   repository's root config. Upstream's `main.yml` duplicates `presubmits.yml`
   except for two things worth keeping: the `addlicense` header check and a
   GitHub token in the test environment, which the imported end-to-end specs
   require. Provenance for everything hand-ported is recorded in
-  `webapp/initial-graft.md`, following the batch pipeline's precedent (**C13**).
+  `api/initial-graft.md`, following the batch pipeline's precedent (**C13**).
+- **Redeploy the imported server as-is, and take it as the preferred
+  implementation** (**W10**). This is a lift-and-shift of running infrastructure,
+  not a refactor. Where the imported API and `internal/httpapi` implement the
+  same contract, the one already serving production wins; `internal/httpapi` and
+  its supporting packages stay in place, keep building, and come off the
+  deployment path. The decision is revisitable, and reversing it later costs
+  nothing that this change spends.
 - **Quarantine the GCP coupling rather than fixing it** (**W10**). The imported
   tree violates this repository's "no hardcoded bucket URLs" rule in three
   places and carries a Cloud Endpoints backend address inside `openapi.yaml`.
   Behavioral equivalence is the acceptance test for this change, so the coupling
   is frozen in place and explicitly out of scope, exactly as the pipeline's GCS
   write path is.
+- **Retire `docs/upstream-graft.md`'s incubator framing** rather than amending
+  it (**W10**). The document tells a reader that the durable pieces here graft
+  outward; after this import that is wrong about two of its three targets, and a
+  reader who trusts it will do the wrong work.
 - **Repoint the external systems that are not in git**: the Cloud Build trigger
   and Cloud Run service that build and deploy the API, the Cloud Endpoints
   service configuration deployed from `openapi.yaml`, the domain mapping, and
@@ -141,7 +153,7 @@ batch pipeline (C11).
 
 ## Impact
 
-- **New code:** 117 files under `webapp/` — 20 hand-written server files plus 39
+- **New code:** 117 files under `api/` — 20 hand-written server files plus 39
   test fixtures, 32 go-swagger generated files plus 19 embedded Swagger UI
   assets, and 7 root-level files (entrypoint, contract, build wiring, Dockerfile,
   copyright header template, shared DNS doc). No existing package under
@@ -189,8 +201,13 @@ batch pipeline (C11).
   backend selection underneath the API. Same reason (**W10**).
 - **Reconciling the imported API with `internal/httpapi`, `internal/store`, or
   `internal/orchestrator`.** Deferred to its own change (**W10**); this one must
-  stay behavior-preserving to be revertible.
-- **Restructuring `webapp/` into this repository's `internal/` + `cmd/`
+  stay behavior-preserving to be revertible. Preferring the imported
+  implementation settles which side of that reconciliation is the starting
+  point — it does not perform it here.
+- **Deleting `internal/httpapi` or its supporting packages.** Coming off the
+  deployment path is not removal, and the choice is meant to stay cheap to
+  revisit (**W10**).
+- **Restructuring `api/` into this repository's `internal/` + `cmd/`
   layout** (**W5**).
 - **Moving the website.** `scorecards-site/`, `netlify.toml`, and the site's CI
   stay in `ossf/scorecard-webapp`.
