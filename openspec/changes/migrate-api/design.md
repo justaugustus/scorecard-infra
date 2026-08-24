@@ -270,6 +270,16 @@ than an absent one. If they prove flaky in practice, the fix is narrowing the
 skip conditions to specific typed errors, as the Rekor guard already does, not
 widening them.
 
+**Verified (PR #49): 8 specs pass, 0 skip, with the token supplied.** Worth
+recording how nearly this went the other way. In the authoring environment the
+Sigstore specs all skipped, because that network returns an HTML `403` from every
+Rekor endpoint — and read alongside the upstream guard's comment about Rekor v2
+removing the search index, that looked like proof the coverage was gone
+everywhere. It was a local proxy block. The conclusion drawn from it would have
+justified treating the publish path as untested and skipping work accordingly.
+The general lesson for this migration: a skip observed on one network is a
+reachability signal, not a property of the test suite.
+
 ### W10 — Lift-and-shift: the imported server is the one that ships
 
 This is the decision the rest of the change rests on, and it is where this

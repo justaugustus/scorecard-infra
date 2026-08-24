@@ -58,8 +58,9 @@ jobs:
     # fix; gating the specs off would drop coverage of the publish path's
     # verification logic instead (design W9).
     #
-    # Note this does NOT un-skip the Sigstore specs: those skip on Rekor's
-    # removed search-by-hash index, which no credential restores. See task 3.8b.
+    # The Sigstore specs additionally call live Rekor. They pass in CI, but skip
+    # rather than fail if Rekor's search-by-hash index is unreachable, so a run
+    # showing skips is a reachability signal, not a pass.
     - name: Test
       env:
         GITHUB_AUTH_TOKEN: ${{ github.token }}

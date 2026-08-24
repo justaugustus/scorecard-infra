@@ -168,23 +168,28 @@ selected the wrong thing.
       Fixed to `fmt.Fprint`, matching the adjacent line and provably identical
       output for the current string. First deliberate deviation from the
       behavior freeze, and a narrow one.
-- [ ] 3.8a **The GitHub-API e2e specs need a token and flake without one.**
-      `githubVerifier_contains` calls `api.github.com` unauthenticated and hits
-      the 60/hour per-IP limit: green in isolation, red one run in three under
-      the full suite. This is exactly what **W9** predicted, and the fix is CI
-      configuration (4.3), not a code or test change. Not verified locally —
-      this environment has no `github.com` token.
-- [ ] 3.8b **The Sigstore verification e2e specs are skipping entirely, and a
-      token will not change that.** All five skip on the Rekor guard: the
-      search-by-hash index returns `403`, because Rekor v2 removed it. The guard
-      is upstream's own and it fails safe, but the consequence deserves stating
-      plainly — **the publish path's certificate-verification logic has no
-      working end-to-end coverage today, here or upstream.** **W9** assumed a
-      token was what stood between these specs and running; it is not. This
-      makes task 6.6 (confirm a real Action upload end to end) the only genuine
-      verification of the POST path, so it is load-bearing rather than
-      belt-and-braces. Whether to rebuild the coverage against Rekor v2 is a
-      follow-on, not this week's work.
+- [x] 3.8a **Resolved: the GitHub-API e2e specs need a token, and with one they
+      pass.** `githubVerifier_contains` calls `api.github.com`; unauthenticated it
+      hits the 60/hour per-IP limit and was red one local run in three. Fixed by
+      supplying `github.token` in CI (4.3). **Verified in CI (PR #49): all specs
+      pass.** This is what **W9** predicted, and the fix was configuration.
+- [x] 3.8b **Corrected. The Sigstore verification specs do run, and they pass.**
+      An earlier note here claimed all five skipped unconditionally because Rekor
+      v2 removed the search-by-hash index, and concluded the publish path's
+      certificate verification had no working end-to-end coverage anywhere. That
+      was wrong, and it was wrong in the direction that matters — it understated
+      existing coverage and would have justified skipping verification work.
+      **CI reports 8 passed, 0 skipped** (PR #49), at 64.6% statement coverage
+      for `api/app/server`.
+      The local result — 3 passed, 5 skipped — was an artifact of this authoring
+      environment: it receives an HTML `403` from *every* Rekor endpoint,
+      including `/api/v1/log`, so the block is a network proxy rather than a
+      removed API. The upstream skip guard is real and its comment does cite
+      Rekor v2, so the coverage may still be intermittent for other consumers —
+      but it is present and green today.
+      Task 6.6 (confirm a real Action upload end to end) is therefore ordinary
+      cutover verification again, not the sole check standing in for absent
+      coverage.
 - [x] 3.9 Binary builds via `make api-build`, starts, and serves. The badge
       path returns `302` to `img.shields.io` correctly — it is a pure redirect
       with no storage access, contrary to the AWS memo's description of it as
@@ -200,29 +205,21 @@ selected the wrong thing.
 
 **Production still runs images built from `ossf/scorecard-webapp` throughout.**
 
-- [ ] 4.1 `api-docker` added to `build-images.yml`'s matrix. **Attempted and
-      blocked environmentally, so still unverified.** The Docker daemon cannot
-      reach `registry-1.docker.io` — TLS handshake timeout on a direct `docker
-      pull` of the base image, with nothing cached — which is the same TLS
-      interception the pipeline import hit locally. The failure is upstream of
-      the Dockerfile: BuildKit never got as far as reading it.
-      What *is* exercised locally is the step the image runs inside the builder:
-      `make api-build` does exactly `make -C api scorecard-webapp` from the
-      repository root and succeeds, and the `COPY --from=builder` source path
-      follows from where that writes the binary. That is reasoning, not a test.
-      This is precisely the defect class the batch pipeline hit — a stale path
-      in a Dockerfile compiles fine and fails only at image build — so it stays
-      open until CI builds it.
+- [x] 4.1 `api-docker` added to `build-images.yml`'s matrix. **Verified in CI
+      (PR #49): the image builds, in 2m0s.** It could not be built locally — the
+      Docker daemon here cannot reach `registry-1.docker.io` (TLS handshake
+      timeout on a direct pull, nothing cached), the same interception the
+      pipeline import hit. So the Dockerfile path fixes from 3.2 were unproven
+      until this run, which is exactly the defect class that only an image build
+      catches.
 - [x] 4.2 `license-headers` job added, using `-check` (report, don't rewrite)
       rather than upstream's rewrite-then-`git diff` pair. **Scoped to `api/`:**
       run repository-wide it flags four pre-existing files —
       `.github/dependabot.yml` and three workflows — that have no header and
       nothing to do with this import. Widening it is a separate change.
-- [x] 4.3 `GITHUB_AUTH_TOKEN: ${{ github.token }}` added to the test job,
-      fixing the rate-limit flake in 3.8a. The comment states plainly that this
-      does **not** un-skip the Sigstore specs (3.8b) — no credential restores a
-      removed Rekor endpoint, and a reader who assumes otherwise will believe
-      the publish path is covered when it is not.
+- [x] 4.3 `GITHUB_AUTH_TOKEN: ${{ github.token }}` added to the test job, fixing
+      the rate-limit flake in 3.8a. **Verified in CI (PR #49): 8 specs pass, 0
+      skip**, `api/app/server` at 64.6% statement coverage.
 - [ ] 4.4 Blocked on 0.4a, same as 3.7: there is no pinned generator to check
       against yet.
 - [ ] 4.5 Deferred with the OSS-Fuzz repointing, per the scope call for this
@@ -240,7 +237,14 @@ selected the wrong thing.
       from the same three-line script would have been artificial. Verified twice:
       it passes on the current tree, and it exits 1 on a planted violation. A
       guard that has never been seen to fail is not yet a guard.
-- [ ] 4.8 Needs CI runs to measure; nothing has been pushed.
+- [x] 4.8 **Measured from PR #49.** Presubmits wall clock is ~4m15s, set by the
+      `test` job — which is also where the API landed, since its end-to-end specs
+      are network-bound. The two new jobs are not on the critical path
+      (`license-headers` 35s, `import-edges` 17s) and `build`/`lint` finish at
+      3m33s/3m50s. Image builds are a separate ~3m51s path, set by
+      `cron-controller-docker`; `api-docker` is among the faster targets at 2m0s.
+      Net effect of adding the API: no change to the critical path's shape, and
+      one more image build running in parallel with six others.
 - [x] 4.9 Release trigger is `api/vX.Y.Z`, implemented in
       `publish-api-image.yml` and documented in its header with the reasoning —
       two deployables here, and upstream's `v1.x` must keep resolving for the

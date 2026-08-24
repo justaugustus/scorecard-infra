@@ -114,12 +114,13 @@ Three things to know before editing:
   living in the generated tree. It holds the handler wiring, CORS setup, and JSON
   producer config, and is excluded from `SWAGGER_GEN`. A regeneration that
   overwrites it silently reverts routing.
-- **The end-to-end specs reach the network**, and their coverage is thinner than
-  it looks. The GitHub-API specs need a token (CI supplies one). The five Sigstore
-  verification specs **skip unconditionally** — they depend on Rekor's
-  search-by-hash index, which Rekor v2 removed. So the publish path's certificate
-  verification has no working end-to-end coverage today, here or upstream. Do not
-  read a green test run as covering it.
+- **The end-to-end specs reach the network.** They call `api.github.com` (CI
+  supplies a token; without one they hit the 60/hour unauthenticated limit and
+  flake) and live Rekor. They pass in CI. They will *skip* rather than fail if
+  Rekor's search-by-hash index is unreachable — a guard upstream added because
+  Rekor v2 removed that index — so on a network that blocks Rekor you will see
+  skips locally and full coverage in CI. Check the skip count before concluding
+  anything from a local run.
 - **The binary is still called `scorecard-webapp`** while this repository's own is
   `scorecard-api`, which inverts what each one actually is. Deliberate: renaming
   changes image contents, and image equivalence is the cutover gate. It gets fixed
