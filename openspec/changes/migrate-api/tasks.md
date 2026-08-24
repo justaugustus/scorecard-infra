@@ -58,42 +58,53 @@ selected the wrong thing.
 
 **Nothing is pushed to `ossf/scorecard-infra` in this group.**
 
-- [ ] 1.1 Clone `ossf/scorecard-webapp` fresh and single-branch to
-      `../scorecard-api-extract`; record the tip SHA and total commit count and
-      confirm they match the analysis basis (**W1**).
-- [ ] 1.2 Delete all 20 tags in the clone before filtering (**W2**).
-- [ ] 1.3 Run `git filter-repo` over the API path set with the `api/` renames
+- [x] 1.1 Cloned `ossf/scorecard-webapp` fresh and single-branch to
+      `../scorecard-api-extract`; tip `39c800b`, 653 commits, 20 tags — matching
+      the analysis basis exactly (**W1**).
+- [x] 1.2 Deleted all 20 tags in the clone before filtering (**W2**).
+- [x] 1.3 Ran `git filter-repo` over the API path set with the `api/` renames
       and the `(#N)` → `(ossf/scorecard-webapp#N)` rewrite (**W1**/**W3**).
-      `docs/dns.md` is retained unrenamed (**W6**).
-- [ ] 1.4 Gate: **150 commits**, **0 merge commits** — the webapp squash-merges,
-      so any merge commit in the result means the filter kept something
-      unexpected.
-- [ ] 1.5 Gate: **117 files**, all under `api/` except `docs/dns.md`.
-- [ ] 1.6 Gate: **0 tags**.
-- [ ] 1.7 Gate: `git log --follow -- api/app/server/get_results.go` resolves
-      through the 2022 go-swagger restructure into its pre-rename
-      `app/get_results.go` history, and
-      `api/app/server/post_results_test.go` follows back through
-      `app/signing_test.go`.
-- [ ] 1.8 Gate: `git blame` on `api/app/server/post_results.go` attributes to
-      original authors, not to the filter.
-- [ ] 1.9 Gate: **0 bare `(#N)` references remain**; 140 commits carry rewritten
-      `(ossf/scorecard-webapp#N)` references. History spans 2021-12-29 to
-      2026-08-07 across 12 authors.
-- [ ] 1.10 Confirm the one commit that touches both halves
-      (`b7e0f8d`, "Change project name to OpenSSF Scorecard on website and in
-      copyright") survives with only its API-side changes and is not empty.
+      `docs/dns.md` retained unrenamed (**W6**). The `--dry-run` confirmed `re`
+      is available in the `--message-callback` context without an explicit
+      import (0.2). **Took two attempts:** the first omitted `Makefile.swagger`
+      on the mistaken theory that `--path Makefile` selects it by string prefix.
+      It does not — see the corrected caution in **W1**.
+- [x] 1.4 Gate passed — **150 commits, 0 merge commits**, exactly as
+      predicted.
+- [x] 1.5 Gate passed on the second run — **117 files**, 116 under `api/` plus
+      `docs/dns.md`, diffed file-by-file against the expected list rather than
+      counted. The first run's 116 is what surfaced the `Makefile.swagger`
+      defect; a count-only check would have found it, but the diff is what named
+      it.
+- [x] 1.6 Gate passed — **0 tags**.
+- [x] 1.7 Gate passed — `api/app/server/get_results.go` follows 9 commits back
+      through the 2022 go-swagger restructure into `app/get_results.go`.
+      `api/app/server/post_results_test.go` follows 14 commits back through
+      **two** renames: `app/signing_test.go` → `app/post_results_test.go` →
+      `app/server/post_results_test.go`.
+- [x] 1.8 Gate passed — blame on `api/app/server/post_results.go` attributes to
+      Azeem Shaikh (404 lines), Spencer Schrock (165), Piotr P. Karwasz, Naveen,
+      asraa and others; nothing to the filter.
+- [x] 1.9 Gate passed — **0 bare `(#N)` references remain**; 140 commits carry
+      rewritten `(ossf/scorecard-webapp#N)` references. History spans 2021-12-29
+      to 2026-08-07 across 12 authors.
+- [x] 1.10 Confirmed — the both-halves commit (`b7e0f8d` upstream, `2474424`
+      after filtering) survives with 47 API-side files changed and no site
+      content. Not empty.
 
 ## 2. Graft into scorecard-infra
 
-- [ ] 2.1 Create a branch off `main`; merge the filtered history with
-      `--allow-unrelated-histories`. Expect conflict-free — nothing here occupies
-      `api/` or `docs/dns.md`.
-- [ ] 2.2 Verify rename tracking and blame survive the merge (re-run 1.7/1.8
-      against the merged branch).
-- [ ] 2.3 Verify zero tags arrived with the merge.
-- [ ] 2.4 Remove the extraction remote. The branch stays **local and unpushed**
-      until the extraction has been reviewed.
+- [x] 2.1 Branch `import-api` created off `main` at `5b90e6f`; filtered history
+      merged with `--allow-unrelated-histories`, conflict-free as predicted (117
+      files staged, no conflicts). Repo now at 690 commits and **three roots**
+      (**W14**).
+- [x] 2.2 Verified — rename tracking and blame survive the merge. Re-running
+      1.7 against the merged branch still resolves `post_results_test.go` 14
+      commits back through both renames, and `get_results.go` 9 commits back.
+- [x] 2.3 Verified — zero tags arrived with the merge.
+- [x] 2.4 Extraction remote removed. Branch is **local and unpushed** — the
+      filtered result at `../scorecard-api-extract` and this branch are both
+      reviewable before anything reaches the remote.
 - [ ] 2.5 Record what could not be imported and why, in
       `api/initial-graft.md`: the linter config (**W7**), the CI fragments
       (**W8**), and the originating commits for each. Follows the batch

@@ -90,6 +90,7 @@ git filter-repo \
   --path main.go \
   --path openapi.yaml \
   --path Makefile \
+  --path Makefile.swagger \
   --path COPYRIGHT.txt \
   --path Dockerfile \
   --path docs/dns.md \
@@ -97,6 +98,7 @@ git filter-repo \
   --path-rename main.go:api/main.go \
   --path-rename openapi.yaml:api/openapi.yaml \
   --path-rename Makefile:api/Makefile \
+  --path-rename Makefile.swagger:api/Makefile.swagger \
   --path-rename COPYRIGHT.txt:api/COPYRIGHT.txt \
   --path-rename Dockerfile:api/Dockerfile \
   --message-callback '
@@ -106,13 +108,14 @@ git filter-repo \
 
 Two mechanical cautions, both verifiable on the dry run rather than trusted:
 
-- **`--path` and `--path-rename` match by prefix, not by exact filename.**
-  `--path Makefile` also selects `Makefile.swagger`, and
-  `--path-rename Makefile:api/Makefile` also relocates it to
-  `api/Makefile.swagger`. That is the desired outcome here, and it is the
-  reason `Makefile.swagger` does not appear in the list — but the same property
-  would silently pull in an unrelated `Dockerfile.debug` if one existed. The file
-  count gate (117) is what catches a mistake.
+- **`--path` matches exact paths and directory prefixes — not string prefixes.**
+  An earlier draft of this section asserted the opposite, and left
+  `Makefile.swagger` out of the list on the theory that `--path Makefile` would
+  select it. It does not: the first extraction produced 116 files instead of 117,
+  and `Makefile.swagger` was the one missing. Every non-directory path needs its
+  own `--path` and its own `--path-rename`. **The file-count gate is what caught
+  this**, which is the argument for stating expected counts as gates rather than
+  as estimates.
 - **`docs/dns.md` is deliberately not renamed.** It lands at `docs/dns.md` in
   this repository, where there is no collision, because it documents this
   repository's DNS rather than the imported tree's internals (**W6**).
