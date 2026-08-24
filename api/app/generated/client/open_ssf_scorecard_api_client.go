@@ -25,8 +25,8 @@ import (
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
 
-	"github.com/ossf/scorecard-webapp/app/generated/client/badge"
-	"github.com/ossf/scorecard-webapp/app/generated/client/results"
+	"github.com/ossf/scorecard-infra/api/app/generated/client/badge"
+	"github.com/ossf/scorecard-infra/api/app/generated/client/results"
 )
 
 // Default open SSF scorecard API HTTP client.

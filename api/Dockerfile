@@ -22,12 +22,14 @@ RUN go mod download
 
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 make scorecard-webapp
+# The build context is the repository root, because go.mod lives there. The
+# API's own Makefile is one level down and its recipes are relative to it.
+RUN CGO_ENABLED=0 make -C api scorecard-webapp
 
 # Multi-Stage production build
 FROM golang:1.25.7@sha256:011d6e21edbc198b7aeb06d705f17bc1cc219e102c932156ad61db45005c5d31 as deploy
 # Retrieve the binary from the previous stage
-COPY --from=builder /opt/app-root/src/scorecard-webapp /usr/local/bin/scorecard-webapp
+COPY --from=builder /opt/app-root/src/api/scorecard-webapp /usr/local/bin/scorecard-webapp
 
 # Set the binary as the entrypoint of the container
 ENTRYPOINT scorecard-webapp --host="0.0.0.0" --port=8080

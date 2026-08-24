@@ -27,7 +27,7 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
 
-	"github.com/ossf/scorecard-webapp/app/generated/models"
+	"github.com/ossf/scorecard-infra/api/app/generated/models"
 )
 
 // GetResultReader is a Reader for the GetResult structure.

@@ -34,8 +34,8 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
 
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations/badge"
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations/results"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/badge"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/results"
 )
 
 // NewScorecardAPI creates a new Scorecard instance

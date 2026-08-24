@@ -22,8 +22,8 @@ import (
 	"github.com/go-openapi/loads"
 	flag "github.com/spf13/pflag"
 
-	"github.com/ossf/scorecard-webapp/app/generated/restapi"
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations"
 )
 
 func main() {
@@ -42,7 +42,7 @@ func main() {
 		fmt.Fprint(os.Stderr, title+"\n\n")
 		desc := "API to interact with a project's published Scorecard result"
 		if desc != "" {
-			fmt.Fprintf(os.Stderr, desc+"\n\n")
+			fmt.Fprint(os.Stderr, desc+"\n\n")
 		}
 		fmt.Fprintln(os.Stderr, flag.CommandLine.FlagUsages())
 	}

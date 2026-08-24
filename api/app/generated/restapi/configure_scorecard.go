@@ -29,10 +29,10 @@ import (
 	"github.com/rs/cors"
 	flag "github.com/spf13/pflag"
 
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations"
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations/badge"
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations/results"
-	"github.com/ossf/scorecard-webapp/app/server"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/badge"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/results"
+	"github.com/ossf/scorecard-infra/api/app/server"
 )
 
 //go:generate swagger generate server --target ../../generated --name Scorecard --spec ../../../openapi.yaml --principal interface{}

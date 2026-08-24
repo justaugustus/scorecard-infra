@@ -32,7 +32,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ossf/scorecard-webapp/app/server/internal/hashedrekord"
+	"github.com/ossf/scorecard-infra/api/app/server/internal/hashedrekord"
 )
 
 func Test_extractCertInfo(t *testing.T) {

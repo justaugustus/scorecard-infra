@@ -42,10 +42,10 @@ import (
 	"github.com/transparency-dev/merkle/rfc6962"
 	"gocloud.dev/blob"
 
-	"github.com/ossf/scorecard-webapp/app/generated/models"
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations/results"
-	"github.com/ossf/scorecard-webapp/app/server/internal/cdn"
-	"github.com/ossf/scorecard-webapp/app/server/internal/hashedrekord"
+	"github.com/ossf/scorecard-infra/api/app/generated/models"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/results"
+	"github.com/ossf/scorecard-infra/api/app/server/internal/cdn"
+	"github.com/ossf/scorecard-infra/api/app/server/internal/hashedrekord"
 )
 
 const (

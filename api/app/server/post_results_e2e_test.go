@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/ossf/scorecard-webapp/app/generated/models"
+	"github.com/ossf/scorecard-infra/api/app/generated/models"
 )
 
 // skipIfRekorSearchUnavailable skips the current spec when a failure is caused by the

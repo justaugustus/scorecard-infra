@@ -66,6 +66,24 @@ test: ## Run all tests with the race detector
 lint: ## Run golangci-lint
 	golangci-lint run ./...
 
+##@ Results API
+###############################################################################
+# The imported API keeps its own Makefile with upstream's recipes, whose paths
+# are relative to api/ (design W5: upstream layout intact). These delegate to it
+# so the repository root stays the single entry point.
+.PHONY: api-build api-swagger api-docker
+api-build: ## Build the results API binary (api/scorecard-webapp)
+	$(MAKE) -C api scorecard-webapp
+
+api-swagger: ## Regenerate the API server and client from api/openapi.yaml
+	$(MAKE) -C api swagger
+
+# Context is the repository root because go.mod lives here, matching the
+# pipeline image targets below.
+api-docker: ## Build the results API image
+	DOCKER_BUILDKIT=1 docker build . --file api/Dockerfile \
+		--tag $(IMAGE_NAME)-api
+
 ##@ Protobuf
 ###############################################################################
 # Deliberately NOT expressed as file rules (.pb.go depending on .proto), which is

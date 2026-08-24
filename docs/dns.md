@@ -11,15 +11,11 @@ This will look something like:
 * ns-cloud-b3.googledomains.com.
 * ns-cloud-b4.googledomains.com.
 
-## Docs
-
-The doc portion of the website is managed through Netlify. Follow their 
-[instructions](https://docs.netlify.com/domains-https/custom-domains/configure-external-dns/)
-for setting up external DNS.
-
-For HTTPS, we use Netlify's [managed certificates](https://docs.netlify.com/domains-https/https-ssl/#netlify-managed-certificates).
-They auto-generate and renew Let's Encrypt certs for the site.
-We don't currently set CAA records, as we also have certificates for the API hosted on Google Cloud.
+This file was imported with the results API from `ossf/scorecard-webapp`, where
+it documented DNS for both the website and the API. A path filter cannot split a
+file, so it came across whole and the website half was removed here; the website
+half stays in `ossf/scorecard-webapp`, which still owns the Netlify deployment
+and its certificates.
 
 ## API
 

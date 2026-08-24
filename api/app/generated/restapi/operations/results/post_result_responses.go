@@ -25,7 +25,7 @@ import (
 
 	"github.com/go-openapi/runtime"
 
-	"github.com/ossf/scorecard-webapp/app/generated/models"
+	"github.com/ossf/scorecard-infra/api/app/generated/models"
 )
 
 // PostResultCreatedCode is the HTTP code returned for type PostResultCreated

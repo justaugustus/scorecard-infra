@@ -23,8 +23,8 @@ import (
 	"github.com/go-openapi/runtime/middleware"
 	_ "gocloud.dev/blob/gcsblob" // Needed to link in GCP drivers.
 
-	"github.com/ossf/scorecard-webapp/app/generated/models"
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations/badge"
+	"github.com/ossf/scorecard-infra/api/app/generated/models"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/badge"
 )
 
 const (

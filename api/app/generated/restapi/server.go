@@ -39,7 +39,7 @@ import (
 	flag "github.com/spf13/pflag"
 	"golang.org/x/net/netutil"
 
-	"github.com/ossf/scorecard-webapp/app/generated/restapi/operations"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations"
 )
 
 const (

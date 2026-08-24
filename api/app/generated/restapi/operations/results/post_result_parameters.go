@@ -30,7 +30,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/validate"
 
-	"github.com/ossf/scorecard-webapp/app/generated/models"
+	"github.com/ossf/scorecard-infra/api/app/generated/models"
 )
 
 // NewPostResultParams creates a new PostResultParams object

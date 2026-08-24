@@ -2,6 +2,10 @@
 .env
 /data/
 
+# Results API build artifact. Upstream ignored this as `scorecard-webapp` at its
+# repository root; the binary name is unchanged through cutover (design W5).
+/api/scorecard-webapp
+
 # Batch pipeline build artifacts (see Makefile "Pipeline binaries")
 /cron/internal/bq/data-transfer
 /cron/internal/cii/cii-worker

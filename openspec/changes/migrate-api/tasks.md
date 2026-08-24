@@ -113,33 +113,82 @@ selected the wrong thing.
 
 ## 3. Make it build
 
-- [ ] 3.1 Rewrite import paths at the tip: `github.com/ossf/scorecard-webapp/app/`
-      → `github.com/ossf/scorecard-infra/api/app/` (**W4**).
-- [ ] 3.2 Fix every non-Go reference in the **W4** table — Dockerfile build
-      context and make target, Makefile prerequisites and output path, swagger
-      generate paths, the `SWAGGER_GEN` find expression, the `//go:generate`
-      directive, and the `addlicense` ignore globs. Grep for
-      `scorecard-webapp` across the imported tree afterwards; the only surviving
-      hits should be in files that *describe* the migration.
-- [ ] 3.3 Trim `docs/dns.md` to the API half and link the site half's new
-      location upstream (**W6**).
-- [ ] 3.4 Reconcile `go.mod` / `go.sum`. Confirm `gocloud.dev` resolves to a
-      single version across the pipeline, the API server, and the import.
-- [ ] 3.5 Reconcile `.golangci.yml` by hand (**W7**). Exclusions for the
-      generated tree must be scoped to `api/app/generated/`; no linter is
-      disabled repository-wide to accommodate the import.
-- [ ] 3.6 Verify no import edges: `api/` imports nothing from `internal/`,
-      `cmd/`, or `cron/`, and none of them imports `api/` (**W10**).
-- [ ] 3.7 Regenerate from `openapi.yaml` with the generator chosen in 0.4 and
-      confirm the tree is reproducible — `make swagger` followed by
-      `git diff --exit-code` is clean, and `configure_scorecard.go` is unchanged.
-- [ ] 3.8 `go build ./...`, `go test ./... -race`, and `golangci-lint run ./...`
-      pass with all three trees included. Record which imported tests reach the
-      network and what they need (**W9**).
-- [ ] 3.9 Verify the imported binary still starts and serves: run it locally
-      against a `fileblob`- or `memblob`-backed fixture where possible, and
-      record which endpoints cannot be exercised without GCS credentials.
-- [ ] 3.10 Confirm the imported binary is still named `scorecard-webapp` and the
+- [x] 3.1 Import paths rewritten in 18 Go files. Every occurrence was a module
+      prefix; nothing needed hand-inspection (**W4**).
+- [x] 3.2 Non-Go references fixed — **and the W4 table over-predicted.** Because
+      the whole tree moved together and its recipes are relative to it, the
+      Makefile prerequisites, the swagger generate paths, the `SWAGGER_GEN` find
+      expression and the `//go:generate` directive are all still correct
+      unchanged. Only two things genuinely broke, both because the module root is
+      now two levels up: the Dockerfile (`make -C api`, and the binary copied
+      from `src/api/`) and the Makefile's docker target (build context `..`).
+      Upstream's `linter` target was dropped — it invoked a `.golangci.yml` that
+      **W7** deliberately did not import, so it referenced a file that does not
+      exist. Root Makefile gains `api-build` / `api-swagger` / `api-docker`
+      delegating targets. Surviving `scorecard-webapp` strings are the binary
+      name (**W5**) and upstream test-fixture repository names, both correct.
+- [x] 3.3 `docs/dns.md` trimmed to the API half, with a note recording that it
+      arrived whole and that the website half stays upstream (**W6**).
+- [x] 3.4 `go.mod` seeded with the webapp's 21 direct requirements **at their
+      pinned versions** before tidying, so the imported code builds against what
+      production runs rather than whatever resolved latest. **20 of 21 held
+      exactly.** The one that moved — `AdaLogics/go-fuzz-headers` — moved because
+      this module already required a newer revision; MVS max, unavoidable.
+      `gocloud.dev` was already at v0.46.0 here, matching the webapp exactly.
+      MVS also nudged some pre-existing indirect deps (`actionlint` v1.7.9 →
+      v1.7.12, `x/net` v0.56.0 → v0.58.0, `x/mod` v0.37.0 → v0.39.0 and similar).
+      `actionlint` is the one worth noting: the Scorecard engine links it, and
+      `cron/` is behavior-frozen — the bump is a consequence of two projects
+      sharing one module, not a choice.
+- [x] 3.5 `.golangci.yml` reconciled (**W7**). 41 issues, **all** explained by
+      config lineage rather than by defects: the webapp ran `default: none` with
+      an explicit enable list, this config descends from `ossf/scorecard`'s and
+      enables strictly more. All of it was in hand-written source, so the
+      generated-path exclusion the task anticipated would not have reached any of
+      it. Resolved by applying the imported tree's own historical linter set to
+      `api/` only, with the block marked for removal when the freeze lifts (5.7).
+      No linter is disabled repository-wide.
+      **`govet` was deliberately left enabled**, and it earned it — see 3.8.
+- [x] 3.6 Verified clean both directions — `api/` imports nothing from
+      `internal/`, `cmd/`, or `cron/`, and none of them imports `api/` (**W10**).
+- [ ] 3.7 Blocked on 0.4a, which trails past this week: the generator version
+      that produced the checked-in tree is unrecorded, so there is nothing to
+      regenerate *with* yet. `make api-swagger` exists and is wired.
+- [x] 3.8 `go build ./...` and `golangci-lint run ./...` are clean with all
+      three trees included. `go test ./... -race` is clean **except** for the
+      imported end-to-end specs, which reach the network — see 3.8a and 3.8b.
+      Leaving `govet` enabled for `api/` caught a real defect that would
+      otherwise have shipped: a non-constant format string in `api/main.go`.
+      It is not a lint opinion — `go test` runs the vet printf check, so the
+      package **failed to build under test**. Upstream never saw it because its
+      CI only ever ran `cd app/server && go test`, never the root package.
+      Fixed to `fmt.Fprint`, matching the adjacent line and provably identical
+      output for the current string. First deliberate deviation from the
+      behavior freeze, and a narrow one.
+- [ ] 3.8a **The GitHub-API e2e specs need a token and flake without one.**
+      `githubVerifier_contains` calls `api.github.com` unauthenticated and hits
+      the 60/hour per-IP limit: green in isolation, red one run in three under
+      the full suite. This is exactly what **W9** predicted, and the fix is CI
+      configuration (4.3), not a code or test change. Not verified locally —
+      this environment has no `github.com` token.
+- [ ] 3.8b **The Sigstore verification e2e specs are skipping entirely, and a
+      token will not change that.** All five skip on the Rekor guard: the
+      search-by-hash index returns `403`, because Rekor v2 removed it. The guard
+      is upstream's own and it fails safe, but the consequence deserves stating
+      plainly — **the publish path's certificate-verification logic has no
+      working end-to-end coverage today, here or upstream.** **W9** assumed a
+      token was what stood between these specs and running; it is not. This
+      makes task 6.6 (confirm a real Action upload end to end) the only genuine
+      verification of the POST path, so it is load-bearing rather than
+      belt-and-braces. Whether to rebuild the coverage against Rekor v2 is a
+      follow-on, not this week's work.
+- [x] 3.9 Binary builds via `make api-build`, starts, and serves. The badge
+      path returns `302` to `img.shields.io` correctly — it is a pure redirect
+      with no storage access, contrary to the AWS memo's description of it as
+      generating badges. `/projects/{host}/{org}/{repo}` returns `404` without
+      GCS credentials, which is the read path failing closed rather than
+      erroring; it cannot be exercised further locally.
+- [x] 3.10 Confirmed — the imported binary is still named `scorecard-webapp` and the
       incubator's is still `scorecard-api` (**W5**). The names invert reality and
       renaming is tempting while the Dockerfile is open — but it changes image
       contents, and image equivalence is the cutover gate. Rename after 6.7.
@@ -204,6 +253,10 @@ selected the wrong thing.
       nobody has told is how stale code gets written against.
 - [ ] 5.6 Note in `internal/model`'s design record that **D13**'s rationale
       changed — the webapp's generated models are now in-tree (**W10**).
+- [ ] 5.7 **Remove the `api/` linter-exclusion block from `.golangci.yml` when
+      the behavior freeze lifts**, and fix what it surfaces. The block is scoped
+      to `api/` and annotated with a pointer to this task; it exists because the
+      imported tree is frozen, not because the findings are wrong (**W7**, 3.5).
 
 ## 6. Production cutover
 
