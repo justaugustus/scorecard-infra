@@ -55,7 +55,6 @@ const (
 	fulcioRepoPathKey = "1.3.6.1.4.1.57264.1.5"
 	fulcioRepoSHAKey  = "1.3.6.1.4.1.57264.1.3"
 	fulcioIssuerKey   = "1.3.6.1.4.1.57264.1.1"
-	resultsBucket     = "gs://ossf-scorecard-results"
 	resultsFile       = "results.json"
 	noTlogIndex       = 0
 	githubOIDCIssuer  = "https://token.actions.githubusercontent.com"
@@ -164,8 +163,8 @@ func processRequest(host, org, repo string, scorecardResult *models.VerifiedScor
 		return fmt.Errorf("workflow verification failed: %w", err)
 	}
 
-	// Save scorecard results (results.json, score.txt) to GCS
-	bucketURL := resultsBucket
+	// Save scorecard results (results.json, score.txt) to the results bucket.
+	bucketURL := resultsBucketURL()
 	objectPath := fmt.Sprintf("%s/%s/%s/%s", host, org, repo, resultsFile)
 	if err := writeToBlobStore(ctx, bucketURL, objectPath, []byte(scorecardResult.Result)); err != nil {
 		return fmt.Errorf("%w: %v", errWritingBucket, err)

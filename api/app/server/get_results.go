@@ -24,16 +24,16 @@ import (
 
 	"github.com/go-openapi/runtime/middleware"
 	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/gcsblob" // Needed to link in GCP drivers.
 
 	"github.com/ossf/scorecard-infra/api/app/generated/models"
 	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/results"
 )
 
-const (
-	scorecardResultBucketURL     = "gs://ossf-scorecard-results"
-	scorecardCronResultBucketURL = "gs://ossf-scorecard-cron-results"
+// The bucket URLs these handlers read now come from resultsBucketURL() and
+// cronResultsBucketURL() in config.go, which also carries the blob driver
+// blank-imports this file used to hold.
 
+const (
 	// 1 year, invalidated if updated by the weekly scan or scorecard action.
 	fastlyTTL       = "max-age=31557600"
 	browserCacheTTL = "max-age=600" // 10 minutes
@@ -75,11 +75,11 @@ func getResults(host, orgName, repoName string, commit *string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Querying GCS bucket for: %s", cleanResultsFile)
+	log.Printf("Querying results bucket for: %s", cleanResultsFile)
 
-	// Query GCS bucket.
+	// Query the primary results bucket.
 	ctx := context.Background()
-	if bucket, err := blob.OpenBucket(ctx, scorecardResultBucketURL); err == nil {
+	if bucket, err := blob.OpenBucket(ctx, resultsBucketURL()); err == nil {
 		if results, err := bucket.ReadAll(ctx, cleanResultsFile); err == nil {
 			return results, nil
 		}
@@ -91,7 +91,7 @@ func getResults(host, orgName, repoName string, commit *string) ([]byte, error) 
 	}
 
 	// Try the backup cron bucket.
-	if bucket, err := blob.OpenBucket(ctx, scorecardCronResultBucketURL); err == nil {
+	if bucket, err := blob.OpenBucket(ctx, cronResultsBucketURL()); err == nil {
 		if results, err := bucket.ReadAll(ctx, cleanResultsFile2); err == nil {
 			return results, nil
 		}

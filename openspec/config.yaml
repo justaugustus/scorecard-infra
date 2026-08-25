@@ -33,10 +33,12 @@ context: |
   have since been imported here instead. Consolidation replaced grafting.
   See docs/upstream-graft.md, which records what still genuinely grafts out.
 
-  Quarantined in the frozen trees, and deliberately not "fixed": api/ hardcodes
-  three gs:// bucket URLs, api/openapi.yaml carries an x-google-backend block
-  (it is both the published contract and gateway deployment config), and cron/
-  keeps its own GCS write path.
+  Quarantined in the frozen trees, and deliberately not "fixed":
+  api/openapi.yaml carries an x-google-backend block (it is both the published
+  contract and gateway deployment config), and cron/ keeps its own GCS write
+  path. api/'s hardcoded gs:// bucket URLs were also quarantined and are no
+  longer: see configure-result-buckets, which made them environment variables
+  defaulting to the compiled-in values.
 
   Language & stack: Go. HTTP server (net/http; chi optional). Imports the Scorecard
   library directly: github.com/ossf/scorecard/v5/pkg (in-process entrypoint

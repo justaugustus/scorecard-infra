@@ -37,8 +37,6 @@ Both frozen trees violate rules stated further down this file. That is
 deliberate, and reverting the violation breaks the migration's acceptance test,
 which is that the deployed behavior did not change.
 
-- **`api/app/server` hardcodes three `gs://` bucket URLs.** They stay until the
-  freeze lifts. Making them configurable is a separate, already-planned change.
 - **`api/openapi.yaml` carries an `x-google-backend` block.** It is both the
   published contract and the API gateway's deployment configuration. Editing it
   changes a deployed service.
@@ -46,6 +44,13 @@ which is that the deployed behavior did not change.
 - **`.golangci.yml` applies a narrower linter set to `api/`.** The imported tree
   ran a different config upstream; the block is scoped to `api/` and marked for
   removal when the freeze lifts, not a general relaxation.
+
+`api/app/server`'s hardcoded `gs://` bucket URLs were on this list and are not
+any more — they became `SCORECARD_RESULTS_BUCKET_URL` and
+`SCORECARD_CRON_RESULTS_BUCKET_URL` in `configure-result-buckets`, defaulting to
+the values that had been compiled in. That is what lifting an item here looks
+like: its own change, with defaults that preserve the deployed behavior. It is
+not a precedent for fixing the remaining three opportunistically.
 
 ## Current state
 
