@@ -127,14 +127,21 @@ capture build-triggers "Cloud Build triggers" \
 # The revision list is the rollback target: "shift traffic back" needs a name.
 capture run-services "Cloud Run services" \
   gcloud run services list --project="${PROJECT}" --region="${REGION}" --format=json
-capture run-service-detail "Cloud Run service detail (scorecard-api-prod)" \
-  gcloud run services describe scorecard-api-prod \
-    --project="${PROJECT}" --region="${REGION}" --format=json
-capture run-revisions "Cloud Run revisions (the rollback targets)" \
-  gcloud run revisions list --project="${PROJECT}" --region="${REGION}" \
-    --service=scorecard-api-prod --format=json
+# Three services are in play, not one: the API itself, a staging copy that
+# already exists (so W11's "deploy somewhere non-production" has a home), and
+# the ESPv2 gateway that fronts them. Capturing only the first would have
+# described a third of the request path.
+for svc in scorecard-api-prod scorecard-api-staging scorecard-endpoints-prod; do
+  capture "run-service-${svc}" "Cloud Run service detail: ${svc}" \
+    gcloud run services describe "${svc}" \
+      --project="${PROJECT}" --region="${REGION}" --format=json
+  capture "run-revisions-${svc}" "Cloud Run revisions: ${svc} (rollback targets)" \
+    gcloud run revisions list --project="${PROJECT}" --region="${REGION}" \
+      --service="${svc}" --format=json
+done
+# GA since 2021; `gcloud beta run` requires a component most installs lack.
 capture run-domain-mappings "Cloud Run domain mappings" \
-  gcloud beta run domain-mappings list --project="${PROJECT}" --region="${REGION}" --format=json
+  gcloud run domain-mappings list --project="${PROJECT}" --region="${REGION}" --format=json
 
 # --- Endpoints / ESPv2 ---------------------------------------------------
 # api/openapi.yaml is deployed here, so the live service config is the ground
@@ -153,7 +160,10 @@ capture endpoints-config "Deployed Endpoints config (api.securityscorecards.dev)
 # takes to undo.
 capture dns-zones "Cloud DNS zones" \
   gcloud dns managed-zones list --project="${PROJECT}" --format=json
-for zone in scorecard-dev securityscorecards-dev; do
+# Zone names, not domain names: `scorecard` serves scorecard.dev and
+# `scorecard-existing` serves securityscorecards.dev. Guessing them from the
+# domains produced two 404s on the first real run.
+for zone in scorecard scorecard-existing; do
   capture "dns-records-${zone}" "DNS records in ${zone}" \
     gcloud dns record-sets list --zone="${zone}" --project="${PROJECT}" --format=json
 done

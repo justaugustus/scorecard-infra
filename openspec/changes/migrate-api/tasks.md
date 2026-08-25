@@ -323,7 +323,33 @@ selected the wrong thing.
       auth error fifteen times and burying the one instruction that fixes it;
       and it defaults to a timestamped, gitignored directory and refuses a
       repository root, because passing `.` scattered a dozen loose files into
-      the working tree. Still blocked on an interactive `gcloud auth login`.
+      the working tree.
+      **Second run captured 13 of 16 sections.** What it established, most of
+      which contradicts an assumption somewhere in this change:
+      * **Three Cloud Run services, not one.** `scorecard-api-prod`,
+        `scorecard-api-staging` — which already exists, so W11's "deploy
+        somewhere non-production" has a home — and `scorecard-endpoints-prod`,
+        the ESPv2 gateway. Capturing only the first described a third of the
+        request path.
+      * **Only one Endpoints service exists**, for `api.securityscorecards.dev`.
+        There is none for `api.scorecard.dev`, so the two hostnames do not reach
+        the backend by the same path.
+      * **The gateway enforces a 2023-08-30 config.** `openapi.yaml` gained 31
+        lines in February 2026 (`395f1f1`, the Fastly cache headers) that were
+        never deployed. W10 treats the contract as live deployment
+        configuration; it is, but latently — nobody has redeployed it in three
+        years.
+      * **`API_BASE_URL=https://api.scorecard.dev`** and `FASTLY_PURGE_TOKEN`
+        from the `fastly_purge_token` secret. This confirms 6.3a's single-purge
+        diagnosis from configuration rather than inference.
+      * Serving revision `scorecard-api-prod-00056-59d` (100%), 1 vCPU / 512Mi,
+        concurrency 120, maxScale 1000, ingress `all`, running as the project's
+        **default compute service account** — worth sizing and scoping the AWS
+        equivalent against, and worth not reproducing the default-SA breadth.
+      * Real DNS zone names are `scorecard` and `scorecard-existing`; my guesses
+        from the domain names produced two 404s. `gcloud beta run
+        domain-mappings` also needs a component most installs lack — the GA
+        command works. Both fixed; the three failed sections need a re-run.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
@@ -353,6 +379,25 @@ selected the wrong thing.
       means the cutover diff must run origin-to-origin, or it measures cache
       vintage rather than behavior. Worth fixing at the purge rather than
       carrying across; not in this change's scope.
+- [ ] 6.3b **Finding: production is six months behind `main`, so the cutover is
+      not purely a re-host.** The serving image is tagged with webapp commit
+      `765e6ec` (2026-02-06). `main` has moved 25 commits since, 3 of them
+      touching the API — and one, `f2e9814`, is a deliberate **behavior change to
+      the publish path**: runner-label matching moves from a fixed allowlist to a
+      regex, which newly *accepts* `ubuntu-26.04` and `-arm` variants and newly
+      *rejects* `ubuntu-18.04` and `20.04`, and the rejection status changes from
+      500 to 400.
+      The behavior freeze preserved **upstream `main`, not what production
+      runs**, and this change had not drawn that distinction. Consequences:
+      W11's response diff cannot show POST-path equivalence, because the two are
+      genuinely not equivalent; and any project still pinning an EOL Ubuntu
+      runner will start failing to publish at cutover — a user-visible
+      regression that lands at the same moment as the migration and will be
+      attributed to it.
+      The change itself is desirable (it fixes recurring publish failures in
+      `ossf/scorecard-action`). The options are to ship it knowingly and say so,
+      or to deploy from `765e6ec` first and upgrade as a separate step. Not
+      decided here.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.

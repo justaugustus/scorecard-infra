@@ -50,6 +50,11 @@ survives a year unless purged, and `post_results.go` purges a single
 `API_BASE_URL`. A purge therefore refreshes one hostname and leaves the other
 serving whatever it last cached.
 
+Confirmed from the deployment rather than inferred: the Cloud Run service sets
+`API_BASE_URL=https://api.scorecard.dev`, and only `api.securityscorecards.dev`
+has an Endpoints service in front of it — so the two hostnames neither share a
+purge nor reach the backend by the same path.
+
 Two consequences:
 
 1. **Point the harness at origins** — the Cloud Run URL, the candidate
