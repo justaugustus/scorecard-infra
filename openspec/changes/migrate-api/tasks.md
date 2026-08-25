@@ -315,6 +315,15 @@ selected the wrong thing.
       as explicitly manual.
       This is the task whose cost rises fastest with delay: none of it is in
       git, and it stops being readable when project access lapses.
+      **First real run (2026-08-25) failed on expired gcloud credentials** —
+      `Reauthentication failed. cannot prompt during non-interactive execution`
+      — and exposed two defects in the script rather than anything about the
+      project. Both fixed and tested against a stubbed `gcloud`:
+      it now fails fast on missing credentials instead of reporting the same
+      auth error fifteen times and burying the one instruction that fixes it;
+      and it defaults to a timestamped, gitignored directory and refuses a
+      repository root, because passing `.` scattered a dozen loose files into
+      the working tree. Still blocked on an interactive `gcloud auth login`.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.

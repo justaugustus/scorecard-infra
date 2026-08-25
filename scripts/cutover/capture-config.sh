@@ -42,12 +42,48 @@
 
 set -uo pipefail   # deliberately not -e: see "best-effort" above
 
-OUT="${1:-}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Default somewhere gitignored and timestamped. Passing "." writes a dozen loose
+# files into whatever directory you happened to be standing in -- which is how
+# the first real run littered the repository root.
+OUT="${1:-${SCRIPT_DIR}/out/$(date -u +%Y%m%dT%H%M%SZ)}"
 PROJECT="${2:-openssf}"
 REGION="${REGION:-us-central1}"
 
-[ -n "${OUT}" ] || { echo "usage: $0 <output-dir> [gcp-project]" >&2; exit 2; }
 command -v gcloud >/dev/null || { echo "error: gcloud is required" >&2; exit 1; }
+
+# Refuse to scatter output across a git working tree. The capture is a dozen
+# files per run and none of it belongs in version control.
+if [ -d "${OUT}/.git" ] || { [ "$(cd "${OUT}" 2>/dev/null && pwd)" = "$(git -C "${OUT}" rev-parse --show-toplevel 2>/dev/null)" ] && [ -n "$(git -C "${OUT}" rev-parse --show-toplevel 2>/dev/null)" ]; }; then
+  cat >&2 <<EOF
+error: refusing to write into a repository root: ${OUT}
+
+  The capture writes ~12 loose files. Use the default, which is gitignored:
+
+      $0
+
+  or name a directory outside the repository.
+EOF
+  exit 2
+fi
+
+# Fail fast on credentials. Every capture below authenticates the same way, so
+# an expired token is one problem, not fifteen -- and reporting it fifteen times
+# buries the single instruction that fixes it.
+if ! gcloud auth print-access-token >/dev/null 2>&1; then
+  cat >&2 <<EOF
+error: gcloud has no usable credentials for this session.
+
+  Every capture would fail identically. Authenticate first:
+
+      gcloud auth login
+      gcloud config set project ${PROJECT}
+
+  If you are running this from a non-interactive context (an agent session, CI),
+  the login has to happen in a real terminal -- gcloud cannot prompt.
+EOF
+  exit 1
+fi
 
 mkdir -p "${OUT}"
 SUMMARY="${OUT}/SUMMARY.txt"
