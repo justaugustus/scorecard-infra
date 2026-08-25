@@ -406,7 +406,33 @@ selected the wrong thing.
       `FASTLY_API_TOKEN`; the API's purge token is very likely purge-only and
       will 403. Verified only as far as a token-less environment allows: the
       bad-token path returns a real 401 from `api.fastly.com`, and it parses
-      under bash 3.2, which is what macOS ships. The rest is untested.
+      under bash 3.2, which is what macOS ships.
+      **Rewritten to use the Fastly CLI and run clean against the real account
+      (2026-08-25), 23 of 23 sections.** The request path is now fully known:
+
+          api.scorecard.dev            ─┐
+                                        ├─> Fastly "Scorecard Production API"
+          api.securityscorecards.dev   ─┘     └─> backend "Host 1"
+                                                  scorecard-endpoints-prod (ESPv2)
+                                                    └─> scorecard-api-prod
+
+      * **Both production hostnames map to one Fastly service.** That closes
+        6.3a: one service, one backend, two hostnames, cached separately by
+        `Host`, and `post_results.go` purges only `API_BASE_URL` — so the other
+        hostname's objects sit until the year-long TTL expires.
+      * **The cutover is one field**: backend `Host 1` on the production
+        service. Rollback is restoring it. That is a much smaller and more
+        reversible operation than "repoint DNS" implied. (Service IDs are
+        account-scoped identifiers and stay out of this public repository —
+        read them from the gitignored capture, `services.json`.)
+      * **A complete staging path already exists** —
+        `api-staging.scorecard.dev` and `api-staging.securityscorecards.dev` →
+        Fastly "Scorecard Staging API" → `scorecard-api-staging` **directly,
+        with no ESPv2 gateway in front**. So staging already demonstrates the
+        gateway-less topology the AWS move is heading for, and W11 step 2 has a
+        real end-to-end candidate URL rather than a bare Cloud Run address.
+      * Production Fastly is on active version **1** and the API service runs as
+        the default compute service account; staging is on version 9.
 - [ ] 6.3b **Finding: production is six months behind `main`, so the cutover is
       not purely a re-host.** The serving image is tagged with webapp commit
       `765e6ec` (2026-02-06). `main` has moved 25 commits since, 3 of them
