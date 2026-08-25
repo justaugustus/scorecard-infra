@@ -139,9 +139,16 @@ for svc in scorecard-api-prod scorecard-api-staging scorecard-endpoints-prod; do
     gcloud run revisions list --project="${PROJECT}" --region="${REGION}" \
       --service="${svc}" --format=json
 done
-# GA since 2021; `gcloud beta run` requires a component most installs lack.
-capture run-domain-mappings "Cloud Run domain mappings" \
-  gcloud run domain-mappings list --project="${PROJECT}" --region="${REGION}" --format=json
+# Cloud Run domain mappings are deliberately NOT captured. Two invocations of
+# this failed (the beta component is usually absent; the GA command rejects
+# --region here), and chasing a third was pointless once the DNS capture showed
+# why: api.scorecard.dev and api.securityscorecards.dev are both CNAMEs to
+# x.sni.global.fastly.net. Fastly is the front door, the origin is configured
+# inside Fastly rather than in GCP, and no Cloud Run domain mapping sits in the
+# request path. There is nothing here to capture.
+#
+# The corollary is that the Fastly configuration -- listed below as manual -- is
+# the actual cutover control plane, not DNS.
 
 # --- Endpoints / ESPv2 ---------------------------------------------------
 # api/openapi.yaml is deployed here, so the live service config is the ground

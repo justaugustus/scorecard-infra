@@ -347,9 +347,12 @@ selected the wrong thing.
         **default compute service account** — worth sizing and scoping the AWS
         equivalent against, and worth not reproducing the default-SA breadth.
       * Real DNS zone names are `scorecard` and `scorecard-existing`; my guesses
-        from the domain names produced two 404s. `gcloud beta run
-        domain-mappings` also needs a component most installs lack — the GA
-        command works. Both fixed; the three failed sections need a re-run.
+        from the domain names produced two 404s. Fixed, and the corrected run
+        captured **18 of 19 sections**.
+      * The one remaining failure, Cloud Run domain mappings, was **dropped
+        rather than fixed a third time**: the DNS capture proved no domain
+        mapping is in the request path (6.3c), so there was nothing to capture.
+        Two wrong invocations were two more than the question deserved.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
@@ -379,6 +382,24 @@ selected the wrong thing.
       means the cutover diff must run origin-to-origin, or it measures cache
       vintage rather than behavior. Worth fixing at the purge rather than
       carrying across; not in this change's scope.
+- [ ] 6.3c **Finding: the cutover is a Fastly backend change, not a DNS
+      repoint.** Both `api.scorecard.dev` and `api.securityscorecards.dev` are
+      `CNAME`s to `x.sni.global.fastly.net` with a 300s TTL. Fastly is the front
+      door for both; the origin is configured inside Fastly, and no Cloud Run
+      domain mapping is in the request path — which is why two attempts to
+      capture domain mappings were chasing something that does not exist.
+      This change has described phase 6 as "repoint DNS" throughout, including
+      in **W11**. That is wrong, and wrong in a way that matters:
+      * **The control plane is Fastly**, which is the one system in the
+        inventory that `gcloud` cannot reach and that nobody has captured yet.
+        It is now the highest-value uncaptured item, not a footnote.
+      * **Rollback is faster and safer than assumed** — flip the Fastly backend
+        back, no DNS propagation to wait out. The 300s TTL bounds even a genuine
+        DNS change, so neither direction is slow.
+      * It also sharpens 6.3a: both hostnames resolve to the *same* Fastly
+        service, cache separately (keyed by `Host`), and only one is purged.
+      Task 6.4's wording and **W11** need correcting before the cutover is run
+      from them.
 - [ ] 6.3b **Finding: production is six months behind `main`, so the cutover is
       not purely a re-host.** The serving image is tagged with webapp commit
       `765e6ec` (2026-02-06). `main` has moved 25 commits since, 3 of them
