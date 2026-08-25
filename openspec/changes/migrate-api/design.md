@@ -367,6 +367,15 @@ Ordered so the expensive-to-reverse step happens last:
    invisibly.
 4. Repoint the Cloud Build trigger, shift traffic, and repoint the OSS-Fuzz
    project.
+
+   **Corrected after capturing the deployment (task 6.3c).** "Shift traffic"
+   here is a **Fastly backend change, not a DNS repoint**. Both API hostnames
+   are `CNAME`s to `x.sni.global.fastly.net`; the origin lives in Fastly
+   configuration, and no Cloud Run domain mapping is in the path. That makes
+   Fastly the cutover control plane — and it is the one system in the inventory
+   `gcloud` cannot reach, so its configuration has to be captured by hand before
+   anything moves. It also makes rollback faster than this section assumed: flip
+   the backend back, with no propagation to wait out.
 5. Hold. Watch error rates, the badge path, and at least one Scorecard Action
    upload completing end to end through the `POST` path.
 6. Only then delete upstream.

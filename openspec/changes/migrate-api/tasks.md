@@ -300,17 +300,171 @@ selected the wrong thing.
 
 ## 6. Production cutover
 
-- [ ] 6.0 Capture the before-state of every external system: Cloud Build trigger
-      configuration, Cloud Run service and current revision, Cloud Endpoints
-      service configuration, domain mapping, Fastly configuration, and the
-      OSS-Fuzz project's build settings (**W11**).
+- [ ] 6.0 Capture the before-state of every external system (**W11**).
+      **Script written, not run:** `scripts/cutover/capture-config.sh` covers
+      Cloud Build triggers, the Cloud Run service and its revisions (the
+      rollback targets), the deployed Endpoints config, domain mappings, DNS
+      records with their TTLs, IAM, bucket metadata, and Secret Manager entries
+      by name. It is best-effort per section — a permission failure records
+      itself and the run continues, because a partial capture is useful and an
+      aborted one is not — and it redacts probable inline credentials.
+      **Unverified: this environment has no gcloud and no credentials**, so the
+      resource names are informed guesses from `api/openapi.yaml`,
+      `api/Dockerfile`, and `docs/dns.md`. Expect to correct some; the FAILED
+      markers in its summary are where to look. Fastly and OSS-Fuzz are listed
+      as explicitly manual.
+      This is the task whose cost rises fastest with delay: none of it is in
+      git, and it stops being readable when project access lapses.
+      **First real run (2026-08-25) failed on expired gcloud credentials** —
+      `Reauthentication failed. cannot prompt during non-interactive execution`
+      — and exposed two defects in the script rather than anything about the
+      project. Both fixed and tested against a stubbed `gcloud`:
+      it now fails fast on missing credentials instead of reporting the same
+      auth error fifteen times and burying the one instruction that fixes it;
+      and it defaults to a timestamped, gitignored directory and refuses a
+      repository root, because passing `.` scattered a dozen loose files into
+      the working tree.
+      **Second run captured 13 of 16 sections.** What it established, most of
+      which contradicts an assumption somewhere in this change:
+      * **Three Cloud Run services, not one.** `scorecard-api-prod`,
+        `scorecard-api-staging` — which already exists, so W11's "deploy
+        somewhere non-production" has a home — and `scorecard-endpoints-prod`,
+        the ESPv2 gateway. Capturing only the first described a third of the
+        request path.
+      * **Only one Endpoints service exists**, for `api.securityscorecards.dev`.
+        There is none for `api.scorecard.dev`, so the two hostnames do not reach
+        the backend by the same path.
+      * **The gateway enforces a 2023-08-30 config.** `openapi.yaml` gained 31
+        lines in February 2026 (`395f1f1`, the Fastly cache headers) that were
+        never deployed. W10 treats the contract as live deployment
+        configuration; it is, but latently — nobody has redeployed it in three
+        years.
+      * **`API_BASE_URL=https://api.scorecard.dev`** and `FASTLY_PURGE_TOKEN`
+        from the `fastly_purge_token` secret. This confirms 6.3a's single-purge
+        diagnosis from configuration rather than inference.
+      * Serving revision `scorecard-api-prod-00056-59d` (100%), 1 vCPU / 512Mi,
+        concurrency 120, maxScale 1000, ingress `all`, running as the project's
+        **default compute service account** — worth sizing and scoping the AWS
+        equivalent against, and worth not reproducing the default-SA breadth.
+      * Real DNS zone names are `scorecard` and `scorecard-existing`; my guesses
+        from the domain names produced two 404s. Fixed, and the corrected run
+        captured **18 of 19 sections**.
+      * The one remaining failure, Cloud Run domain mappings, was **dropped
+        rather than fixed a third time**: the DNS capture proved no domain
+        mapping is in the request path (6.3c), so there was nothing to capture.
+        Two wrong invocations were two more than the question deserved.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
-- [ ] 6.3 Run the response diff against production (**W11**, step 3): known-good
-      repository, repository with no results, pinned commit, malformed request,
-      each badge style, and the request the website's viewer makes. Compare
-      status codes, bodies, and `Cache-Control` / `Surrogate-Control` headers.
+- [ ] 6.3 Run the response diff against production (**W11**, step 3).
+      **Harness built and exercised against production:**
+      `scripts/api-conformance/` — 20 requests covering the two-bucket read
+      fallback, absent and malformed input, path traversal, every documented
+      badge style, and the CORS headers the website depends on. Compares status,
+      body, and the cache headers; ignores per-deployment noise; records
+      `age`/`x-cache` and prints them beside any body difference.
+      Deliberately live-against-live rather than against a committed fixture:
+      result bodies change on rescan, so a stored baseline is stale within a
+      week and every later run drowns in false differences.
+      **Calibrating it against the two production hostnames found a real
+      defect** — see 6.3a. Run it against *origins*, not CDN hostnames.
+- [ ] 6.3a **Finding: the two published hostnames serve different data.**
+      `api.scorecard.dev` and `api.securityscorecards.dev` front the same
+      service, but returned results for `github.com/ossf/scorecard` from scans a
+      week apart (`date` 2026-08-22 vs 2026-08-15) — same resolved commit, same
+      engine version, both Fastly `HIT` at different ages. `Surrogate-Control`
+      is `max-age=31557600`, so an edge object survives a year unless purged,
+      and `post_results.go` purges a single `API_BASE_URL`. A purge refreshes one
+      hostname and leaves the other stale.
+      Two consequences. Operationally this is a **pre-existing production
+      defect**, not something the migration introduces: which hostname a
+      consumer uses determines how fresh their results are. For the migration it
+      means the cutover diff must run origin-to-origin, or it measures cache
+      vintage rather than behavior. Worth fixing at the purge rather than
+      carrying across; not in this change's scope.
+- [ ] 6.3c **Finding: the cutover is a Fastly backend change, not a DNS
+      repoint.** Both `api.scorecard.dev` and `api.securityscorecards.dev` are
+      `CNAME`s to `x.sni.global.fastly.net` with a 300s TTL. Fastly is the front
+      door for both; the origin is configured inside Fastly, and no Cloud Run
+      domain mapping is in the request path — which is why two attempts to
+      capture domain mappings were chasing something that does not exist.
+      This change has described phase 6 as "repoint DNS" throughout, including
+      in **W11**. That is wrong, and wrong in a way that matters:
+      * **The control plane is Fastly**, which is the one system in the
+        inventory that `gcloud` cannot reach and that nobody has captured yet.
+        It is now the highest-value uncaptured item, not a footnote.
+      * **Rollback is faster and safer than assumed** — flip the Fastly backend
+        back, no DNS propagation to wait out. The 300s TTL bounds even a genuine
+        DNS change, so neither direction is slow.
+      * It also sharpens 6.3a: both hostnames resolve to the *same* Fastly
+        service, cache separately (keyed by `Host`), and only one is purged.
+      Task 6.4's wording and **W11** need correcting before the cutover is run
+      from them. **Corrected in both.**
+      Follow-on: `scripts/cutover/capture-fastly.sh` captures the Fastly side —
+      backends (the origin, i.e. the thing the cutover changes), domains,
+      conditions, VCL, snippets, cache settings. Needs a read-scoped
+      `FASTLY_API_TOKEN`; the API's purge token is very likely purge-only and
+      will 403. Verified only as far as a token-less environment allows: the
+      bad-token path returns a real 401 from `api.fastly.com`, and it parses
+      under bash 3.2, which is what macOS ships.
+      **Rewritten to use the Fastly CLI and run clean against the real account
+      (2026-08-25), 23 of 23 sections.** The request path is now fully known:
+
+          api.scorecard.dev            ─┐
+                                        ├─> Fastly "Scorecard Production API"
+          api.securityscorecards.dev   ─┘     └─> backend "Host 1"
+                                                  scorecard-endpoints-prod (ESPv2)
+                                                    └─> scorecard-api-prod
+
+      * **Both production hostnames map to one Fastly service.** That closes
+        6.3a: one service, one backend, two hostnames, cached separately by
+        `Host`, and `post_results.go` purges only `API_BASE_URL` — so the other
+        hostname's objects sit until the year-long TTL expires.
+      * **The cutover is one field**: backend `Host 1` on the production
+        service. Rollback is restoring it. That is a much smaller and more
+        reversible operation than "repoint DNS" implied. (Service IDs are
+        account-scoped identifiers and stay out of this public repository —
+        read them from the gitignored capture, `services.json`.)
+      * **A complete staging path already exists** —
+        `api-staging.scorecard.dev` and `api-staging.securityscorecards.dev` →
+        Fastly "Scorecard Staging API" → `scorecard-api-staging` **directly,
+        with no ESPv2 gateway in front**. So staging already demonstrates the
+        gateway-less topology the AWS move is heading for, and W11 step 2 has a
+        real end-to-end candidate URL rather than a bare Cloud Run address.
+      * Production Fastly is on active version **1** and the API service runs as
+        the default compute service account; staging is on version 9.
+- [ ] 6.3b **Finding: production is six months behind `main`, so the cutover is
+      not purely a re-host.** The serving image is tagged with webapp commit
+      `765e6ec` (2026-02-06). `main` has moved 25 commits since, 3 of them
+      touching the API — and one, `f2e9814`, is a deliberate **behavior change to
+      the publish path**: runner-label matching moves from a fixed allowlist to a
+      regex, which newly *accepts* `ubuntu-26.04` and `-arm` variants and newly
+      *rejects* `ubuntu-18.04` and `20.04`, and the rejection status changes from
+      500 to 400.
+      The behavior freeze preserved **upstream `main`, not what production
+      runs**, and this change had not drawn that distinction. Consequences:
+      W11's response diff cannot show POST-path equivalence, because the two are
+      genuinely not equivalent; and any project still pinning an EOL Ubuntu
+      runner will start failing to publish at cutover — a user-visible
+      regression that lands at the same moment as the migration and will be
+      attributed to it.
+      The change itself is desirable (it fixes recurring publish failures in
+      `ossf/scorecard-action`).
+      **Decided (2026-08-25): ship the newer version.** Deploying a six-month-old
+      commit to preserve an equivalence that would be broken days later is
+      ceremony. Two obligations follow from choosing it, and they are the reason
+      this is recorded rather than assumed:
+      * **The cutover notice must say that EOL Ubuntu runners stop being
+        accepted.** A project pinning `ubuntu-20.04` in its Scorecard workflow
+        publishes today and will not after cutover. That regression arrives with
+        the migration and will be attributed to it, so it is announced rather
+        than discovered.
+      * **W11's response diff cannot be read as proving POST-path equivalence.**
+        It never could here; the two versions differ deliberately. The gate for
+        that path is 6.6 — watching a real Action upload land — and it is worth
+        watching one from a repository on a *supported* runner and, if one can be
+        found, one on an EOL runner to confirm the rejection is the clean 400
+        rather than a 500.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.

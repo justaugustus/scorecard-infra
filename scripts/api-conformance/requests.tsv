@@ -1,0 +1,53 @@
+# Fixed request set for results-API conformance checks (design W11, step 3).
+#
+# Format: name <TAB> path <TAB> extra-curl-args
+# Lines starting with # and blank lines are ignored.
+#
+# Chosen to cover each distinct code path in api/app/server rather than to be
+# exhaustive: the two-bucket read fallback, the badge redirect, input rejection,
+# and the CORS headers the project website depends on. Add cases here rather
+# than passing ad-hoc URLs, so that a comparison run is reproducible and so the
+# same set is used before and after a cutover.
+#
+# Deliberately NOT included: the POST publish path. It has side effects
+# (verification against live Sigstore, a write to the results bucket, a CDN
+# purge) and cannot be exercised safely against production. Confirming it is a
+# separate cutover step -- watch a real Scorecard Action upload land.
+
+# --- Results: the primary read path -------------------------------------
+# A repository certain to have published results.
+results-known-good	/projects/github.com/ossf/scorecard
+# A high-traffic repository, likely served from the Action-published bucket
+# rather than the weekly cron bucket -- the two-bucket fallback in
+# get_results.go means these can resolve differently.
+results-high-traffic	/projects/github.com/kubernetes/kubernetes
+# A repository scanned by the weekly cron but unlikely to publish via the
+# Action, exercising the fallback bucket.
+results-cron-only	/projects/github.com/torvalds/linux
+# GitLab-hosted, to confirm platform routing is not GitHub-specific.
+results-gitlab	/projects/gitlab.com/gitlab-org/gitlab
+
+# --- Results: absent and malformed --------------------------------------
+results-absent	/projects/github.com/ossf/definitely-not-a-real-repository-9f3a
+results-bad-platform	/projects/not-a-platform/ossf/scorecard
+results-missing-repo	/projects/github.com/ossf
+results-bad-commit	/projects/github.com/ossf/scorecard?commit=nothex
+results-unknown-commit	/projects/github.com/ossf/scorecard?commit=0000000000000000000000000000000000000000
+# Path traversal, which sanitizeInputs is meant to reject.
+results-traversal	/projects/github.com/ossf/../../etc/passwd
+
+# --- Badge: a redirect, one case per documented style --------------------
+badge-default	/projects/github.com/ossf/scorecard/badge
+badge-flat	/projects/github.com/ossf/scorecard/badge?style=flat
+badge-flat-square	/projects/github.com/ossf/scorecard/badge?style=flat-square
+badge-plastic	/projects/github.com/ossf/scorecard/badge?style=plastic
+badge-for-the-badge	/projects/github.com/ossf/scorecard/badge?style=for-the-badge
+badge-social	/projects/github.com/ossf/scorecard/badge?style=social
+badge-invalid-style	/projects/github.com/ossf/scorecard/badge?style=not-a-style
+badge-absent	/projects/github.com/ossf/definitely-not-a-real-repository-9f3a/badge
+
+# --- CORS: the project website is a browser client of this API -----------
+# The viewer at scorecard.dev fetches results cross-origin, so the response
+# headers matter as much as the body.
+cors-viewer-origin	/projects/github.com/ossf/scorecard	-H 'Origin: https://scorecard.dev'
+cors-preflight	/projects/github.com/ossf/scorecard	-X OPTIONS -H 'Origin: https://scorecard.dev' -H 'Access-Control-Request-Method: GET'
