@@ -300,17 +300,50 @@ selected the wrong thing.
 
 ## 6. Production cutover
 
-- [ ] 6.0 Capture the before-state of every external system: Cloud Build trigger
-      configuration, Cloud Run service and current revision, Cloud Endpoints
-      service configuration, domain mapping, Fastly configuration, and the
-      OSS-Fuzz project's build settings (**W11**).
+- [ ] 6.0 Capture the before-state of every external system (**W11**).
+      **Script written, not run:** `scripts/cutover/capture-config.sh` covers
+      Cloud Build triggers, the Cloud Run service and its revisions (the
+      rollback targets), the deployed Endpoints config, domain mappings, DNS
+      records with their TTLs, IAM, bucket metadata, and Secret Manager entries
+      by name. It is best-effort per section — a permission failure records
+      itself and the run continues, because a partial capture is useful and an
+      aborted one is not — and it redacts probable inline credentials.
+      **Unverified: this environment has no gcloud and no credentials**, so the
+      resource names are informed guesses from `api/openapi.yaml`,
+      `api/Dockerfile`, and `docs/dns.md`. Expect to correct some; the FAILED
+      markers in its summary are where to look. Fastly and OSS-Fuzz are listed
+      as explicitly manual.
+      This is the task whose cost rises fastest with delay: none of it is in
+      git, and it stops being readable when project access lapses.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
-- [ ] 6.3 Run the response diff against production (**W11**, step 3): known-good
-      repository, repository with no results, pinned commit, malformed request,
-      each badge style, and the request the website's viewer makes. Compare
-      status codes, bodies, and `Cache-Control` / `Surrogate-Control` headers.
+- [ ] 6.3 Run the response diff against production (**W11**, step 3).
+      **Harness built and exercised against production:**
+      `scripts/api-conformance/` — 20 requests covering the two-bucket read
+      fallback, absent and malformed input, path traversal, every documented
+      badge style, and the CORS headers the website depends on. Compares status,
+      body, and the cache headers; ignores per-deployment noise; records
+      `age`/`x-cache` and prints them beside any body difference.
+      Deliberately live-against-live rather than against a committed fixture:
+      result bodies change on rescan, so a stored baseline is stale within a
+      week and every later run drowns in false differences.
+      **Calibrating it against the two production hostnames found a real
+      defect** — see 6.3a. Run it against *origins*, not CDN hostnames.
+- [ ] 6.3a **Finding: the two published hostnames serve different data.**
+      `api.scorecard.dev` and `api.securityscorecards.dev` front the same
+      service, but returned results for `github.com/ossf/scorecard` from scans a
+      week apart (`date` 2026-08-22 vs 2026-08-15) — same resolved commit, same
+      engine version, both Fastly `HIT` at different ages. `Surrogate-Control`
+      is `max-age=31557600`, so an edge object survives a year unless purged,
+      and `post_results.go` purges a single `API_BASE_URL`. A purge refreshes one
+      hostname and leaves the other stale.
+      Two consequences. Operationally this is a **pre-existing production
+      defect**, not something the migration introduces: which hostname a
+      consumer uses determines how fresh their results are. For the migration it
+      means the cutover diff must run origin-to-origin, or it measures cache
+      vintage rather than behavior. Worth fixing at the purge rather than
+      carrying across; not in this change's scope.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.

@@ -16,3 +16,8 @@
 /cron/internal/shuffle/shuffle
 /cron/internal/webhook/webhook
 /cron/internal/worker/worker
+
+# Captured deployment configuration (scripts/cutover/capture-config.sh). Not in
+# git by design: it describes live infrastructure and may contain values the
+# redaction pass did not recognize.
+/scripts/cutover/out/
