@@ -399,7 +399,14 @@ selected the wrong thing.
       * It also sharpens 6.3a: both hostnames resolve to the *same* Fastly
         service, cache separately (keyed by `Host`), and only one is purged.
       Task 6.4's wording and **W11** need correcting before the cutover is run
-      from them.
+      from them. **Corrected in both.**
+      Follow-on: `scripts/cutover/capture-fastly.sh` captures the Fastly side —
+      backends (the origin, i.e. the thing the cutover changes), domains,
+      conditions, VCL, snippets, cache settings. Needs a read-scoped
+      `FASTLY_API_TOKEN`; the API's purge token is very likely purge-only and
+      will 403. Verified only as far as a token-less environment allows: the
+      bad-token path returns a real 401 from `api.fastly.com`, and it parses
+      under bash 3.2, which is what macOS ships. The rest is untested.
 - [ ] 6.3b **Finding: production is six months behind `main`, so the cutover is
       not purely a re-host.** The serving image is tagged with webapp commit
       `765e6ec` (2026-02-06). `main` has moved 25 commits since, 3 of them
@@ -416,9 +423,22 @@ selected the wrong thing.
       regression that lands at the same moment as the migration and will be
       attributed to it.
       The change itself is desirable (it fixes recurring publish failures in
-      `ossf/scorecard-action`). The options are to ship it knowingly and say so,
-      or to deploy from `765e6ec` first and upgrade as a separate step. Not
-      decided here.
+      `ossf/scorecard-action`).
+      **Decided (2026-08-25): ship the newer version.** Deploying a six-month-old
+      commit to preserve an equivalence that would be broken days later is
+      ceremony. Two obligations follow from choosing it, and they are the reason
+      this is recorded rather than assumed:
+      * **The cutover notice must say that EOL Ubuntu runners stop being
+        accepted.** A project pinning `ubuntu-20.04` in its Scorecard workflow
+        publishes today and will not after cutover. That regression arrives with
+        the migration and will be attributed to it, so it is announced rather
+        than discovered.
+      * **W11's response diff cannot be read as proving POST-path equivalence.**
+        It never could here; the two versions differ deliberately. The gate for
+        that path is 6.6 — watching a real Action upload land — and it is worth
+        watching one from a repository on a *supported* runner and, if one can be
+        found, one on an EOL runner to confirm the rejection is the clean 400
+        rather than a 500.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.

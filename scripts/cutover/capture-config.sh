@@ -28,12 +28,12 @@
 # for lack of permission or a wrong resource name records the failure and the
 # run continues. A partial capture is useful; an aborted one is not.
 #
-#     !!  UNVERIFIED  !!
-# These commands have not been executed against the real project -- the
-# authoring environment has no gcloud and no credentials. Treat the resource
-# names as informed guesses from api/openapi.yaml, api/Dockerfile, and
-# docs/dns.md, and expect to correct some. The FAILED markers in the summary are
-# where to start.
+# Status: run against the real project on 2026-08-25 and corrected from what it
+# returned. 18 of 19 sections succeeded; the nineteenth (Cloud Run domain
+# mappings) was removed once DNS showed no domain mapping is in the request
+# path. Earlier drafts guessed the DNS zone names and the number of Cloud Run
+# services and were wrong about both -- if a section starts failing, suspect a
+# renamed resource before suspecting the API.
 #
 # Secrets: this script captures configuration *shape*, not secret values. It
 # redacts anything that looks like a credential in environment blocks. Read the
@@ -226,11 +226,12 @@ note "done -- read the output before sharing it regardless."
 
 # --- Things this script cannot capture -----------------------------------
 note ""
-note "NOT captured here; capture these by hand:"
-note "  * Fastly service configuration, VCL, and surrogate-key setup."
-note "    Needs a Fastly API token; the API purges via FASTLY_PURGE_TOKEN and"
-note "    API_BASE_URL, and purge behavior is per-hostname -- see"
-note "    scripts/api-conformance/README.md for why that matters."
+note "NOT captured here:"
+note "  * Fastly -- run ./capture-fastly.sh, which needs a read-scoped"
+note "    FASTLY_API_TOKEN (the API's purge token will not do). This is the"
+note "    cutover control plane rather than a CDN detail: both API hostnames"
+note "    are CNAMEs to Fastly, so the origin lives in Fastly configuration"
+note "    and shifting traffic means changing a backend there."
 note "  * The OSS-Fuzz project: google/oss-fuzz projects/scorecard-web/"
 note "    (project.yaml and build.sh name the source repository). Public git;"
 note "    no credentials needed."
