@@ -27,14 +27,29 @@
 # tags must keep resolving for the module's one remaining consumer -- so a bare
 # version tag here would be ambiguous in two directions at once.
 #
-# Deliberately not deploy-on-merge: a public API serving badge and result lookups
-# gets an explicit, nameable release. See also build-images.yml, which proves the
-# image builds on every pull request but publishes nothing.
+# Merges publish a MUTABLE tag; releases publish IMMUTABLE ones. `main` moves and
+# is what a staging deployment tracks; `api/v*` produces the semver and `latest`
+# tags a production deployment pins -- by digest, not by tag. An earlier version
+# of this workflow published on tags only, on the reasoning that a public API
+# gets an explicit, nameable release. That still holds for production, and the
+# mutable tag does not weaken it: staging needs something continuously fresh to
+# pull, and the alternative is cutting a release to test a commit.
+#
+# See also build-images.yml, which proves every image builds on each pull request
+# but publishes nothing.
+#
+# The owner is parameterized so a fork can exercise this end to end -- pushing to
+# its own `ghcr.io/<fork-owner>/...` namespace rather than failing at the org's.
+# GHCR namespaces must be lowercase and `repository_owner` preserves the
+# account's casing, so it is lowercased rather than used raw; an owner with
+# capitals otherwise fails at the push with a message about the reference format.
 
 name: publish-api-image
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'api/v*'
   workflow_dispatch:
@@ -79,23 +94,31 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # `api/v1.2.3` -> `1.2.3`. The commit SHA is always published alongside, so
-      # a manual dispatch with no tag input still produces something pullable.
+      # a merge or a manual dispatch with no tag input still produces something
+      # immutable to pin.
       - name: Derive tags
         id: tags
         env:
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
           EXTRA_TAG: ${{ inputs.tag }}
-          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/scorecard-api
+          OWNER: ${{ github.repository_owner }}
+          REGISTRY: ${{ env.REGISTRY }}
         run: |
-          tags="${IMAGE}:sha-${GITHUB_SHA}"
+          owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          image="${REGISTRY}/${owner}/scorecard-api"
+          tags="${image}:sha-${GITHUB_SHA}"
           if [ "$REF_TYPE" = "tag" ]; then
             version="${REF_NAME#api/v}"
-            tags="${tags},${IMAGE}:${version},${IMAGE}:latest"
+            tags="${tags},${image}:${version},${image}:latest"
+          else
+            # Branch build. Only `main` reaches here, per the trigger.
+            tags="${tags},${image}:${REF_NAME}"
           fi
           if [ -n "$EXTRA_TAG" ]; then
-            tags="${tags},${IMAGE}:${EXTRA_TAG}"
+            tags="${tags},${image}:${EXTRA_TAG}"
           fi
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "tags=${tags}" >> "$GITHUB_OUTPUT"
           echo "Publishing: ${tags}"
 
@@ -118,7 +141,7 @@ jobs:
       - name: Record the digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
-          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}/scorecard-api
+          IMAGE: ${{ steps.tags.outputs.image }}
         run: |
           {
             echo "### Results API image published"
