@@ -12,46 +12,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Publishes the results API image to ghcr.io.
+# Publishes the batch pipeline's images to ghcr.io.
 #
-# This is the migration's handoff artifact (design W15). The API is being
-# re-hosted away from the GCP project that builds it today, so the image has to
-# be pullable by an operator with no access to that project; a neutral registry
-# is what makes the artifact, rather than a build configuration, the thing that
-# moves. It also front-loads the build/deploy split that the provider exit needs
-# either way: this workflow builds and publishes, and whatever runs the service
-# only has to deploy a digest.
+# The pipeline is being re-hosted away from the GCP project that builds it today,
+# where the images land in `gcr.io/openssf/` via Cloud Build. Nothing in this
+# repository published them, so an operator without access to that project had no
+# way to obtain them -- which makes this the pipeline's half of the same handoff
+# the API image already covers.
 #
-# Releases are tagged `api/vX.Y.Z`, not `vX.Y.Z`. This repository holds more than
-# one independently deployable system, and `ossf/scorecard-webapp`'s own `v1.x`
-# tags must keep resolving for the module's one remaining consumer -- so a bare
-# version tag here would be ambiguous in two directions at once.
+# Names are unchanged from what Cloud Build produces; only the registry and owner
+# move. `gcr.io/openssf/scorecard-batch-worker` becomes
+# `ghcr.io/ossf/scorecard-batch-worker`. That keeps the k8s manifests under
+# `cron/k8s/` a prefix edit rather than a rename, which matters while the tree is
+# behavior-frozen.
 #
-# Merges publish a MUTABLE tag; releases publish IMMUTABLE ones. `main` moves and
-# is what a staging deployment tracks; `api/v*` produces the semver and `latest`
-# tags a production deployment pins -- by digest, not by tag. An earlier version
-# of this workflow published on tags only, on the reasoning that a public API
-# gets an explicit, nameable release. That still holds for production, and the
-# mutable tag does not weaken it: staging needs something continuously fresh to
-# pull, and the alternative is cutting a release to test a commit.
+# Releases are tagged `cron/vX.Y.Z`, matching the API's `api/v*`. A bare `vX.Y.Z`
+# would be ambiguous in a repository holding several independently deployable
+# systems.
 #
-# See also build-images.yml, which proves every image builds on each pull request
-# but publishes nothing.
+# Merges publish a MUTABLE `main` tag; releases publish IMMUTABLE semver and
+# `latest`. Deploy the digest.
 #
-# The owner is parameterized so a fork can exercise this end to end -- pushing to
-# its own `ghcr.io/<fork-owner>/...` namespace rather than failing at the org's.
-# GHCR namespaces must be lowercase and `repository_owner` preserves the
-# account's casing, so it is lowercased rather than used raw; an owner with
-# capitals otherwise fails at the push with a message about the reference format.
+# The owner is parameterized so a fork can exercise this end to end against its
+# own namespace. GHCR namespaces must be lowercase and `repository_owner`
+# preserves the account's casing, so it is lowercased before use.
+#
+# NOT PUBLISHED HERE: `scorecard-webhook-releasetest`, which
+# `cron/k8s/webhook.release.yaml` refers to. Every other release-test workload
+# reuses its normal image under a `-releasetest` *deployment* name -- controller
+# and worker both do -- so that reference is inconsistent with its neighbours and
+# nothing in this repository has ever built it. Correcting the manifest means
+# editing a frozen tree, so it is left alone and recorded in
+# `openspec/changes/migrate-batch-pipeline/tasks.md` instead of being papered
+# over by minting an image to match it.
 
-name: publish-api-image
+name: publish-cron-images
 
 on:
   push:
     branches:
       - main
     tags:
-      - 'api/v*'
+      - 'cron/v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -67,11 +69,31 @@ env:
 
 jobs:
   publish:
-    name: publish
+    name: ${{ matrix.image }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: scorecard-batch-controller
+            dockerfile: cron/internal/controller/Dockerfile
+          - image: scorecard-batch-worker
+            dockerfile: cron/internal/worker/Dockerfile
+          - image: scorecard-cii-worker
+            dockerfile: cron/internal/cii/Dockerfile
+          # BigQuery, which the cloud-agnostic rules exclude and which has no
+          # equivalent in the destination. Published so the set is complete and
+          # nothing is dropped silently; its future is an open question recorded
+          # against the migration, not an oversight here.
+          - image: scorecard-bq-transfer
+            dockerfile: cron/internal/bq/Dockerfile
+          - image: scorecard-webhook
+            dockerfile: cron/internal/webhook/Dockerfile
+          - image: scorecard-github-server
+            dockerfile: cron/internal/githubserver/Dockerfile
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -93,8 +115,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # `api/v1.2.3` -> `1.2.3`. The commit SHA is always published alongside, so
-      # a merge or a manual dispatch with no tag input still produces something
+      # `cron/v1.2.3` -> `1.2.3`. The commit SHA is always published alongside,
+      # so a merge or a dispatch with no tag input still yields something
       # immutable to pin.
       - name: Derive tags
         id: tags
@@ -104,12 +126,13 @@ jobs:
           EXTRA_TAG: ${{ inputs.tag }}
           OWNER: ${{ github.repository_owner }}
           REGISTRY: ${{ env.REGISTRY }}
+          NAME: ${{ matrix.image }}
         run: |
           owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          image="${REGISTRY}/${owner}/scorecard-api"
+          image="${REGISTRY}/${owner}/${NAME}"
           tags="${image}:sha-${GITHUB_SHA}"
           if [ "$REF_TYPE" = "tag" ]; then
-            version="${REF_NAME#api/v}"
+            version="${REF_NAME#cron/v}"
             tags="${tags},${image}:${version},${image}:latest"
           else
             # Branch build. Only `main` reaches here, per the trigger.
@@ -122,29 +145,27 @@ jobs:
           echo "tags=${tags}" >> "$GITHUB_OUTPUT"
           echo "Publishing: ${tags}"
 
-      # Context is the repository root because go.mod lives there; the Dockerfile
-      # builds the API from api/ (see api/Dockerfile).
+      # Context is the repository root because go.mod lives there, matching the
+      # Makefile's docker targets and build-images.yml.
       - name: Build and push
         id: push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          file: ./api/Dockerfile
+          file: ./${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: true
           sbom: true
 
-      # The digest is what the deployment should pin, not any of the tags above.
-      # Surfaced in the job summary so a handoff can quote it rather than
-      # rediscover it from the registry.
+      # The digest is what a deployment should pin, not any of the tags above.
       - name: Record the digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
           IMAGE: ${{ steps.tags.outputs.image }}
         run: |
           {
-            echo "### Results API image published"
+            echo "### \`${IMAGE}\` published"
             echo
             echo '```'
             echo "${IMAGE}@${DIGEST}"
