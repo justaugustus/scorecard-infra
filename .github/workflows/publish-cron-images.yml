@@ -1,0 +1,175 @@
+# Copyright 2026 OpenSSF Scorecard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Publishes the batch pipeline's images to ghcr.io.
+#
+# The pipeline is being re-hosted away from the GCP project that builds it today,
+# where the images land in `gcr.io/openssf/` via Cloud Build. Nothing in this
+# repository published them, so an operator without access to that project had no
+# way to obtain them -- which makes this the pipeline's half of the same handoff
+# the API image already covers.
+#
+# Names are unchanged from what Cloud Build produces; only the registry and owner
+# move. `gcr.io/openssf/scorecard-batch-worker` becomes
+# `ghcr.io/ossf/scorecard-batch-worker`. That keeps the k8s manifests under
+# `cron/k8s/` a prefix edit rather than a rename, which matters while the tree is
+# behavior-frozen.
+#
+# Releases are tagged `cron/vX.Y.Z`, matching the API's `api/v*`. A bare `vX.Y.Z`
+# would be ambiguous in a repository holding several independently deployable
+# systems.
+#
+# Merges publish a MUTABLE `main` tag; releases publish IMMUTABLE semver and
+# `latest`. Deploy the digest.
+#
+# The owner is parameterized so a fork can exercise this end to end against its
+# own namespace. GHCR namespaces must be lowercase and `repository_owner`
+# preserves the account's casing, so it is lowercased before use.
+#
+# NOT PUBLISHED HERE: `scorecard-webhook-releasetest`, which
+# `cron/k8s/webhook.release.yaml` refers to. Every other release-test workload
+# reuses its normal image under a `-releasetest` *deployment* name -- controller
+# and worker both do -- so that reference is inconsistent with its neighbours and
+# nothing in this repository has ever built it. Correcting the manifest means
+# editing a frozen tree, so it is left alone and recorded in
+# `openspec/changes/migrate-batch-pipeline/tasks.md` instead of being papered
+# over by minting an image to match it.
+
+name: publish-cron-images
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'cron/v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Extra tag to apply (e.g. staging). The digest and SHA tag are always published.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: scorecard-batch-controller
+            dockerfile: cron/internal/controller/Dockerfile
+          - image: scorecard-batch-worker
+            dockerfile: cron/internal/worker/Dockerfile
+          - image: scorecard-cii-worker
+            dockerfile: cron/internal/cii/Dockerfile
+          # BigQuery, which the cloud-agnostic rules exclude and which has no
+          # equivalent in the destination. Published so the set is complete and
+          # nothing is dropped silently; its future is an open question recorded
+          # against the migration, not an oversight here.
+          - image: scorecard-bq-transfer
+            dockerfile: cron/internal/bq/Dockerfile
+          - image: scorecard-webhook
+            dockerfile: cron/internal/webhook/Dockerfile
+          - image: scorecard-github-server
+            dockerfile: cron/internal/githubserver/Dockerfile
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+      - name: Clone the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `cron/v1.2.3` -> `1.2.3`. The commit SHA is always published alongside,
+      # so a merge or a dispatch with no tag input still yields something
+      # immutable to pin.
+      - name: Derive tags
+        id: tags
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          EXTRA_TAG: ${{ inputs.tag }}
+          OWNER: ${{ github.repository_owner }}
+          REGISTRY: ${{ env.REGISTRY }}
+          NAME: ${{ matrix.image }}
+        run: |
+          owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          image="${REGISTRY}/${owner}/${NAME}"
+          tags="${image}:sha-${GITHUB_SHA}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#cron/v}"
+            tags="${tags},${image}:${version},${image}:latest"
+          else
+            # Branch build. Only `main` reaches here, per the trigger.
+            tags="${tags},${image}:${REF_NAME}"
+          fi
+          if [ -n "$EXTRA_TAG" ]; then
+            tags="${tags},${image}:${EXTRA_TAG}"
+          fi
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+          echo "Publishing: ${tags}"
+
+      # Context is the repository root because go.mod lives there, matching the
+      # Makefile's docker targets and build-images.yml.
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          provenance: true
+          sbom: true
+
+      # The digest is what a deployment should pin, not any of the tags above.
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE: ${{ steps.tags.outputs.image }}
+        run: |
+          {
+            echo "### \`${IMAGE}\` published"
+            echo
+            echo '```'
+            echo "${IMAGE}@${DIGEST}"
+            echo '```'
+            echo
+            echo "Deploy the digest, not a tag: tags move, digests do not."
+          } >> "$GITHUB_STEP_SUMMARY"

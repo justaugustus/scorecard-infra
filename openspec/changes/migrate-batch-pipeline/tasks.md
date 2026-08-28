@@ -188,6 +188,32 @@ for at least one full scan cycle** (**C10**).
       manifests consume `:stable`. A staging path needs a registry destination
       chosen (separate project? `gcr.io/openssf/staging-*`?) before
       `cron/cloudbuild/*.yaml` can be varied for it. Deliberately not invented here.
+      **Resolved for the destination registry (2026-08-28):**
+      `.github/workflows/publish-cron-images.yml` publishes all six to
+      `ghcr.io/<owner>/scorecard-*`, keeping the names Cloud Build already
+      produces so the `cron/k8s/*.yaml` edit stays a registry prefix rather than
+      a rename — which is what the freeze requires. Merges publish a mutable
+      `main` tag, `cron/v*` publishes immutable semver and `latest`, and the
+      owner is parameterized so a fork can exercise it against its own
+      namespace. This does not close 4.4: `:stable`, which the manifests
+      actually consume, is still nobody's decision, and GHCR does not answer the
+      question of what promotes an image to it.
+- [ ] 4.4a **Anomaly: `cron/k8s/webhook.release.yaml` names an image nothing
+      builds.** It refers to `scorecard-webhook-releasetest`, while every other
+      release-test workload reuses its normal image under a `-releasetest`
+      *deployment* name — `controller.release.yaml` and `worker.release.yaml`
+      both run `scorecard-batch-controller:latest` and
+      `scorecard-batch-worker:latest` against different topics, buckets, and the
+      `gitlab-projects-releasetest.csv` project list. So the webhook reference is
+      inconsistent with its neighbours, and no Makefile target, Cloud Build
+      config, or CI job in this repository has ever produced that image.
+      **Deliberately not resolved either way.** Publishing a seventh image would
+      mint an artifact to match what is probably a mistake; correcting the
+      manifest edits a frozen tree. Left for when the freeze lifts, recorded so
+      it is a known gap rather than something rediscovered as a broken deploy.
+      Whether that release-test environment still runs at all is worth
+      establishing first — a manifest referencing an unbuildable image suggests
+      it may not.
 - [ ] 4.5 Diff each staging-built image against its production equivalent to
       confirm the split introduced no behavioral change. Depends on 4.4.
 - [x] 4.6 **Measured from PR #27's runs. The presubmit path did not slow down.**
