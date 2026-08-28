@@ -14,8 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Verifies that the new nameservers serve the same zone as the old ones, before
-# delegation is changed (task 6.3d).
+# Verifies that the new nameservers serve the same zone the old ones did
+# (task 6.3d). Written as a pre-delegation gate; delegation was changed on
+# 2026-08-28, so it now runs as an after-the-fact check. While the old
+# nameservers still answer, the comparison is still worth having.
 #
 #   ./dnsdiff.sh [--list] [capture-dir]
 #
@@ -52,7 +54,21 @@ set -uo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 OLD_NS="${OLD_NS:-ns-cloud-b1.googledomains.com}"
-NEW_NS="${NEW_NS:-dns1.p01.nsone.net}"
+
+# The new nameserver is PER ZONE. Netlify DNS assigns each zone its own NS1
+# pool, and the two zones did not get the same one: scorecard.dev is on p01,
+# securityscorecards.dev on p09. Asking p01 about securityscorecards.dev
+# returns nothing, because it is not authoritative for it -- and this script
+# treats an empty answer as a dropped record, so a single NEW_NS would fail
+# every record of the second zone and look like a catastrophe rather than a
+# misdirected query. Override with NEW_NS to force one server for all zones.
+new_ns_for() {
+  case "$1" in
+    *securityscorecards.dev*) echo "dns1.p09.nsone.net" ;;
+    *scorecard.dev*)          echo "dns1.p01.nsone.net" ;;
+    *)                        echo "" ;;
+  esac
+}
 
 LIST_ONLY=0
 if [ "${1:-}" = "--list" ]; then LIST_ONLY=1; shift; fi
@@ -129,19 +145,31 @@ norm() { tr ' ' '\n' | tr -d '"' | tr '[:upper:]' '[:lower:]' | sed '/^$/d' | so
 MATCH=0; MISMATCH=0; MISSING=0; EXPECTED_DIFF=0; DRIFT=0
 
 echo "=========================================================="
-echo " Pre-delegation DNS diff"
+echo " Post-delegation DNS check"
 echo " capture: ${CAPTURE}"
 echo " OLD NS:  ${OLD_NS}"
-echo " NEW NS:  ${NEW_NS}"
+if [ -n "${NEW_NS:-}" ]; then
+  echo " NEW NS:  ${NEW_NS} (forced for every zone)"
+else
+  echo " NEW NS:  per zone -- scorecard.dev p01, securityscorecards.dev p09"
+fi
 echo "=========================================================="
 echo
 
 while IFS="$(printf '\t')" read -r NAME TYPE WANT; do
   [ -n "${NAME}" ] || continue
 
+  TARGET_NS="${NEW_NS:-$(new_ns_for "${NAME}")}"
+  if [ -z "${TARGET_NS}" ]; then
+    MISMATCH=$((MISMATCH + 1))
+    echo "❌ [NO SERVER] ${NAME} (${TYPE}) -- no nameserver mapped for this zone"
+    echo "      add it to new_ns_for(), or set NEW_NS to force one"
+    continue
+  fi
+
   WANT_N="$(printf '%s' "${WANT}" | norm)"
   OLD_N="$(dig @"${OLD_NS}" "${NAME}" "${TYPE}" +short +time=2 +tries=2 2>/dev/null | norm)"
-  NEW_N="$(dig @"${NEW_NS}" "${NAME}" "${TYPE}" +short +time=2 +tries=2 2>/dev/null | norm)"
+  NEW_N="$(dig @"${TARGET_NS}" "${NAME}" "${TYPE}" +short +time=2 +tries=2 2>/dev/null | norm)"
 
   # The delegation itself.
   if [ "${TYPE}" = "NS" ]; then
@@ -156,7 +184,7 @@ while IFS="$(printf '\t')" read -r NAME TYPE WANT; do
   # have the record. Empty is never a pass.
   if [ -z "${NEW_N}" ]; then
     MISSING=$((MISSING + 1))
-    echo "❌ [MISSING]  ${NAME} (${TYPE}) -- absent from ${NEW_NS}"
+    echo "❌ [MISSING]  ${NAME} (${TYPE}) -- absent from ${TARGET_NS}"
     echo "      expected: $(echo "${WANT_N}" | tr '\n' ' ')"
     continue
   fi
@@ -196,5 +224,5 @@ if [ $((MISMATCH + MISSING)) -gt 0 ]; then
   echo "=========================================================="
   exit 1
 fi
-echo "🎉 Every captured record is served correctly by ${NEW_NS}."
+echo "🎉 Every captured record is served correctly by the new nameservers."
 echo "=========================================================="
