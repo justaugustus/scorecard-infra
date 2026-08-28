@@ -415,13 +415,31 @@ selected the wrong thing.
       anything subtler.
       `openssf` carries a `gitcache` namespace alongside `default`, which is
       the scanning side's own workload rather than anything GKE created.
-      **Still open, because the capture is not the goal.** 87 objects is not
-      the same statement as "the GitHub App credential is among them", and most
-      of that count is cluster-bound service-account tokens that are not worth
-      moving. Read the non-service-account rows of `INDEX.tsv`, confirm the App
-      credential is actually there, and move what matters into a real secret
-      store — the capture directory is a staging area with a shutdown clock on
-      it, not a destination. Close this task on that, not on the run.
+      **The whole haul is six secrets.** 87 objects, and everything else is
+      cluster-bound service-account tokens not worth moving — which is why the
+      index exists and why the count on its own means nothing. In the `openssf`
+      cluster's `default` namespace: `github` (`app_id`, `app_key`,
+      `installation_id`, `token`), `gitlab` (`auth_token`), and `fastly`
+      (`purge_token`). The `criticality-score` cluster holds its own `github`
+      of the same shape plus `enumerate-github-auth` and `github-staging`.
+      **The GitHub App credential this task was written for is captured**, key
+      material included. That part is done.
+      Two things nobody had on a list:
+      * **A GitLab token.** Scorecard scans GitLab, and that credential has to
+        exist in the new environment too. It appears in no sync note, no
+        action item, and nowhere else in this change.
+      * **The Fastly purge token exists twice** — here, and in Secret Manager
+        as `fastly_purge_token`, which is what the API reads. Two copies of one
+        credential means a rotation that updates one and not the other leaves
+        half the system purging with a dead token, silently, because a failed
+        purge looks exactly like a cache that has not expired yet. Worth
+        collapsing to one during the move rather than faithfully reproducing
+        the duplication.
+      **Still open on the follow-through, not the capture.** Move these into a
+      real secret store and delete the directory; it is a staging area with a
+      shutdown clock on it, not a destination. Re-issue rather than transplant
+      wherever the issuer makes that cheap — the App key can be rotated, and
+      `criticality-score`'s three belong to whoever owns that service.
       **Credentials held outside the project are a re-issue task, not a capture
       task.** GitHub organization and repository Actions secrets cannot be read
       back through any API. If any of the App credentials live there, they have
