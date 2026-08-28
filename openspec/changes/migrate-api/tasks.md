@@ -655,14 +655,25 @@ selected the wrong thing.
       Explicitly *not* the `[TYPE CHANGED]` classifier that was drafted first:
       resolving `A`/`AAAA` to excuse an absent CNAME would have marked the
       broken hostname benign.
-- [ ] 6.3g **Re-run `capture-fastly.sh`; its output is gone.** The 23-section
-      capture from 2026-08-25 is not on disk, and being gitignored it is not
-      recoverable from the repository. 6.3c cites `services.json` from it as
-      where the service identifiers live, so that pointer currently resolves to
-      nothing — and the capture is the rollback source for backend `Host 1`, the
-      single field the cutover changes. Needs a read-scoped `FASTLY_API_TOKEN`;
-      the API's purge token will 403. Cheap to redo and expensive to be without
-      at the moment a rollback is wanted.
+- [x] 6.3g **Re-ran `capture-fastly.sh` (2026-08-28); the earlier output had
+      been lost.** The 2026-08-25 capture was not on disk and, being gitignored,
+      was not recoverable from the repository either — while 6.3c cites its
+      `services.json` as where the service identifiers live and treats it as the
+      rollback source for backend `Host 1`. Redone clean, 23 of 23 sections.
+      Two things it settles:
+      * **The rollback target is unchanged.** Production's `Host 1` still points
+        at the `scorecard-endpoints-prod` Cloud Run URL, matching the request
+        path in 6.3c. The one field the cutover changes is captured again.
+      * **The account has a third service, and it is nothing.** "Unnamed
+        Service", created 2026-05-15, has no domains, no backends, one version,
+        and was never activated. It cannot carry traffic. Recorded only so the
+        next reader of `services.json` does not have to re-derive that — 6.3c's
+        two-service topology was never wrong.
+      One incidental confirmation for 6.3a: Fastly's own domain descriptions
+      call `api.scorecard.dev` "the production API domain" and
+      `api.securityscorecards.dev` "the old domain". So the single purge that
+      `post_results.go` issues covers the *canonical* hostname and strands the
+      legacy one, which is the less bad way round for that defect to fall.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.
