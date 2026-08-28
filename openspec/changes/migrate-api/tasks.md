@@ -353,6 +353,44 @@ selected the wrong thing.
         rather than fixed a third time**: the DNS capture proved no domain
         mapping is in the request path (6.3c), so there was nothing to capture.
         Two wrong invocations were two more than the question deserved.
+- [ ] 6.0a **Gap: the capture never looked at Kubernetes, and that is where the
+      credentials are.** `capture-config.sh` enumerates Cloud Run, Cloud Build,
+      Endpoints, DNS, IAM, buckets, and Secret Manager. It has no GKE section.
+      Secret Manager in this project holds exactly **one** entry,
+      `fastly_purge_token` — which reads as a complete answer until you notice
+      the scanning side authenticates to GitHub as an App, and that credential
+      is not there. It is a Kubernetes Secret inside a cluster in the same
+      project. The earlier capture was not wrong; it was looking at a different
+      layer, and "18 of 19 sections" described coverage of the layer it knew
+      about.
+      Follow-on: `scripts/cutover/capture-gke.sh` walks every cluster in the
+      project and, per namespace, captures Secrets, ConfigMaps, and workload
+      manifests, with an `INDEX.tsv` inventory across all of them.
+      **This one writes credential values to disk, unlike its two siblings** —
+      `capture-config.sh` redacts anything resembling a secret, which is exactly
+      backwards here, because a credential that cannot be replayed into the new
+      environment has not been migrated. So the output directory is mode 0700,
+      the run sets `umask 077`, and the summary says to move the contents into a
+      real secret store and delete it. Base64 is an encoding, not encryption.
+      Where re-issuing is cheap it beats transplanting: the point of capturing a
+      GitHub App private key is that a rotation delay does not become an outage,
+      not that rotation can be skipped.
+      Two deliberate choices: **nothing is filtered** — service-account token
+      Secrets are cluster-bound and worthless post-shutdown, but they are
+      captured and flagged in the index rather than dropped, because omitting
+      rows from an unrepeatable capture is the more expensive mistake — and it
+      uses a scratch `KUBECONFIG` rather than letting `get-credentials` rewrite
+      the operator's `~/.kube/config` and switch their current context.
+      **Not yet run.** Verified only as far as a credential-less environment
+      allows: it parses under bash 3.2, and it fails fast on both prerequisites,
+      which is how the second one was found — `gke-gcloud-auth-plugin` was not
+      installed, and without it `kubectl` cannot reach GKE at all while naming
+      neither the plugin nor the fix.
+      **Credentials held outside the project are a re-issue task, not a capture
+      task.** GitHub organization and repository Actions secrets cannot be read
+      back through any API. If any of the App credentials live there, they have
+      to be minted fresh in the new environment, and that wants deciding before
+      the cutover window rather than inside it.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
