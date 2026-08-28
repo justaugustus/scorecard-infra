@@ -435,11 +435,26 @@ selected the wrong thing.
         purge looks exactly like a cache that has not expired yet. Worth
         collapsing to one during the move rather than faithfully reproducing
         the duplication.
-      **Still open on the follow-through, not the capture.** Move these into a
-      real secret store and delete the directory; it is a staging area with a
-      shutdown clock on it, not a destination. Re-issue rather than transplant
-      wherever the issuer makes that cheap — the App key can be rotated, and
-      `criticality-score`'s three belong to whoever owns that service.
+      **Still open on the follow-through, not the capture.** Decided
+      2026-08-28: the destination is **AWS Secrets Manager in the new account**,
+      co-located with what consumes them, which means an IAM policy and a naming
+      scheme that do not exist yet — real work rather than a paste. Delete the
+      capture directory once they land; it is a staging area with a shutdown
+      clock, not a destination. Re-issue rather than transplant wherever the
+      issuer makes that cheap.
+      Three decisions on specific credentials:
+      * **The GitLab token is required, not an inventory curiosity.** Scorecard
+        scans GitLab, so if `auth_token` does not exist in the new environment
+        that scanning stops — quietly, since nothing else reports it.
+      * **Collapse the Fastly purge token to one secret**, rather than
+        reproducing the Secret Manager/cluster duplication. Deliberately *not*
+        lift-and-shift here: the duplication's failure mode is invisible, since
+        a purge with a dead token is indistinguishable from a cache that has not
+        expired, and it compounds 6.3a where purging is already the defect.
+      * **`criticality-score`'s three credentials are out of scope and need an
+        owner.** That cluster is a different OpenSSF hosted service dying on the
+        same account. Flagged here so it is visible rather than assumed handled;
+        nobody in the cutover thread has claimed it.
       **Credentials held outside the project are a re-issue task, not a capture
       task.** GitHub organization and repository Actions secrets cannot be read
       back through any API. If any of the App credentials live there, they have
@@ -448,6 +463,37 @@ selected the wrong thing.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
+- [ ] 6.2a **Decided (2026-08-28): AWS becomes the staging origin first, and the
+      staging flip *is* the rehearsal.** Rather than deploy a parallel
+      non-production revision, stand the new infrastructure up on AWS and point
+      the **Fastly staging service's** backend at it. `api-staging.scorecard.dev`
+      and `api-staging.securityscorecards.dev` then exercise the AWS stack end
+      to end, through the same CDN path production uses, before production's
+      backend is touched. This supersedes 6.1/6.2's Cloud-Run shape, which
+      assumed the destination was another GCP revision.
+      Why it is better than what it replaces: the staging flip is the identical
+      operation to the production flip — one backend field, same rollback — so
+      the rehearsal and the event share a procedure rather than merely
+      resembling each other.
+      Three things it does not give for free, none blocking:
+      * **Staging has no ESPv2 gateway and production does** (6.3c). So a clean
+        staging run does not exercise the gateway layer. If production keeps the
+        gateway after cutover, the rehearsal is missing a hop; if production
+        drops it, then dropping it is a *second* variable changing at the same
+        moment as the origin. Decide which before 6.4, not during it.
+      * **Repointing staging spends the existing control.** `scorecard-api-
+        staging` on GCP is currently what staging serves; once the backend
+        moves, there is no longer a GCP staging to compare against. Capture
+        whatever baseline is wanted from it first.
+      * **The staging hostnames are edge-cached** with the same year-long
+        `Surrogate-Control` as production. A test that does not purge or
+        cache-bust measures the edge, not the new origin.
+- [ ] 6.2b **Gate (decided 2026-08-28): staging conformance on AWS.** The
+      production flip waits on `scripts/api-conformance/conformance.sh` running
+      clean against the AWS-backed staging endpoint. Stephen calls it, and
+      expects the criteria to move as the remaining steps land — so this is the
+      standing gate, not a frozen checklist. 0.8's approvals are still
+      unrecorded and are a separate question from this one.
 - [ ] 6.3 Run the response diff against production (**W11**, step 3).
       **Harness built and exercised against production:**
       `scripts/api-conformance/` — 20 requests covering the two-bucket read
@@ -694,14 +740,12 @@ selected the wrong thing.
       Fix is a Netlify site setting — add `www.securityscorecards.dev` as a
       domain alias and the certificate provisions itself. Not a DNS change, and
       not something the record diff could ever have surfaced.
-      **Whether this predates the delegation is undetermined and decides
-      whether it belongs in the cutover notice.** Netlify's certificate coverage
-      follows the site's configured domains, which a nameserver change does not
-      touch — that argues pre-existing. Do not settle it by argument: certificate
-      transparency has the answer, and nothing ever issued for the name means it
-      was already broken, while a certificate that lapsed within a day or two of
-      2026-08-28 means the migration broke it and owes users a line in the
-      notice.
+      **Determined (2026-08-28): pre-existing, so it stays out of the cutover
+      notice.** No certificate ever covered the name; the delegation did not
+      break it and the notice must not imply otherwise. Fix it as ordinary
+      maintenance. The distinction was worth spending a query on rather than
+      assuming either way — announcing a self-inflicted regression that was not
+      one costs credibility exactly when the migration needs it.
 - [ ] 6.3f **Give `dnsdiff.sh` an HTTPS probe for web-facing names.** Record
       comparison is sound for `api.*` and `_acme-challenge` and unsound for
       anything terminating TLS, per the reasoning in 6.3d. 6.3e is a working
@@ -730,6 +774,15 @@ selected the wrong thing.
       legacy one, which is the less bad way round for that defect to fall.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
+      **Requirement (decided 2026-08-28): the new backend is a hostname that
+      terminates TLS with a certificate Fastly can verify** — not a bare EC2
+      address. Today's backend is the Endpoints gateway's Cloud Run hostname,
+      which gives origin TLS verification and SNI for nothing. Pointing at an IP
+      instead means setting SNI and `override_host` by hand and either finding a
+      certificate valid for an IP or disabling origin verification, which is a
+      security-posture change riding along inside a migration whose whole claim
+      is that behavior did not change. Keeping it a hostname also keeps the flip
+      a one-field edit in both directions.
 - [ ] 6.5 Notify the Scorecard community before this cutover.
 - [ ] 6.6 Confirm a Scorecard Action upload completes end to end through the
       `POST` path — a broken publish path is silent, unlike a broken read.
