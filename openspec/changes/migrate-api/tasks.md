@@ -407,7 +407,21 @@ selected the wrong thing.
       the inventory rather than after — twenty `ok` lines above one `FAILED`
       reads as success — and the script exits nonzero, so "the capture ran" and
       "the capture is complete" cannot be confused by anything checking status.
-      Re-running it now reports why `openssf` is unreachable.
+      **Second run (2026-08-28) got both clusters: 87 objects.** The cause was
+      the VPN — the GKE control plane is not reachable through it. Worth
+      writing down because it is the second tool in this task list to fail that
+      way and the failure looks nothing like a network problem from inside: the
+      DNS check needed the VPN off too. Try disconnecting before diagnosing
+      anything subtler.
+      `openssf` carries a `gitcache` namespace alongside `default`, which is
+      the scanning side's own workload rather than anything GKE created.
+      **Still open, because the capture is not the goal.** 87 objects is not
+      the same statement as "the GitHub App credential is among them", and most
+      of that count is cluster-bound service-account tokens that are not worth
+      moving. Read the non-service-account rows of `INDEX.tsv`, confirm the App
+      credential is actually there, and move what matters into a real secret
+      store — the capture directory is a staging area with a shutdown clock on
+      it, not a destination. Close this task on that, not on the run.
       **Credentials held outside the project are a re-issue task, not a capture
       task.** GitHub organization and repository Actions secrets cannot be read
       back through any API. If any of the App credentials live there, they have
