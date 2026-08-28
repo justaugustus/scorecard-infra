@@ -353,9 +353,147 @@ selected the wrong thing.
         rather than fixed a third time**: the DNS capture proved no domain
         mapping is in the request path (6.3c), so there was nothing to capture.
         Two wrong invocations were two more than the question deserved.
+- [ ] 6.0a **Gap: the capture never looked at Kubernetes, and that is where the
+      credentials are.** `capture-config.sh` enumerates Cloud Run, Cloud Build,
+      Endpoints, DNS, IAM, buckets, and Secret Manager. It has no GKE section.
+      Secret Manager in this project holds exactly **one** entry,
+      `fastly_purge_token` — which reads as a complete answer until you notice
+      the scanning side authenticates to GitHub as an App, and that credential
+      is not there. It is a Kubernetes Secret inside a cluster in the same
+      project. The earlier capture was not wrong; it was looking at a different
+      layer, and "18 of 19 sections" described coverage of the layer it knew
+      about.
+      Follow-on: `scripts/cutover/capture-gke.sh` walks every cluster in the
+      project and, per namespace, captures Secrets, ConfigMaps, and workload
+      manifests, with an `INDEX.tsv` inventory across all of them.
+      **This one writes credential values to disk, unlike its two siblings** —
+      `capture-config.sh` redacts anything resembling a secret, which is exactly
+      backwards here, because a credential that cannot be replayed into the new
+      environment has not been migrated. So the output directory is mode 0700,
+      the run sets `umask 077`, and the summary says to move the contents into a
+      real secret store and delete it. Base64 is an encoding, not encryption.
+      Where re-issuing is cheap it beats transplanting: the point of capturing a
+      GitHub App private key is that a rotation delay does not become an outage,
+      not that rotation can be skipped.
+      Two deliberate choices: **nothing is filtered** — service-account token
+      Secrets are cluster-bound and worthless post-shutdown, but they are
+      captured and flagged in the index rather than dropped, because omitting
+      rows from an unrepeatable capture is the more expensive mistake — and it
+      uses a scratch `KUBECONFIG` rather than letting `get-credentials` rewrite
+      the operator's `~/.kube/config` and switch their current context.
+      Written against a credential-less environment, where it could only be
+      shown to parse under bash 3.2 and to fail fast on both prerequisites —
+      which is how the second one surfaced: `gke-gcloud-auth-plugin` was not
+      installed, and without it `kubectl` cannot reach GKE at all while naming
+      neither the plugin nor the fix.
+      **First real run (2026-08-28) captured one cluster of two, and not the
+      one it was written for.** The project holds `criticality-score` and
+      `openssf`. `criticality-score` came back complete — 7 namespaces, 41
+      objects, mostly cluster-bound service-account tokens — and it belongs to
+      a different OpenSSF hosted service that also dies with this account, so
+      someone should own it, but it is not this change's business and holds
+      nothing the API needs.
+      **`openssf` failed at the first API call**, and that is the cluster whose
+      name matches the project and the likelier home for the GitHub App
+      credentials. So the gap this task exists to close is still open.
+      **The script threw the reason away.** `kubectl get namespaces` ran with
+      stderr redirected to `/dev/null`, so the run reported "could not list
+      namespaces" and nothing else — and a private endpoint, a missing RBAC
+      binding, and a stopped cluster are three different problems with three
+      different fixes. The same mistake as discarding `dig`'s diagnostics in
+      6.3d, in a different script: the error text *is* the finding.
+      Fixed, and two related things with it. The failure is now reported with
+      its message, an `INCOMPLETE` block names every uncaptured cluster *before*
+      the inventory rather than after — twenty `ok` lines above one `FAILED`
+      reads as success — and the script exits nonzero, so "the capture ran" and
+      "the capture is complete" cannot be confused by anything checking status.
+      **Second run (2026-08-28) got both clusters: 87 objects.** The cause was
+      the VPN — the GKE control plane is not reachable through it. Worth
+      writing down because it is the second tool in this task list to fail that
+      way and the failure looks nothing like a network problem from inside: the
+      DNS check needed the VPN off too. Try disconnecting before diagnosing
+      anything subtler.
+      `openssf` carries a `gitcache` namespace alongside `default`, which is
+      the scanning side's own workload rather than anything GKE created.
+      **The whole haul is six secrets.** 87 objects, and everything else is
+      cluster-bound service-account tokens not worth moving — which is why the
+      index exists and why the count on its own means nothing. In the `openssf`
+      cluster's `default` namespace: `github` (`app_id`, `app_key`,
+      `installation_id`, `token`), `gitlab` (`auth_token`), and `fastly`
+      (`purge_token`). The `criticality-score` cluster holds its own `github`
+      of the same shape plus `enumerate-github-auth` and `github-staging`.
+      **The GitHub App credential this task was written for is captured**, key
+      material included. That part is done.
+      Two things nobody had on a list:
+      * **A GitLab token.** Scorecard scans GitLab, and that credential has to
+        exist in the new environment too. It appears in no sync note, no
+        action item, and nowhere else in this change.
+      * **The Fastly purge token exists twice** — here, and in Secret Manager
+        as `fastly_purge_token`, which is what the API reads. Two copies of one
+        credential means a rotation that updates one and not the other leaves
+        half the system purging with a dead token, silently, because a failed
+        purge looks exactly like a cache that has not expired yet. Worth
+        collapsing to one during the move rather than faithfully reproducing
+        the duplication.
+      **Still open on the follow-through, not the capture.** Decided
+      2026-08-28: the destination is **AWS Secrets Manager in the new account**,
+      co-located with what consumes them, which means an IAM policy and a naming
+      scheme that do not exist yet — real work rather than a paste. Delete the
+      capture directory once they land; it is a staging area with a shutdown
+      clock, not a destination. Re-issue rather than transplant wherever the
+      issuer makes that cheap.
+      Three decisions on specific credentials:
+      * **The GitLab token is required, not an inventory curiosity.** Scorecard
+        scans GitLab, so if `auth_token` does not exist in the new environment
+        that scanning stops — quietly, since nothing else reports it.
+      * **Collapse the Fastly purge token to one secret**, rather than
+        reproducing the Secret Manager/cluster duplication. Deliberately *not*
+        lift-and-shift here: the duplication's failure mode is invisible, since
+        a purge with a dead token is indistinguishable from a cache that has not
+        expired, and it compounds 6.3a where purging is already the defect.
+      * **`criticality-score`'s three credentials are out of scope and need an
+        owner.** That cluster is a different OpenSSF hosted service dying on the
+        same account. Flagged here so it is visible rather than assumed handled;
+        nobody in the cutover thread has claimed it.
+      **Credentials held outside the project are a re-issue task, not a capture
+      task.** GitHub organization and repository Actions secrets cannot be read
+      back through any API. If any of the App credentials live there, they have
+      to be minted fresh in the new environment, and that wants deciding before
+      the cutover window rather than inside it.
 - [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
       production service consumes.
 - [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
+- [ ] 6.2a **Decided (2026-08-28): AWS becomes the staging origin first, and the
+      staging flip *is* the rehearsal.** Rather than deploy a parallel
+      non-production revision, stand the new infrastructure up on AWS and point
+      the **Fastly staging service's** backend at it. `api-staging.scorecard.dev`
+      and `api-staging.securityscorecards.dev` then exercise the AWS stack end
+      to end, through the same CDN path production uses, before production's
+      backend is touched. This supersedes 6.1/6.2's Cloud-Run shape, which
+      assumed the destination was another GCP revision.
+      Why it is better than what it replaces: the staging flip is the identical
+      operation to the production flip — one backend field, same rollback — so
+      the rehearsal and the event share a procedure rather than merely
+      resembling each other.
+      Three things it does not give for free, none blocking:
+      * **Staging has no ESPv2 gateway and production does** (6.3c). So a clean
+        staging run does not exercise the gateway layer. If production keeps the
+        gateway after cutover, the rehearsal is missing a hop; if production
+        drops it, then dropping it is a *second* variable changing at the same
+        moment as the origin. Decide which before 6.4, not during it.
+      * **Repointing staging spends the existing control.** `scorecard-api-
+        staging` on GCP is currently what staging serves; once the backend
+        moves, there is no longer a GCP staging to compare against. Capture
+        whatever baseline is wanted from it first.
+      * **The staging hostnames are edge-cached** with the same year-long
+        `Surrogate-Control` as production. A test that does not purge or
+        cache-bust measures the edge, not the new origin.
+- [ ] 6.2b **Gate (decided 2026-08-28): staging conformance on AWS.** The
+      production flip waits on `scripts/api-conformance/conformance.sh` running
+      clean against the AWS-backed staging endpoint. Stephen calls it, and
+      expects the criteria to move as the remaining steps land — so this is the
+      standing gate, not a frozen checklist. 0.8's approvals are still
+      unrecorded and are a separate question from this one.
 - [ ] 6.3 Run the response diff against production (**W11**, step 3).
       **Harness built and exercised against production:**
       `scripts/api-conformance/` — 20 requests covering the two-bucket read
@@ -465,8 +603,186 @@ selected the wrong thing.
         watching one from a repository on a *supported* runner and, if one can be
         found, one on an EOL runner to confirm the rejection is the clean 400
         rather than a 500.
+- [ ] 6.3d **Decided (2026-08-28): the nameserver move is a second switch, and
+      it does not run with the cutover.** 6.3c established that the cutover is
+      one Fastly backend field. Separately, the zones themselves are hosted in
+      **Cloud DNS**, which is a GCP service and therefore dies with the account.
+      Both are true, they were being scheduled into the same window, and they
+      have opposite reversibility:
+      * **The Fastly flip rolls back in seconds** — restore the backend, no
+        propagation, no third party.
+      * **A delegation change rolls back on the registry's timetable.** It is a
+        parent-zone change made through the registrar, so backing it out is not
+        ours to schedule. 6.3c's "rollback is faster than assumed" finding
+        covers the backend flip and must not be read as covering this.
+      So the API cutover proceeds with **no DNS change at all** — both hostnames
+      keep resolving to Fastly exactly as they do today — and the delegation
+      move is sequenced against the account shutdown, which is its actual
+      deadline, rather than against the cutover, which is not.
+      What the delegation move needs, none of it blocking the cutover:
+      * **The zones are small enough to port by hand: 17 records across two
+        zones**, both captured (`dns-records-scorecard.json`,
+        `dns-records-scorecard-existing.json`). That capture is the rebuild
+        source; there is no export step still owed.
+      * **The four `_acme-challenge` CNAMEs to `*.fastly-validations.com` are
+        the ones that fail silently.** One per API hostname, prod and staging.
+        Drop them and nothing breaks at cutover — Fastly TLS renewal breaks
+        weeks later, long after anyone would connect it to the migration. They
+        are the records most likely to be missed precisely because nothing
+        immediately depends on them.
+      * **The website is already on Netlify** and is not part of this: both
+        apexes are `A 75.2.60.5` and both `www` are CNAMEs to
+        `ossf-scorecard.netlify.app`. Only zone *hosting* is in GCP.
+      * Access is not ours today. The domains are LF-registered and the
+        delegation is changed through LF IT (ticket **IT-30079**), so the lead
+        time is a third party's, which is the other reason not to couple it to
+        a cutover window.
+      * The registrar also holds `scorecards.dev`, `openssfscorecard.dev`, and
+        `openssfscorecards.dev`, which were not on this change's inventory. The
+        last two are said to redirect to `securityscorecards.dev`. Confirm what
+        serves them before assuming the two captured zones are the whole story.
+      **`nsone.net` *is* Netlify DNS.** Netlify's managed DNS runs on NS1
+      infrastructure, so `dns*.pNN.nsone.net` is what IT-30079 asked for and
+      what it got. Recorded because the opposite was briefly concluded from the
+      hostname alone: an unfamiliar provider name in a delegation is not
+      evidence that the wrong provider was used, and reading it that way
+      manufactured a website outage that was never there.
+      **Each zone gets its own nameserver pool, and they differ.**
+      `scorecard.dev` is delegated to the **p01** set and
+      `securityscorecards.dev` to the **p09** set. A checker with one
+      `NEW_NS` therefore asks a server that is not authoritative for the other
+      zone and gets nothing back — which, in a tool that treats an empty answer
+      as a dropped record, is a false failure across every record of the second
+      zone. The per-zone mapping is not a detail; it is the difference between
+      the second zone reading as catastrophic and reading as fine.
+      **Delegation was changed on 2026-08-28**, propagating over a few hours to
+      24. Every check below is now post-delegation verification rather than a
+      pre-flight gate, and 6.3c's "flip the Fastly backend back" remains the
+      only fast rollback in the system.
+      **First diff against the new nameservers (2026-08-28) covered one domain
+      of two.** Seven mismatches were reported on `scorecard.dev`. Two of the
+      three underlying facts are not findings:
+      * **The apex and `www` addresses are most likely Netlify's own.** They
+        move off `75.2.60.5` — the single apex address Netlify documents for
+        *external* DNS — to a pair of addresses served by Netlify DNS itself,
+        and `www` moves from a CNAME to those same two, which is what ALIAS
+        flattening looks like. So this is probably correct-by-construction
+        rather than broken. **Verify it by fetching the site, not by diffing
+        records**: a record comparison across a provider change cannot
+        distinguish "reconfigured" from "equivalent", and this one was read as
+        the former on no evidence.
+      * **`NS` is not a discrepancy; it is the migration.** Old and new
+        nameservers must disagree about NS during a delegation move. Counting
+        it as a mismatch inflates the total and teaches people to skim.
+      * **`www` was one difference reported five times.** An authoritative
+        server returns the CNAME for any query type, so A/AAAA/TXT/NS at a
+        CNAME name all echo the CNAME rather than revealing four more records.
+      * **Every `api.*` and `api-staging.*` record matched** — the result the
+        decoupling above predicts. The API rides a CNAME to Fastly and is
+        indifferent to which nameserver serves it, so the delegation move
+        touches the website and leaves the API alone.
+      **The second run verified nothing either, and claimed the opposite.**
+      Re-run after the per-zone fix, it reported 13 mismatches whose "new"
+      values were fragments of `dig`'s own error text. `dig +short` writes
+      "no servers could be reached" to *stdout*, so redirecting stderr does not
+      suppress it, and piping it into the comparison turns an unreachable
+      resolver into thirteen content differences. Fixed by checking the exit
+      status, dropping `;` lines, and classifying an unanswered query as
+      `[UNREACHABLE]` with its own exit code: a run that could not ask is not a
+      run that found nothing. A preflight reports that once rather than once
+      per record.
+      **`securityscorecards.dev` went unverified for the first two runs**: 6 of
+      the 15 records, including `api.securityscorecards.dev`, the hostname 6.3a
+      already flags as serving staler data than its sibling. The first diff
+      queried `securityscorecard.dev` — singular, not a zone — so every lookup
+      returned empty from both nameservers, and a skip-when-neither-has-a-record
+      guard reported that silence as a clean section with no rows. Corrected by
+      deriving the check list from the capture's `dns-records-*.json` instead of
+      a hand-written list: a name can now only be missed by being absent from
+      the capture, and an empty answer where the capture has a record is a hard
+      failure rather than a skipped row.
+      **Third run (2026-08-28), off the VPN, is the valid one — and the API
+      side is clean.** All eight `api.*` and `api-staging.*` CNAMEs to Fastly
+      matched on **both** zones, as did all four `_acme-challenge` CNAMEs and
+      the apex `TXT`. The `NS` rows confirmed the p01/p09 split. Nothing the
+      cutover depends on was disturbed by the delegation, and the TLS-renewal
+      records flagged above as the silent-failure class came through intact.
+      **Its four remaining rows were three checker artifacts and one real
+      outage** (6.3e). The apex `A` "mismatch" on both zones is ALIAS
+      flattening: the answer varies between queries — a run an hour earlier
+      returned a different pair, in a different AWS region — so comparing it
+      against the single captured address can never clear, and `75.2.60.5` is
+      the address Netlify documents for zones hosted *elsewhere*.
+      `www.scorecard.dev` reported `[MISSING]` only because the check queries
+      the record *type* the capture held; CNAME became ALIAS, and the name
+      serves a 301 to the apex.
+      **The lesson is that record comparison cannot verify a name that
+      terminates TLS.** The two `www` rows were byte-identical at the record
+      layer — same captured CNAME, same absence, same verdict — and one of them
+      was down. A classifier that resolved `A`/`AAAA` and called the type change
+      benign, which is what was about to be built, would have marked both fine
+      and buried a live outage. Fetching the names is the check; the record diff
+      is only sound for `api.*` and `_acme-challenge`, where it is exactly right
+      and where it just came back clean.
+      **Still uncovered by anything we have:** records present in the *new* zone
+      but absent from the capture. The two new apex addresses are exactly that
+      class, and they surfaced only because the apex happened to appear on the
+      old hand-written list. Enumerating them needs a zone export from the
+      new provider; a diff driven by the old zone can prove nothing was dropped,
+      never that nothing was added.
+- [ ] 6.3e **`https://www.securityscorecards.dev` is serving a certificate that
+      does not cover it**, found by fetching the four web hostnames after the
+      delegation. TLS negotiates far enough to present a certificate, so the
+      name resolves and Netlify answers; the SAN list simply omits it. The apex
+      returns 200, so the certificate covers `securityscorecards.dev` and not
+      its `www`. `scorecard.dev` shows the intended shape: apex 200, `www` 301
+      to the apex, one certificate spanning both.
+      Fix is a Netlify site setting — add `www.securityscorecards.dev` as a
+      domain alias and the certificate provisions itself. Not a DNS change, and
+      not something the record diff could ever have surfaced.
+      **Determined (2026-08-28): pre-existing, so it stays out of the cutover
+      notice.** No certificate ever covered the name; the delegation did not
+      break it and the notice must not imply otherwise. Fix it as ordinary
+      maintenance. The distinction was worth spending a query on rather than
+      assuming either way — announcing a self-inflicted regression that was not
+      one costs credibility exactly when the migration needs it.
+- [ ] 6.3f **Give `dnsdiff.sh` an HTTPS probe for web-facing names.** Record
+      comparison is sound for `api.*` and `_acme-challenge` and unsound for
+      anything terminating TLS, per the reasoning in 6.3d. 6.3e is a working
+      example of a name the record layer called identical to a healthy one.
+      Explicitly *not* the `[TYPE CHANGED]` classifier that was drafted first:
+      resolving `A`/`AAAA` to excuse an absent CNAME would have marked the
+      broken hostname benign.
+- [x] 6.3g **Re-ran `capture-fastly.sh` (2026-08-28); the earlier output had
+      been lost.** The 2026-08-25 capture was not on disk and, being gitignored,
+      was not recoverable from the repository either — while 6.3c cites its
+      `services.json` as where the service identifiers live and treats it as the
+      rollback source for backend `Host 1`. Redone clean, 23 of 23 sections.
+      Two things it settles:
+      * **The rollback target is unchanged.** Production's `Host 1` still points
+        at the `scorecard-endpoints-prod` Cloud Run URL, matching the request
+        path in 6.3c. The one field the cutover changes is captured again.
+      * **The account has a third service, and it is nothing.** "Unnamed
+        Service", created 2026-05-15, has no domains, no backends, one version,
+        and was never activated. It cannot carry traffic. Recorded only so the
+        next reader of `services.json` does not have to re-derive that — 6.3c's
+        two-service topology was never wrong.
+      One incidental confirmation for 6.3a: Fastly's own domain descriptions
+      call `api.scorecard.dev` "the production API domain" and
+      `api.securityscorecards.dev` "the old domain". So the single purge that
+      `post_results.go` issues covers the *canonical* hostname and strands the
+      legacy one, which is the less bad way round for that defect to fall.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
+      **Requirement (decided 2026-08-28): the new backend is a hostname that
+      terminates TLS with a certificate Fastly can verify** — not a bare EC2
+      address. Today's backend is the Endpoints gateway's Cloud Run hostname,
+      which gives origin TLS verification and SNI for nothing. Pointing at an IP
+      instead means setting SNI and `override_host` by hand and either finding a
+      certificate valid for an IP or disabling origin verification, which is a
+      security-posture change riding along inside a migration whose whole claim
+      is that behavior did not change. Keeping it a hostname also keeps the flip
+      a one-field edit in both directions.
 - [ ] 6.5 Notify the Scorecard community before this cutover.
 - [ ] 6.6 Confirm a Scorecard Action upload completes end to end through the
       `POST` path — a broken publish path is silent, unlike a broken read.
