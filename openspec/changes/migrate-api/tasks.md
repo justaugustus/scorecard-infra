@@ -591,25 +591,78 @@ selected the wrong thing.
       `[UNREACHABLE]` with its own exit code: a run that could not ask is not a
       run that found nothing. A preflight reports that once rather than once
       per record.
-      **So the state of this check is still "unverified".** Two runs, two
-      invalid results, for two unrelated reasons — worth saying plainly,
-      because "we ran the DNS diff twice" reads like coverage and is not.
-      **`securityscorecards.dev` remains unverified**: 6 of the 15 records,
-      including `api.securityscorecards.dev`, the hostname 6.3a already flags as
-      serving staler data than its sibling. The diff queried
-      `securityscorecard.dev` — singular, not a zone — so every lookup returned
-      empty from both nameservers, and a skip-when-neither-has-a-record guard
-      reported that silence as a clean section with no rows. Corrected by
+      **`securityscorecards.dev` went unverified for the first two runs**: 6 of
+      the 15 records, including `api.securityscorecards.dev`, the hostname 6.3a
+      already flags as serving staler data than its sibling. The first diff
+      queried `securityscorecard.dev` — singular, not a zone — so every lookup
+      returned empty from both nameservers, and a skip-when-neither-has-a-record
+      guard reported that silence as a clean section with no rows. Corrected by
       deriving the check list from the capture's `dns-records-*.json` instead of
       a hand-written list: a name can now only be missed by being absent from
       the capture, and an empty answer where the capture has a record is a hard
       failure rather than a skipped row.
+      **Third run (2026-08-28), off the VPN, is the valid one — and the API
+      side is clean.** All eight `api.*` and `api-staging.*` CNAMEs to Fastly
+      matched on **both** zones, as did all four `_acme-challenge` CNAMEs and
+      the apex `TXT`. The `NS` rows confirmed the p01/p09 split. Nothing the
+      cutover depends on was disturbed by the delegation, and the TLS-renewal
+      records flagged above as the silent-failure class came through intact.
+      **Its four remaining rows were three checker artifacts and one real
+      outage** (6.3e). The apex `A` "mismatch" on both zones is ALIAS
+      flattening: the answer varies between queries — a run an hour earlier
+      returned a different pair, in a different AWS region — so comparing it
+      against the single captured address can never clear, and `75.2.60.5` is
+      the address Netlify documents for zones hosted *elsewhere*.
+      `www.scorecard.dev` reported `[MISSING]` only because the check queries
+      the record *type* the capture held; CNAME became ALIAS, and the name
+      serves a 301 to the apex.
+      **The lesson is that record comparison cannot verify a name that
+      terminates TLS.** The two `www` rows were byte-identical at the record
+      layer — same captured CNAME, same absence, same verdict — and one of them
+      was down. A classifier that resolved `A`/`AAAA` and called the type change
+      benign, which is what was about to be built, would have marked both fine
+      and buried a live outage. Fetching the names is the check; the record diff
+      is only sound for `api.*` and `_acme-challenge`, where it is exactly right
+      and where it just came back clean.
       **Still uncovered by anything we have:** records present in the *new* zone
       but absent from the capture. The two new apex addresses are exactly that
       class, and they surfaced only because the apex happened to appear on the
       old hand-written list. Enumerating them needs a zone export from the
       new provider; a diff driven by the old zone can prove nothing was dropped,
       never that nothing was added.
+- [ ] 6.3e **`https://www.securityscorecards.dev` is serving a certificate that
+      does not cover it**, found by fetching the four web hostnames after the
+      delegation. TLS negotiates far enough to present a certificate, so the
+      name resolves and Netlify answers; the SAN list simply omits it. The apex
+      returns 200, so the certificate covers `securityscorecards.dev` and not
+      its `www`. `scorecard.dev` shows the intended shape: apex 200, `www` 301
+      to the apex, one certificate spanning both.
+      Fix is a Netlify site setting — add `www.securityscorecards.dev` as a
+      domain alias and the certificate provisions itself. Not a DNS change, and
+      not something the record diff could ever have surfaced.
+      **Whether this predates the delegation is undetermined and decides
+      whether it belongs in the cutover notice.** Netlify's certificate coverage
+      follows the site's configured domains, which a nameserver change does not
+      touch — that argues pre-existing. Do not settle it by argument: certificate
+      transparency has the answer, and nothing ever issued for the name means it
+      was already broken, while a certificate that lapsed within a day or two of
+      2026-08-28 means the migration broke it and owes users a line in the
+      notice.
+- [ ] 6.3f **Give `dnsdiff.sh` an HTTPS probe for web-facing names.** Record
+      comparison is sound for `api.*` and `_acme-challenge` and unsound for
+      anything terminating TLS, per the reasoning in 6.3d. 6.3e is a working
+      example of a name the record layer called identical to a healthy one.
+      Explicitly *not* the `[TYPE CHANGED]` classifier that was drafted first:
+      resolving `A`/`AAAA` to excuse an absent CNAME would have marked the
+      broken hostname benign.
+- [ ] 6.3g **Re-run `capture-fastly.sh`; its output is gone.** The 23-section
+      capture from 2026-08-25 is not on disk, and being gitignored it is not
+      recoverable from the repository. 6.3c cites `services.json` from it as
+      where the service identifiers live, so that pointer currently resolves to
+      nothing — and the capture is the rollback source for backend `Host 1`, the
+      single field the cutover changes. Needs a read-scoped `FASTLY_API_TOKEN`;
+      the API's purge token will 403. Cheap to redo and expensive to be without
+      at the moment a rollback is wanted.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.
