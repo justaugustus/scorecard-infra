@@ -503,6 +503,100 @@ selected the wrong thing.
         watching one from a repository on a *supported* runner and, if one can be
         found, one on an EOL runner to confirm the rejection is the clean 400
         rather than a 500.
+- [ ] 6.3d **Decided (2026-08-28): the nameserver move is a second switch, and
+      it does not run with the cutover.** 6.3c established that the cutover is
+      one Fastly backend field. Separately, the zones themselves are hosted in
+      **Cloud DNS**, which is a GCP service and therefore dies with the account.
+      Both are true, they were being scheduled into the same window, and they
+      have opposite reversibility:
+      * **The Fastly flip rolls back in seconds** — restore the backend, no
+        propagation, no third party.
+      * **A delegation change rolls back on the registry's timetable.** It is a
+        parent-zone change made through the registrar, so backing it out is not
+        ours to schedule. 6.3c's "rollback is faster than assumed" finding
+        covers the backend flip and must not be read as covering this.
+      So the API cutover proceeds with **no DNS change at all** — both hostnames
+      keep resolving to Fastly exactly as they do today — and the delegation
+      move is sequenced against the account shutdown, which is its actual
+      deadline, rather than against the cutover, which is not.
+      What the delegation move needs, none of it blocking the cutover:
+      * **The zones are small enough to port by hand: 17 records across two
+        zones**, both captured (`dns-records-scorecard.json`,
+        `dns-records-scorecard-existing.json`). That capture is the rebuild
+        source; there is no export step still owed.
+      * **The four `_acme-challenge` CNAMEs to `*.fastly-validations.com` are
+        the ones that fail silently.** One per API hostname, prod and staging.
+        Drop them and nothing breaks at cutover — Fastly TLS renewal breaks
+        weeks later, long after anyone would connect it to the migration. They
+        are the records most likely to be missed precisely because nothing
+        immediately depends on them.
+      * **The website is already on Netlify** and is not part of this: both
+        apexes are `A 75.2.60.5` and both `www` are CNAMEs to
+        `ossf-scorecard.netlify.app`. Only zone *hosting* is in GCP.
+      * Access is not ours today. The domains are LF-registered and the
+        delegation is changed through LF IT (ticket **IT-30079**), so the lead
+        time is a third party's, which is the other reason not to couple it to
+        a cutover window.
+      * The registrar also holds `scorecards.dev`, `openssfscorecard.dev`, and
+        `openssfscorecards.dev`, which were not on this change's inventory. The
+        last two are said to redirect to `securityscorecards.dev`. Confirm what
+        serves them before assuming the two captured zones are the whole story.
+      **`nsone.net` *is* Netlify DNS.** Netlify's managed DNS runs on NS1
+      infrastructure, so `dns*.pNN.nsone.net` is what IT-30079 asked for and
+      what it got. Recorded because the opposite was briefly concluded from the
+      hostname alone: an unfamiliar provider name in a delegation is not
+      evidence that the wrong provider was used, and reading it that way
+      manufactured a website outage that was never there.
+      **Each zone gets its own nameserver pool, and they differ.**
+      `scorecard.dev` is delegated to the **p01** set and
+      `securityscorecards.dev` to the **p09** set. A checker with one
+      `NEW_NS` therefore asks a server that is not authoritative for the other
+      zone and gets nothing back — which, in a tool that treats an empty answer
+      as a dropped record, is a false failure across every record of the second
+      zone. The per-zone mapping is not a detail; it is the difference between
+      the second zone reading as catastrophic and reading as fine.
+      **Delegation was changed on 2026-08-28**, propagating over a few hours to
+      24. Every check below is now post-delegation verification rather than a
+      pre-flight gate, and 6.3c's "flip the Fastly backend back" remains the
+      only fast rollback in the system.
+      **First diff against the new nameservers (2026-08-28) covered one domain
+      of two.** Seven mismatches were reported on `scorecard.dev`. Two of the
+      three underlying facts are not findings:
+      * **The apex and `www` addresses are most likely Netlify's own.** They
+        move off `75.2.60.5` — the single apex address Netlify documents for
+        *external* DNS — to a pair of addresses served by Netlify DNS itself,
+        and `www` moves from a CNAME to those same two, which is what ALIAS
+        flattening looks like. So this is probably correct-by-construction
+        rather than broken. **Verify it by fetching the site, not by diffing
+        records**: a record comparison across a provider change cannot
+        distinguish "reconfigured" from "equivalent", and this one was read as
+        the former on no evidence.
+      * **`NS` is not a discrepancy; it is the migration.** Old and new
+        nameservers must disagree about NS during a delegation move. Counting
+        it as a mismatch inflates the total and teaches people to skim.
+      * **`www` was one difference reported five times.** An authoritative
+        server returns the CNAME for any query type, so A/AAAA/TXT/NS at a
+        CNAME name all echo the CNAME rather than revealing four more records.
+      * **Every `api.*` and `api-staging.*` record matched** — the result the
+        decoupling above predicts. The API rides a CNAME to Fastly and is
+        indifferent to which nameserver serves it, so the delegation move
+        touches the website and leaves the API alone.
+      **`securityscorecards.dev` remains unverified**: 6 of the 15 records,
+      including `api.securityscorecards.dev`, the hostname 6.3a already flags as
+      serving staler data than its sibling. The diff queried
+      `securityscorecard.dev` — singular, not a zone — so every lookup returned
+      empty from both nameservers, and a skip-when-neither-has-a-record guard
+      reported that silence as a clean section with no rows. Corrected by
+      deriving the check list from the capture's `dns-records-*.json` instead of
+      a hand-written list: a name can now only be missed by being absent from
+      the capture, and an empty answer where the capture has a record is a hard
+      failure rather than a skipped row.
+      **Still uncovered by anything we have:** records present in the *new* zone
+      but absent from the capture. The two new apex addresses are exactly that
+      class, and they surfaced only because the apex happened to appear on the
+      old hand-written list. Enumerating them needs a zone export from the
+      new provider; a diff driven by the old zone can prove nothing was dropped,
+      never that nothing was added.
 - [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
       `scorecard-web` OSS-Fuzz project.
 - [ ] 6.5 Notify the Scorecard community before this cutover.
