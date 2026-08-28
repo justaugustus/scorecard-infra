@@ -137,12 +137,30 @@ if [ "${LIST_ONLY}" -eq 1 ]; then
 fi
 
 # Normalize for comparison: one token per line, quotes stripped, lowercased,
-# sorted. Values containing spaces (a multi-string TXT record) would be split
-# here; none of these zones has one, and the --list output is where you would
-# notice if that changed.
-norm() { tr ' ' '\n' | tr -d '"' | tr '[:upper:]' '[:lower:]' | sed '/^$/d' | sort; }
+# sorted, `;` diagnostic lines dropped. Values containing spaces (a multi-string
+# TXT record) would be split here; none of these zones has one, and the --list
+# output is where you would notice if that changed.
+norm() {
+  grep -v '^;' | tr ' ' '\n' | tr -d '"' | tr '[:upper:]' '[:lower:]' \
+    | sed '/^$/d' | sort
+}
 
-MATCH=0; MISMATCH=0; MISSING=0; EXPECTED_DIFF=0; DRIFT=0
+# `dig +short` writes "connection timed out; no servers could be reached" to
+# STDOUT, not stderr, and still produces output when the query never happened.
+# Piping it straight into the comparison turns an unreachable resolver into a
+# content mismatch: the first run of this script reported 13 differences whose
+# "new" values were shredded error text. So check the exit status and make the
+# distinction explicit -- "the server answered differently" and "I could not
+# ask" are not the same result, and only one of them says anything about DNS.
+dig_answer() {
+  local out rc
+  out="$(dig @"$1" "$2" "$3" +short +time=2 +tries=2 2>/dev/null)"
+  rc=$?
+  [ "${rc}" -eq 0 ] || return 1
+  printf '%s\n' "${out}" | norm
+}
+
+MATCH=0; MISMATCH=0; MISSING=0; EXPECTED_DIFF=0; DRIFT=0; UNREACHABLE=0
 
 echo "=========================================================="
 echo " Post-delegation DNS check"
@@ -156,6 +174,31 @@ fi
 echo "=========================================================="
 echo
 
+# Preflight. Without this, an environment that cannot resolve at all spends
+# two minutes timing out once per record and buries the one fact that matters
+# in fifteen rows of noise. Same reasoning as the capture scripts' fail-fast on
+# credentials: one problem should be reported once.
+PREFLIGHT_OK=0
+for S in $(sed 's/\t.*//' "${EXPECTED}" | while IFS= read -r n; do
+             [ -n "${n}" ] && echo "${NEW_NS:-$(new_ns_for "${n}")}"
+           done | sort -u); do
+  [ -n "${S}" ] || continue
+  if dig @"${S}" . NS +short +time=2 +tries=1 >/dev/null 2>&1; then
+    PREFLIGHT_OK=1
+    break
+  fi
+done
+if [ "${PREFLIGHT_OK}" -eq 0 ]; then
+  cat >&2 <<EOF
+error: no nameserver answered a preflight query.
+
+  DNS is not reachable from here, so every check below would fail for a
+  reason that has nothing to do with the zone. Re-run from a network that
+  can resolve.
+EOF
+  exit 2
+fi
+
 while IFS="$(printf '\t')" read -r NAME TYPE WANT; do
   [ -n "${NAME}" ] || continue
 
@@ -168,8 +211,15 @@ while IFS="$(printf '\t')" read -r NAME TYPE WANT; do
   fi
 
   WANT_N="$(printf '%s' "${WANT}" | norm)"
-  OLD_N="$(dig @"${OLD_NS}" "${NAME}" "${TYPE}" +short +time=2 +tries=2 2>/dev/null | norm)"
-  NEW_N="$(dig @"${TARGET_NS}" "${NAME}" "${TYPE}" +short +time=2 +tries=2 2>/dev/null | norm)"
+
+  # An unanswerable query is an error about this machine, not a finding about
+  # the zone. Never let it reach the comparison.
+  if ! NEW_N="$(dig_answer "${TARGET_NS}" "${NAME}" "${TYPE}")"; then
+    UNREACHABLE=$((UNREACHABLE + 1))
+    echo "🚫 [UNREACHABLE] ${NAME} (${TYPE}) -- no answer from ${TARGET_NS}"
+    continue
+  fi
+  OLD_N="$(dig_answer "${OLD_NS}" "${NAME}" "${TYPE}")" || OLD_N=""
 
   # The delegation itself.
   if [ "${TYPE}" = "NS" ]; then
@@ -213,14 +263,26 @@ done < "${EXPECTED}"
 
 echo
 echo "=========================================================="
-echo " match ${MATCH}   mismatch ${MISMATCH}   missing ${MISSING}   drift ${DRIFT}   expected-diff ${EXPECTED_DIFF}"
+echo " match ${MATCH}   mismatch ${MISMATCH}   missing ${MISSING}   drift ${DRIFT}"
+echo " unreachable ${UNREACHABLE}   expected-diff ${EXPECTED_DIFF}"
 echo
 echo " Not covered: records present in the new zone but absent from the"
 echo " capture. Listing those needs a zone export from the new provider;"
 echo " this script can only verify that nothing was dropped."
 
+# Reported separately and first: an unreachable resolver invalidates the whole
+# run, and reading it as a zone problem is the specific mistake this script has
+# already made once.
+if [ "${UNREACHABLE}" -gt 0 ]; then
+  echo "🚫 ${UNREACHABLE} quer(ies) got no answer. This says nothing about the"
+  echo "   zone -- it says DNS is not reachable from here. Re-run somewhere"
+  echo "   that can resolve; a sandbox or a VPN split-tunnel will do this."
+  echo "=========================================================="
+  exit 2
+fi
+
 if [ $((MISMATCH + MISSING)) -gt 0 ]; then
-  echo "⚠️  Do not delegate until these are resolved."
+  echo "⚠️  Resolve these before trusting the new zone."
   echo "=========================================================="
   exit 1
 fi

@@ -581,6 +581,19 @@ selected the wrong thing.
         decoupling above predicts. The API rides a CNAME to Fastly and is
         indifferent to which nameserver serves it, so the delegation move
         touches the website and leaves the API alone.
+      **The second run verified nothing either, and claimed the opposite.**
+      Re-run after the per-zone fix, it reported 13 mismatches whose "new"
+      values were fragments of `dig`'s own error text. `dig +short` writes
+      "no servers could be reached" to *stdout*, so redirecting stderr does not
+      suppress it, and piping it into the comparison turns an unreachable
+      resolver into thirteen content differences. Fixed by checking the exit
+      status, dropping `;` lines, and classifying an unanswered query as
+      `[UNREACHABLE]` with its own exit code: a run that could not ask is not a
+      run that found nothing. A preflight reports that once rather than once
+      per record.
+      **So the state of this check is still "unverified".** Two runs, two
+      invalid results, for two unrelated reasons — worth saying plainly,
+      because "we ran the DNS diff twice" reads like coverage and is not.
       **`securityscorecards.dev` remains unverified**: 6 of the 15 records,
       including `api.securityscorecards.dev`, the hostname 6.3a already flags as
       serving staler data than its sibling. The diff queried
