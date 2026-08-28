@@ -381,11 +381,33 @@ selected the wrong thing.
       rows from an unrepeatable capture is the more expensive mistake — and it
       uses a scratch `KUBECONFIG` rather than letting `get-credentials` rewrite
       the operator's `~/.kube/config` and switch their current context.
-      **Not yet run.** Verified only as far as a credential-less environment
-      allows: it parses under bash 3.2, and it fails fast on both prerequisites,
-      which is how the second one was found — `gke-gcloud-auth-plugin` was not
+      Written against a credential-less environment, where it could only be
+      shown to parse under bash 3.2 and to fail fast on both prerequisites —
+      which is how the second one surfaced: `gke-gcloud-auth-plugin` was not
       installed, and without it `kubectl` cannot reach GKE at all while naming
       neither the plugin nor the fix.
+      **First real run (2026-08-28) captured one cluster of two, and not the
+      one it was written for.** The project holds `criticality-score` and
+      `openssf`. `criticality-score` came back complete — 7 namespaces, 41
+      objects, mostly cluster-bound service-account tokens — and it belongs to
+      a different OpenSSF hosted service that also dies with this account, so
+      someone should own it, but it is not this change's business and holds
+      nothing the API needs.
+      **`openssf` failed at the first API call**, and that is the cluster whose
+      name matches the project and the likelier home for the GitHub App
+      credentials. So the gap this task exists to close is still open.
+      **The script threw the reason away.** `kubectl get namespaces` ran with
+      stderr redirected to `/dev/null`, so the run reported "could not list
+      namespaces" and nothing else — and a private endpoint, a missing RBAC
+      binding, and a stopped cluster are three different problems with three
+      different fixes. The same mistake as discarding `dig`'s diagnostics in
+      6.3d, in a different script: the error text *is* the finding.
+      Fixed, and two related things with it. The failure is now reported with
+      its message, an `INCOMPLETE` block names every uncaptured cluster *before*
+      the inventory rather than after — twenty `ok` lines above one `FAILED`
+      reads as success — and the script exits nonzero, so "the capture ran" and
+      "the capture is complete" cannot be confused by anything checking status.
+      Re-running it now reports why `openssf` is unreachable.
       **Credentials held outside the project are a re-issue task, not a capture
       task.** GitHub organization and repository Actions secrets cannot be read
       back through any API. If any of the App credentials live there, they have

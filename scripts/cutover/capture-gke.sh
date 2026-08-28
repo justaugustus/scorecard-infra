@@ -165,15 +165,22 @@ if [ ! -s "${OUT}/clusters.json" ]; then
   exit 1
 fi
 
-# bash 3.2 on macOS has no mapfile; read the pairs off a pipe instead.
-CLUSTERS="$(jq -r '.[] | "\(.name)\t\(.location)"' "${OUT}/clusters.json" 2>/dev/null)"
+# bash 3.2 on macOS has no mapfile. Read from a file rather than a pipe: a
+# piped `while` runs in a subshell, so any tally of failed clusters would be
+# discarded at the end of the loop -- which for a capture whose whole job is
+# telling you what it could not get would be the wrong thing to lose.
+CLUSTER_LIST="${OUT}/.clusters.tsv"
+FAILED_CLUSTERS="${OUT}/.failed-clusters"
+jq -r '.[] | "\(.name)\t\(.location)"' "${OUT}/clusters.json" 2>/dev/null \
+  > "${CLUSTER_LIST}"
+: > "${FAILED_CLUSTERS}"
 
-if [ -z "${CLUSTERS}" ]; then
+if [ ! -s "${CLUSTER_LIST}" ]; then
   note "FAILED   could not parse cluster list -- inspect clusters.json by hand"
   exit 1
 fi
 
-echo "${CLUSTERS}" | while IFS="$(printf '\t')" read -r CLUSTER LOCATION; do
+while IFS="$(printf '\t')" read -r CLUSTER LOCATION; do
   [ -n "${CLUSTER}" ] || continue
   note ""
   note "=== cluster ${CLUSTER} (${LOCATION}) ==="
@@ -183,15 +190,26 @@ echo "${CLUSTERS}" | while IFS="$(printf '\t')" read -r CLUSTER LOCATION; do
         >"${OUT}/creds-${CLUSTER}.err" 2>&1; then
     note "FAILED   credentials for ${CLUSTER}"
     note "         $(head -1 "${OUT}/creds-${CLUSTER}.err")"
+    echo "${CLUSTER}" >> "${FAILED_CLUSTERS}"
     continue
   fi
   rm -f "${OUT}/creds-${CLUSTER}.err"
 
-  NAMESPACES="$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)"
+  # Keep the error. `get-credentials` only writes a kubeconfig -- it never
+  # contacts the cluster -- so this is the first call that can actually fail,
+  # and it fails differently for a private endpoint, a missing RBAC binding,
+  # and a cluster that is not running. Discarding stderr here reported "could
+  # not list namespaces" with no way to tell which, on the one cluster that
+  # mattered.
+  NS_ERR="${OUT}/ns-${CLUSTER}.err"
+  NAMESPACES="$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>"${NS_ERR}")"
   if [ -z "${NAMESPACES}" ]; then
     note "FAILED   could not list namespaces in ${CLUSTER}"
+    note "         $(tr '\n' ' ' < "${NS_ERR}" | cut -c1-300)"
+    echo "${CLUSTER}" >> "${FAILED_CLUSTERS}"
     continue
   fi
+  rm -f "${NS_ERR}"
   note "namespaces: ${NAMESPACES}"
 
   for NS in ${NAMESPACES}; do
@@ -220,7 +238,21 @@ echo "${CLUSTERS}" | while IFS="$(printf '\t')" read -r CLUSTER LOCATION; do
         "${F}" >> "${INDEX}" 2>/dev/null
     done
   done
-done
+done < "${CLUSTER_LIST}"
+
+# Before the inventory, not after it. A cluster that could not be read is the
+# most important thing this run has to say, and twenty "ok" lines above one
+# "FAILED" reads as success -- the capture is only as good as its worst gap.
+if [ -s "${FAILED_CLUSTERS}" ]; then
+  note ""
+  note "=========================================================="
+  note "INCOMPLETE -- $(wc -l < "${FAILED_CLUSTERS}" | tr -d ' ') cluster(s) not captured:"
+  while IFS= read -r c; do [ -n "${c}" ] && note "  * ${c}"; done < "${FAILED_CLUSTERS}"
+  note ""
+  note "Whatever lives in them is NOT in this capture. Read the reason above"
+  note "before assuming the credentials you were looking for are elsewhere."
+  note "=========================================================="
+fi
 
 note ""
 note "Inventory: ${INDEX}"
@@ -246,3 +278,8 @@ note "    iam-policy.json has the GCP half."
 note ""
 note "Next: move these into a secret store, then delete this directory."
 note "Summary written to ${SUMMARY}"
+
+# Exit nonzero on a missed cluster, so "the capture ran" and "the capture is
+# complete" cannot be confused by a caller that only checks the status.
+[ -s "${FAILED_CLUSTERS}" ] && exit 1
+exit 0
