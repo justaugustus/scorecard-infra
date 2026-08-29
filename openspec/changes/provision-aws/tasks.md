@@ -312,13 +312,32 @@ Decision tags **A1**–**A16** are defined in `design.md`.
         and hit the router's generic not-found instead. Plausibly the same
         six-month staleness already logged in finding 6.3b — not confirmed by
         diffing dependency versions.
-- [ ] 9.5 Verify the object key contract is preserved exactly:
+- [x] 9.5 Verify the object key contract is preserved exactly:
       `{host}/{org}/{repo}/results.json` and
       `{host}/{org}/{repo}/{commit}/results.json`.
-- [ ] 9.6 Compare `Content-Type` and `Cache-Control` against production before
+      9.4 confirmed the first form (`results-known-good` et al., all `latest`
+      reads). The second form wasn't exercised there — every commit-scoped
+      request in `requests.tsv` is deliberately a 404 case
+      (`results-bad-commit`, `results-unknown-commit`), which confirms the
+      lookup *fails* correctly but not that it *succeeds* correctly.
+      **Confirmed 2026-08-29** against a real one: production's own
+      `github.com/ossf/scorecard` result names its scanned commit
+      (`d1fab88f54636ff366076edfc5c239f97b3c8e66`); querying
+      `?commit=d1fab88f54636ff366076edfc5c239f97b3c8e66` origin-to-origin
+      (gateway hostname, not the CDN hostname) returned 200 on both sides with
+      byte-identical bodies. `post_results.go:178` writes this key
+      (`{host}/{org}/{repo}/{commit}/results.json`) only on a publish, so this
+      also confirms a commit-scoped object actually exists in the shared
+      corpus bucket and both deployments resolve it the same way.
+- [x] 9.6 Compare `Content-Type` and `Cache-Control` against production before
       concluding parity. The batch helper calls `NewWriter(..., nil)` and does
       not deliberately set them, so what production serves must be observed
       rather than derived.
+      9.4 already evidenced this for `latest` reads (`SIGNIFICANT_HEADERS`
+      covers both, and every real 200 in that run was `same`). The 9.5 check
+      above adds the commit-scoped case: `content-type: application/json`,
+      `cache-control: max-age=600`, and `surrogate-control: max-age=31557600`
+      all matched exactly, origin-to-origin.
 - [ ] 9.7 Confirm the task role **cannot** reach a bucket or secret outside its
       grant. A permissions test that only shows the allowed path working proves
       half of what is needed.
