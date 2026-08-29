@@ -21,3 +21,15 @@
 # git by design: it describes live infrastructure and may contain values the
 # redaction pass did not recognize.
 /scripts/cutover/out/
+
+# OpenTofu working state (deploy/). Provider plugins and lock artifacts are
+# machine-local; state belongs in the S3 backend, and a *.tfstate in a working
+# tree means a root module ran without its backend configured. *.tfvars may
+# carry real values -- the checked-in examples are *.tfvars.example.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
