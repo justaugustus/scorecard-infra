@@ -1,0 +1,55 @@
+# Coverage visibility, not a merge gate: every status below is
+# informational so a PR is never blocked on coverage percentage.
+#
+# api/ and cron/ are behavior-frozen imported trees (see the import-edges
+# CI job in .github/workflows/presubmits.yml and the generated-code carve-out
+# in .golangci.yml); internal/ and cmd/ are this repository's native code.
+# Components mirror that boundary so a change to internal/ is judged on its
+# own coverage rather than blended with the imported trees.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+      api:
+        informational: true
+        paths:
+          - "api/**/*"
+      cron:
+        informational: true
+        paths:
+          - "cron/**/*"
+      core:
+        informational: true
+        paths:
+          - "internal/**/*"
+          - "cmd/**/*"
+    patch:
+      default:
+        informational: true
+
+component_management:
+  individual_components:
+    - component_id: api
+      name: api
+      paths:
+        - "api/**/*"
+    - component_id: cron
+      name: cron
+      paths:
+        - "cron/**/*"
+    - component_id: core
+      name: core
+      paths:
+        - "internal/**/*"
+        - "cmd/**/*"
+
+comment:
+  layout: "condensed_header, diff, flags, components, condensed_files"
+  after_n_builds: 1
+
+# go-swagger and protoc output; carries "// Code generated" headers and is
+# never hand-edited.
+ignore:
+  - "api/app/generated/**/*"
+  - "cron/data/*.pb.go"
