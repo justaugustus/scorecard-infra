@@ -19,17 +19,13 @@ terraform {
     }
   }
 
-  # Uncomment ONLY after the first apply has created the bucket, then run
-  # `tofu init -migrate-state`. Leaving this uncommented on a fresh account
-  # fails at init, because the bucket named here does not exist yet.
-  #
-  # backend "s3" {
-  #   bucket       = "<state_bucket_name>"
-  #   key          = "bootstrap/terraform.tfstate"
-  #   region       = "us-east-1"
-  #   encrypt      = true
-  #   use_lockfile = true
-  # }
+  backend "s3" {
+    bucket       = "ossf-scorecard-tfstate"
+    key          = "bootstrap/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {

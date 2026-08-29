@@ -232,10 +232,14 @@ Decision tags **A1**–**A16** are defined in `design.md`.
 
 ## 9. Verification
 
-- [ ] 9.1 **First run against real S3 is a test, not a formality.** The `s3blob`
+- [x] 9.1 **First run against real S3 is a test, not a formality.** The `s3blob`
       driver is linked and the bucket URL is configuration, but this combination
       has never been executed by anyone. Treat a failure here as expected
       information.
+      **Passed 2026-08-29**, evidenced by 9.4: `results-known-good`,
+      `results-high-traffic`, `results-cron-only`, and `results-gitlab` all
+      returned real S3-backed 200s from the staging origin, byte-identical to
+      production. The driver worked on the first real attempt.
 - [ ] 9.2 Measure the ESPv2 contribution (**A12**). **Runnable today — needs no
       AWS resources**, so it does not have to wait behind the apply:
       `conformance.sh compare <scorecard-endpoints-prod> <scorecard-api-prod>`.
@@ -250,11 +254,64 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       established the two public hostnames cache separately under a year-long
       `Surrogate-Control` with only one purged, so a CDN comparison measures
       cache vintage, not behavior.
-- [ ] 9.3 Record the diff and decide per difference: fold into the application,
+
+      **Blocked, and treated as superseded by 9.4 rather than pursued
+      further.** The one run attempted (2026-08-29) showed 20 of 20 requests
+      differing, with `scorecard-api-prod` returning a uniform 403 on every
+      path including `results-known-good` — not the selective
+      undocumented-path rejection this task is meant to isolate.
+      `get-iam-policy` on the service confirmed why: its only
+      `roles/run.invoker` binding is
+      `367732848534-compute@developer.gserviceaccount.com` (the project's
+      default Compute SA, not a purpose-built identity), no `allUsers` — so
+      the run measured Cloud Run's auth gate, not ESPv2. Minting a token for
+      that service account requires impersonating it, which requires
+      `roles/iam.serviceAccountTokenCreator` on it; the account available in
+      this session does not have that binding, and getting it requires
+      another admin's action.
+      Not pursued further because 9.4 already produced a more direct answer:
+      its `cors-preflight` finding shows the gateway rejecting a valid OPTIONS
+      request with its own stale-contract error, while the identical
+      application code (minus the gateway) answers it correctly. That is
+      concrete, attributed evidence of ESPv2 breaking a real request, obtained
+      without impersonation — sufficient for the **A12** decision on its own.
+- [x] 9.3 Record the diff and decide per difference: fold into the application,
       or accept deliberately. Do not let the cutover be where this is found.
-- [ ] 9.4 Run conformance against the AWS origin. Cover the two-bucket read
+      **Both differences from 9.4 accepted deliberately, not folded in** —
+      production is due to redeploy on current `main` regardless of cloud, so
+      matching today's stale gateway/app behavior on the way out is not the
+      target.
+- [x] 9.4 Run conformance against the AWS origin. Cover the two-bucket read
       fallback, absent and malformed input, path traversal, every badge style,
       and the CORS headers the website depends on.
+      **Run 2026-08-29** against the real staging origin (not the CDN
+      hostname): `conformance.sh compare
+      https://scorecard-endpoints-prod-...run.app
+      https://origin-staging.scorecard.dev`. Base URLs must carry an explicit
+      scheme — see the `require_scheme` fix below; a bare hostname silently
+      compared two ALB HTTP-redirect pages instead of the application on the
+      first two attempts.
+      16 of 20 identical. Two categories of difference, neither an AWS-side
+      defect:
+      * **`cors-preflight`: 405 vs 204.** Production's 405 body reads "the
+        current request is matched to the defined url template ... but its
+        http method is not allowed" — ESPv2's own error format, not
+        go-swagger's, and consistent with the gateway's OpenAPI contract being
+        stale since 2023-08-30 (design.md). The application itself handles
+        CORS preflight correctly: `configure_scorecard.go:106` wraps every
+        route in `cors.Default().Handler(...)`, which is exactly what answered
+        with 204 once the gateway wasn't in front of it.
+      * **Missing `content-type` on `results-absent`, `results-bad-platform`,
+        `results-unknown-commit`** (present on `results-missing-repo` and
+        `results-traversal`). Traced to routing, not randomness: the first
+        three match `/projects/{platform}/{org}/{repo}` and reach the
+        operation-specific `GetResultHandler` -> `NewGetResultNotFound()`
+        (`get_results.go:44-51`), which never explicitly sets `Content-Type`;
+        `results-missing-repo` (too few path segments) and `results-traversal`
+        (breaks the `/projects/` prefix once cleaned) never match that route
+        and hit the router's generic not-found instead. Plausibly the same
+        six-month staleness already logged in finding 6.3b — not confirmed by
+        diffing dependency versions.
 - [ ] 9.5 Verify the object key contract is preserved exactly:
       `{host}/{org}/{repo}/results.json` and
       `{host}/{org}/{repo}/{commit}/results.json`.

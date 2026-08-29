@@ -19,6 +19,20 @@
 #   ./conformance.sh capture  <base-url> <out-dir>
 #   ./conformance.sh compare  <base-url-a> <base-url-b> [out-dir]
 #
+# Base URLs must include an explicit scheme (https:// or http://). A bare
+# hostname's default scheme is not something to guess at: against an
+# ALB-fronted origin, plain HTTP hits the HTTP->HTTPS redirect listener before
+# reaching the application, so a bare host silently compares two redirect
+# pages instead of the app.
+#
+# `compare` reads A_CURL_ARGS / B_CURL_ARGS from the environment and applies
+# them to every request against that side only -- for a header one side needs
+# and the other doesn't (e.g. an Authorization bearer token when only one
+# side requires Cloud Run's invoker IAM), where requests.tsv's per-request
+# extra column would apply to both sides equally:
+#   B_CURL_ARGS='-H "Authorization: Bearer '"${TOKEN}"'"' \
+#     ./conformance.sh compare <base-url-a> <base-url-b>
+#
 # `compare` queries both deployments and reports any request whose observable
 # behavior differs. It is the cutover gate: the migrated service must answer
 # identically to the one it replaces.
@@ -56,6 +70,18 @@ IGNORE_SCAN_METADATA=0
 SIGNIFICANT_HEADERS='^(content-type|location|cache-control|surrogate-control|surrogate-key|access-control-allow-origin|access-control-allow-methods|access-control-allow-headers|www-authenticate|retry-after):'
 
 die() { echo "error: $*" >&2; exit 1; }
+
+# A bare hostname's default scheme is not a safe assumption: curl's default
+# varies by version, and a plain-HTTP request to an ALB-fronted origin hits
+# its HTTP->HTTPS redirect listener before ever reaching the application --
+# silently producing a comparison of two redirect pages instead of the app.
+# Require the scheme explicitly rather than let that happen again.
+require_scheme() {
+  case "$1" in
+    http://*|https://*) ;;
+    *) die "'$1' has no scheme -- pass https://$1 (or http://), not a bare hostname. A bare host's default scheme is not guaranteed, and against an ALB origin it silently compares HTTP-redirect pages instead of the application." ;;
+  esac
+}
 
 usage() {
   sed -n '17,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -115,18 +141,23 @@ normalize_body() {
   fi
 }
 
-# run_set <base-url> <out-dir>
+# run_set <base-url> <out-dir> [global-extra-curl-args]
+# global_extra applies to every request against this base, on top of
+# whatever per-request extra the TSV row carries -- for a header (e.g.
+# Authorization) that one side of a compare needs and the other doesn't,
+# where per-request extra in requests.tsv would apply to both sides equally.
 run_set() {
-  local base="$1" dir="$2"
+  local base="$1" dir="$2" global_extra="${3:-}"
   mkdir -p "${dir}"
   local name path extra
   while IFS=$'\t' read -r name path extra; do
     [ -z "${name:-}" ] && continue
     case "${name}" in \#*) continue ;; esac
     [ -z "${path:-}" ] && die "request '${name}' has no path"
-    # extra holds raw curl args (quoted headers); word-splitting is intended.
+    # extra/global_extra hold raw curl args (quoted headers); word-splitting
+    # is intended.
     # shellcheck disable=SC2086
-    eval "fetch \"\${base}\" \"\${path}\" \"\${dir}/\${name}\" ${extra:-}"
+    eval "fetch \"\${base}\" \"\${path}\" \"\${dir}/\${name}\" ${extra:-} ${global_extra}"
     printf '  %-24s %s\n' "${name}" "$(cat "${dir}/${name}.status")"
   done < "${REQUESTS}"
 }
@@ -134,6 +165,7 @@ run_set() {
 cmd_capture() {
   local base="${1:-}" dir="${2:-}"
   [ -n "${base}" ] && [ -n "${dir}" ] || usage
+  require_scheme "${base}"
   echo "Capturing ${base} -> ${dir}"
   run_set "${base}" "${dir}"
   echo "Captured $(find "${dir}" -name '*.status' | wc -l | tr -d ' ') requests."
@@ -142,15 +174,22 @@ cmd_capture() {
 cmd_compare() {
   local a="${1:-}" b="${2:-}" dir="${3:-}"
   [ -n "${a}" ] && [ -n "${b}" ] || usage
+  require_scheme "${a}"
+  require_scheme "${b}"
   if [ -z "${dir}" ]; then
     dir="$(mktemp -d)"
-    trap 'rm -rf "${dir}"' EXIT
+    # Double-quoted so ${dir} is substituted now, while it's a local in this
+    # function's scope -- the trap only fires after the script's last command,
+    # by which point cmd_compare has returned and a deferred lookup of ${dir}
+    # would be unbound under `set -u`.
+    # shellcheck disable=SC2064
+    trap "rm -rf '${dir}'" EXIT
   fi
 
   echo "A: ${a}"
-  run_set "${a}" "${dir}/a"
+  run_set "${a}" "${dir}/a" "${A_CURL_ARGS:-}"
   echo "B: ${b}"
-  run_set "${b}" "${dir}/b"
+  run_set "${b}" "${dir}/b" "${B_CURL_ARGS:-}"
 
   echo
   local differences=0 checked=0 name
