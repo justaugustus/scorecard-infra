@@ -99,9 +99,11 @@ start lying the moment that happened. It also mirrors the existing top-level
 ```text
 deploy/
   api/                        # the serving plane; this change
-    versions.tf               # required_version, provider constraints (A3)
+    README.md
+    .opentofu-version
+    bootstrap/                # root module; one-time, creates the state bucket
     modules/
-      state-backend/          # bootstrap only; see A4
+      state-backend/          # used only by bootstrap/; see A4
       network/                # VPC, private subnets, NAT, S3 gateway endpoint
       secrets/                # Secrets Manager entries; values out-of-band
       service/                # ECS cluster, task definition, Fargate service
@@ -112,6 +114,15 @@ deploy/
       production/             # root module; own state key
   cron/                       # the batch plane; NOT this change
 ```
+
+**Every root module carries its own `terraform` block and provider
+configuration.** There is no tree-wide `versions.tf`, because OpenTofu does not
+inherit one from a parent directory — `bootstrap/`, `environments/staging/`, and
+`environments/production/` are three independent roots. The duplication is
+required by the tool, not an oversight.
+
+`bootstrap/` is a root module rather than an environment because the state
+bucket is shared by both environments and created once, before either exists.
 
 There is **no `modules/storage/`**: the buckets are adopted, not created
 (**A13**). There is no Kustomize overlay and no Kubernetes anywhere in the

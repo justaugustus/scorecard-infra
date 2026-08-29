@@ -55,22 +55,33 @@ Decision tags **A1**–**A13** are defined in `design.md`.
 - [ ] 2.1 Install OpenTofu >= 1.10 (**A3**). `use_lockfile` does not exist
       before it; v1.9 documents only `dynamodb_table` and disables locking
       without it. Latest stable is 1.12.6.
-- [ ] 2.2 Add `deploy/api/` per the layout in **A2**, with `versions.tf` carrying
-      `required_version` and provider constraints, and `.opentofu-version`
-      carrying the exact version.
-- [ ] 2.3 Add `deploy/api/README.md`: how to run, the one-time state bootstrap
+- [x] 2.2 Add `deploy/api/` per the layout in **A2**. `bootstrap/`,
+      `modules/state-backend/`, and `modules/network/` exist; `secrets/`,
+      `service/`, `edge/`, `ci-oidc/`, and the two environment roots do not yet.
+      Corrected while building: **there is no tree-wide `versions.tf`.** Root
+      modules do not inherit a `terraform` block from a parent directory, so
+      each root carries its own. `.opentofu-version` pins 1.12.6.
+      Verified `required_version = ">= 1.10"` actually fires — OpenTofu 1.9.0
+      refuses with `Unsupported OpenTofu Core version` naming the line, rather
+      than failing later and further from the cause.
+- [x] 2.3 Add `deploy/api/README.md`: how to run, the one-time state bootstrap
       and why a local `terraform.tfstate` is a mistake after it, and the manual
       Netlify DNS steps (**A10**).
-- [ ] 2.4 Gitignore OpenTofu working state: `.terraform/`, `*.tfstate*`, and
-      `*.tfvars` holding real values. Add `tofu fmt -check` and `tofu validate`
-      to CI.
+- [ ] 2.4 Gitignore OpenTofu working state — **done**: `.terraform/`,
+      `*.tfstate*`, `*.tfvars` with a `!*.tfvars.example` negation, and crash
+      logs. `.terraform.lock.hcl` deliberately stays tracked; it is the
+      provider-version lock and pinning it is the point.
+      **Still open:** `tofu fmt -check` and `tofu validate` in CI.
 - [ ] 2.5 Define a common tag set applied to every created resource, so anything
       outside this tree is identifiable as drift.
 
 ## 3. State backend (**A4**)
 
-- [ ] 3.1 `modules/state-backend`: versioned, encrypted, public-access-blocked S3
-      bucket. No DynamoDB table.
+- [x] 3.1 `modules/state-backend`: versioned, encrypted, public-access-blocked S3
+      bucket. No DynamoDB table. **Written and schema-validated, not applied.**
+      Also carries `prevent_destroy`, a deny-insecure-transport bucket policy,
+      and lifecycle rules expiring superseded state versions after 90 days and
+      aborting incomplete uploads after 7.
 - [ ] 3.2 Apply once with local state, migrate its own state into the bucket,
       delete the local file. Record it as one-time in the README.
 - [ ] 3.3 `use_lockfile = true`, separate state keys per environment — **not
@@ -82,13 +93,17 @@ Decision tags **A1**–**A13** are defined in `design.md`.
 
 ## 4. Network and storage access
 
-- [ ] 4.1 `modules/network`: a **purpose-built VPC** — not the default one, whose
+- [x] 4.1 `modules/network`: a **purpose-built VPC** — not the default one, whose
       six subnets are public. Private subnets across two AZs for the tasks,
-      public subnets for the ALB, and an **S3 gateway endpoint** (**A5**). The
-      account has no VPC endpoints today.
-- [ ] 4.2 One NAT gateway rather than one per AZ, unless egress volume justifies
-      the second. It is the largest fixed line item after compute, and the API's
-      egress is Sigstore, GitHub, and Fastly purges rather than bulk transfer.
+      public subnets for the ALB, and an **S3 gateway endpoint** (**A5**).
+      **Written and schema-validated, not applied.**
+- [x] 4.2 One NAT gateway rather than one per AZ, behind `single_nat_gateway`,
+      defaulting true. It is the largest fixed line item after compute (~$33/mo
+      each) and the API's egress is Sigstore, GitHub, and Fastly purges rather
+      than bulk transfer. The Elastic IP quota of 5 is a second reason not to
+      spend them per-AZ by default.
+      Private route tables are still created per-AZ so that flipping the flag
+      later is a route change rather than re-associating every subnet.
 - [ ] 4.3 **Adopt the corpus buckets as `data` sources; never as resources**
       (**A13**). Declaring them as `aws_s3_bucket` would put the corpus one
       `tofu destroy` or one deleted block away from deletion, and OpenTofu
