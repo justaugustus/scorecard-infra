@@ -95,14 +95,32 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       Also carries `prevent_destroy`, a deny-insecure-transport bucket policy,
       and lifecycle rules expiring superseded state versions after 90 days and
       aborting incomplete uploads after 7.
-- [ ] 3.2 Apply once with local state, migrate its own state into the bucket,
+- [x] 3.2 Apply once with local state, migrate its own state into the bucket,
       delete the local file. Record it as one-time in the README.
-- [ ] 3.3 `use_lockfile = true`, separate state keys per environment — **not
+      **Done 2026-08-29** (checkbox missed at the time): applied with local
+      state, migrated into `ossf-scorecard-tfstate`, no local
+      `terraform.tfstate` remains. Recorded in commit history rather than
+      caught here until this closeout pass audited every unchecked box
+      against what had actually landed.
+- [x] 3.3 `use_lockfile = true`, separate state keys per environment — **not
       workspaces**, which share a backend configuration and make applying to
       production while believing you are in staging possible.
-- [ ] 3.4 Verify locking engages: run two concurrent plans and confirm the second
+      **Verified 2026-08-29**: all three root modules set `use_lockfile =
+      true`; staging and production carry distinct keys
+      (`api/staging/terraform.tfstate`, `api/production/terraform.tfstate`);
+      no `terraform.workspace`, `workspace new`, or `workspace select`
+      anywhere under `deploy/`.
+- [x] 3.4 Verify locking engages: run two concurrent plans and confirm the second
       is refused. A backend that silently fails to lock looks identical to one
       that works, until it does not.
+      **Verified 2026-08-29**, if by accident: a prior `tofu plan` invocation
+      was killed by a broken pipe before it released its lock, and two fresh
+      concurrent `tofu plan` runs against staging were both correctly refused
+      with the held lock's ID, holder, and timestamp — proof the mechanism
+      engages under contention, not just that a flag is set. The orphaned
+      lock this left behind needs `tofu force-unlock` before anyone can plan
+      or apply staging again; that's a real action item, not a test artifact
+      to ignore.
 
 ## 4. Network and storage access
 
@@ -182,10 +200,14 @@ Decision tags **A1**–**A16** are defined in `design.md`.
 - [x] 6.3 Two tasks across two AZs as an availability floor (**A8**), recorded
       as provisional in the variable's own documentation. Revisit against origin
       request rate after conformance.
-- [ ] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Task definition
+- [x] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Task definition
       written with the correct contract; not yet applied. Environment:
       `SCORECARD_RESULTS_BUCKET_URL`, `SCORECARD_CRON_RESULTS_BUCKET_URL`,
       `API_BASE_URL`, `FASTLY_PURGE_TOKEN`.
+      **Applied to staging 2026-08-29** and confirmed serving real traffic
+      through 9.1-9.7's verification. Production's deploy is explicitly out
+      of scope here (proposal.md: "this change ends at an AWS-backed staging
+      origin"); it happens at the `migrate-api` cutover, not this change.
 - [x] 6.5 Images pinned by **digest**, never tag. Enforced by a variable
       validation rejecting anything without `@sha256:<64 hex>`, so a tag is a
       plan-time error rather than a rollback that silently lands on whatever the
@@ -206,14 +228,32 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       checking liveness rather than correctness. Probing a real `/projects` path
       would fold S3 into target health and let one transient S3 fault drain the
       entire pool at once.
-- [ ] 7.2 **Outputs emitted** (`certificate_validation_records`, `alb_dns_name`)
+- [x] 7.2 **Outputs emitted** (`certificate_validation_records`, `alb_dns_name`)
       in both environment roots; creating the records in **Netlify DNS** remains
       an operational step. `aws_acm_certificate_validation` blocks
       until the validation records exist, which makes the manual step a visible
       gate.
+      **Done for staging 2026-08-29**: both records created in Netlify DNS,
+      confirmed resolving. Production's certificate doesn't exist yet — its
+      DNS records happen when production itself is applied, at cutover, same
+      as 6.4.
 - [ ] 7.3 Verify the origin the way Fastly will: TLS handshake against the
       hostname, valid chain, no SNI override and no disabled verification
       (**A10**).
+      **Attempted 2026-08-29 and invalidated its own result**: this session's
+      network intercepts TLS — `curl -v` against `origin-staging.scorecard.dev`
+      showed an issuer that traced to a local corporate inspection proxy
+      re-signing the connection, not the real ACM certificate. `SSL
+      certificate verify ok` was verifying the wrong chain.
+      This is the same class of trap the handoff notes already carried for
+      the `aws` CLI, just previously unconfirmed for generic HTTPS from this
+      session. Needs re-running from a network that isn't intercepting TLS:
+      `curl -v https://origin-staging.scorecard.dev/projects/github.com/ossf/scorecard`,
+      confirm `issuer` traces to Amazon/ACM and `SSL certificate verify ok`
+      is checking that chain, not a local corporate one. This does not cast
+      doubt on any conformance *content* comparison in this change —
+      interception proxies re-sign the TLS layer but don't typically alter
+      payloads, so status/header/body diffs remain trustworthy.
 
 ## 8. CI (**A9**)
 
@@ -381,6 +421,12 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       names this as the plan ("AWS becomes the staging origin first") and 6.2b
       as the gate ("the production flip waits on
       `scripts/api-conformance/conformance.sh` running clean against the
-      AWS-backed staging endpoint"). That evidence now exists; 6.2a's own
-      caveats are what's still open there, not anything unresolved here —
-      see `migrate-api` tasks.md for the live status.
+      AWS-backed staging endpoint"). That evidence now exists there.
+      **Correction, same day:** this note originally claimed nothing was
+      unresolved in this change itself. A closer audit right after finding
+      10.5 the first time — triggered by noticing 3.2 had never actually been
+      checked off despite being done — turned up three more: 5.3 (duplicated
+      Fastly purge token, cross-cloud, not started), 7.3 (TLS verification
+      invalidated by this session's own network — see 7.3's note), and 9.2
+      (already recorded as blocked/superseded). The handoff to `migrate-api`
+      stands; the change is not fully closed.
