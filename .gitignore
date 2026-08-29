@@ -22,10 +22,12 @@
 # redaction pass did not recognize.
 /scripts/cutover/out/
 
-# OpenTofu working state (deploy/). Provider plugins and lock artifacts are
-# machine-local; state belongs in the S3 backend, and a *.tfstate in a working
-# tree means a root module ran without its backend configured. *.tfvars may
-# carry real values -- the checked-in examples are *.tfvars.example.
+# OpenTofu working state (deploy/). Provider plugin binaries under .terraform/
+# are machine-local; state belongs in the S3 backend, and a *.tfstate in a
+# working tree means a root module ran without its backend configured.
+# *.tfvars may carry real values -- the checked-in examples are
+# *.tfvars.example. .terraform.lock.hcl is NOT ignored here: it is the
+# provider-version lock for each root module and stays tracked on purpose.
 **/.terraform/
 *.tfstate
 *.tfstate.*
