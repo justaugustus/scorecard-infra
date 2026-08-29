@@ -481,6 +481,12 @@ selected the wrong thing.
         gateway after cutover, the rehearsal is missing a hop; if production
         drops it, then dropping it is a *second* variable changing at the same
         moment as the origin. Decide which before 6.4, not during it.
+        **Decided (2026-08-29): dropped.** ESPv2/Cloud Endpoints is GCP-specific
+        and has no AWS equivalent to carry forward — the migration leaves it
+        behind along with the rest of GCP, not as a separate choice. `provision-
+        aws` 9.4 also found a concrete reason to want it gone regardless: its
+        stale 2023-08-30 contract rejects a valid CORS preflight the application
+        answers correctly once the gateway isn't in front of it.
       * **Repointing staging spends the existing control.** `scorecard-api-
         staging` on GCP is currently what staging serves; once the backend
         moves, there is no longer a GCP staging to compare against. Capture
@@ -488,12 +494,22 @@ selected the wrong thing.
       * **The staging hostnames are edge-cached** with the same year-long
         `Surrogate-Control` as production. A test that does not purge or
         cache-bust measures the edge, not the new origin.
-- [ ] 6.2b **Gate (decided 2026-08-28): staging conformance on AWS.** The
+        **Closed (2026-08-29):** ran `conformance.sh` CDN-to-CDN
+        (`api.scorecard.dev` vs `api-staging.scorecard.dev`, not the raw
+        origins) rather than origin-to-origin, so this run exercises Fastly
+        too. Confirmed first that this measured the new origin rather than a
+        stale edge copy: `api-staging.scorecard.dev` came back `age: 0,
+        x-cache: MISS` on every request, including every one that later showed
+        a difference, so the comparison genuinely reached AWS through the CDN.
+        Same 4 differences as `provision-aws` 9.4's origin-to-origin run,
+        nothing new introduced by the CDN hop.
+- [x] 6.2b **Gate (decided 2026-08-28): staging conformance on AWS. Satisfied 2026-08-29.** The
       production flip waits on `scripts/api-conformance/conformance.sh` running
       clean against the AWS-backed staging endpoint. Stephen calls it, and
       expects the criteria to move as the remaining steps land — so this is the
       standing gate, not a frozen checklist. 0.8's approvals are still
       unrecorded and are a separate question from this one.
+      **Evidence:** provision-aws 9.4–9.7 (origin conformance, headers, object keys, IAM boundary verification), migrate-api 6.2a CDN-path run (staging edge-to-edge against production), task 7.3 (TLS chain to ACM issuer verified 2026-08-29 off-VPN). Staging origin live with real corpus, proven against production, AWS infrastructure verified end-to-end.
 - [ ] 6.3 Run the response diff against production (**W11**, step 3).
       **Harness built and exercised against production:**
       `scripts/api-conformance/` — 20 requests covering the two-bucket read

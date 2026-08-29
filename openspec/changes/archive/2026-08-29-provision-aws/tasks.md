@@ -95,14 +95,32 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       Also carries `prevent_destroy`, a deny-insecure-transport bucket policy,
       and lifecycle rules expiring superseded state versions after 90 days and
       aborting incomplete uploads after 7.
-- [ ] 3.2 Apply once with local state, migrate its own state into the bucket,
+- [x] 3.2 Apply once with local state, migrate its own state into the bucket,
       delete the local file. Record it as one-time in the README.
-- [ ] 3.3 `use_lockfile = true`, separate state keys per environment — **not
+      **Done 2026-08-29** (checkbox missed at the time): applied with local
+      state, migrated into `ossf-scorecard-tfstate`, no local
+      `terraform.tfstate` remains. Recorded in commit history rather than
+      caught here until this closeout pass audited every unchecked box
+      against what had actually landed.
+- [x] 3.3 `use_lockfile = true`, separate state keys per environment — **not
       workspaces**, which share a backend configuration and make applying to
       production while believing you are in staging possible.
-- [ ] 3.4 Verify locking engages: run two concurrent plans and confirm the second
+      **Verified 2026-08-29**: all three root modules set `use_lockfile =
+      true`; staging and production carry distinct keys
+      (`api/staging/terraform.tfstate`, `api/production/terraform.tfstate`);
+      no `terraform.workspace`, `workspace new`, or `workspace select`
+      anywhere under `deploy/`.
+- [x] 3.4 Verify locking engages: run two concurrent plans and confirm the second
       is refused. A backend that silently fails to lock looks identical to one
       that works, until it does not.
+      **Verified 2026-08-29**, if by accident: a prior `tofu plan` invocation
+      was killed by a broken pipe before it released its lock, and two fresh
+      concurrent `tofu plan` runs against staging were both correctly refused
+      with the held lock's ID, holder, and timestamp — proof the mechanism
+      engages under contention, not just that a flag is set. The orphaned
+      lock this left behind needs `tofu force-unlock` before anyone can plan
+      or apply staging again; that's a real action item, not a test artifact
+      to ignore.
 
 ## 4. Network and storage access
 
@@ -182,10 +200,14 @@ Decision tags **A1**–**A16** are defined in `design.md`.
 - [x] 6.3 Two tasks across two AZs as an availability floor (**A8**), recorded
       as provisional in the variable's own documentation. Revisit against origin
       request rate after conformance.
-- [ ] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Task definition
+- [x] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Task definition
       written with the correct contract; not yet applied. Environment:
       `SCORECARD_RESULTS_BUCKET_URL`, `SCORECARD_CRON_RESULTS_BUCKET_URL`,
       `API_BASE_URL`, `FASTLY_PURGE_TOKEN`.
+      **Applied to staging 2026-08-29** and confirmed serving real traffic
+      through 9.1-9.7's verification. Production's deploy is explicitly out
+      of scope here (proposal.md: "this change ends at an AWS-backed staging
+      origin"); it happens at the `migrate-api` cutover, not this change.
 - [x] 6.5 Images pinned by **digest**, never tag. Enforced by a variable
       validation rejecting anything without `@sha256:<64 hex>`, so a tag is a
       plan-time error rather than a rollback that silently lands on whatever the
@@ -206,14 +228,32 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       checking liveness rather than correctness. Probing a real `/projects` path
       would fold S3 into target health and let one transient S3 fault drain the
       entire pool at once.
-- [ ] 7.2 **Outputs emitted** (`certificate_validation_records`, `alb_dns_name`)
+- [x] 7.2 **Outputs emitted** (`certificate_validation_records`, `alb_dns_name`)
       in both environment roots; creating the records in **Netlify DNS** remains
       an operational step. `aws_acm_certificate_validation` blocks
       until the validation records exist, which makes the manual step a visible
       gate.
+      **Done for staging 2026-08-29**: both records created in Netlify DNS,
+      confirmed resolving. Production's certificate doesn't exist yet — its
+      DNS records happen when production itself is applied, at cutover, same
+      as 6.4.
 - [ ] 7.3 Verify the origin the way Fastly will: TLS handshake against the
       hostname, valid chain, no SNI override and no disabled verification
       (**A10**).
+      **Attempted 2026-08-29 and invalidated its own result**: this session's
+      network intercepts TLS — `curl -v` against `origin-staging.scorecard.dev`
+      showed an issuer that traced to a local corporate inspection proxy
+      re-signing the connection, not the real ACM certificate. `SSL
+      certificate verify ok` was verifying the wrong chain.
+      This is the same class of trap the handoff notes already carried for
+      the `aws` CLI, just previously unconfirmed for generic HTTPS from this
+      session. Needs re-running from a network that isn't intercepting TLS:
+      `curl -v https://origin-staging.scorecard.dev/projects/github.com/ossf/scorecard`,
+      confirm `issuer` traces to Amazon/ACM and `SSL certificate verify ok`
+      is checking that chain, not a local corporate one. This does not cast
+      doubt on any conformance *content* comparison in this change —
+      interception proxies re-sign the TLS layer but don't typically alter
+      payloads, so status/header/body diffs remain trustworthy.
 
 ## 8. CI (**A9**)
 
@@ -312,28 +352,81 @@ Decision tags **A1**–**A16** are defined in `design.md`.
         and hit the router's generic not-found instead. Plausibly the same
         six-month staleness already logged in finding 6.3b — not confirmed by
         diffing dependency versions.
-- [ ] 9.5 Verify the object key contract is preserved exactly:
+- [x] 9.5 Verify the object key contract is preserved exactly:
       `{host}/{org}/{repo}/results.json` and
       `{host}/{org}/{repo}/{commit}/results.json`.
-- [ ] 9.6 Compare `Content-Type` and `Cache-Control` against production before
+      9.4 confirmed the first form (`results-known-good` et al., all `latest`
+      reads). The second form wasn't exercised there — every commit-scoped
+      request in `requests.tsv` is deliberately a 404 case
+      (`results-bad-commit`, `results-unknown-commit`), which confirms the
+      lookup *fails* correctly but not that it *succeeds* correctly.
+      **Confirmed 2026-08-29** against a real one: production's own
+      `github.com/ossf/scorecard` result names its scanned commit
+      (`d1fab88f54636ff366076edfc5c239f97b3c8e66`); querying
+      `?commit=d1fab88f54636ff366076edfc5c239f97b3c8e66` origin-to-origin
+      (gateway hostname, not the CDN hostname) returned 200 on both sides with
+      byte-identical bodies. `post_results.go:178` writes this key
+      (`{host}/{org}/{repo}/{commit}/results.json`) only on a publish, so this
+      also confirms a commit-scoped object actually exists in the shared
+      corpus bucket and both deployments resolve it the same way.
+- [x] 9.6 Compare `Content-Type` and `Cache-Control` against production before
       concluding parity. The batch helper calls `NewWriter(..., nil)` and does
       not deliberately set them, so what production serves must be observed
       rather than derived.
-- [ ] 9.7 Confirm the task role **cannot** reach a bucket or secret outside its
+      9.4 already evidenced this for `latest` reads (`SIGNIFICANT_HEADERS`
+      covers both, and every real 200 in that run was `same`). The 9.5 check
+      above adds the commit-scoped case: `content-type: application/json`,
+      `cache-control: max-age=600`, and `surrogate-control: max-age=31557600`
+      all matched exactly, origin-to-origin.
+- [x] 9.7 Confirm the task role **cannot** reach a bucket or secret outside its
       grant. A permissions test that only shows the allowed path working proves
       half of what is needed.
+      **Verified 2026-08-29** via `aws iam simulate-principal-policy` against
+      `scorecard-api-staging-task`: `allowed` for `s3:GetObject` on
+      `ossf-scorecard-results` (its actual grant), `implicitDeny` for the same
+      action on `ossf-scorecard-data2` (the batch plane's bucket), and
+      `implicitDeny` for `secretsmanager:GetSecretValue` on the Fastly
+      secret — the task role has no secrets grant at all by design
+      (`modules/service/main.tf:86-90`: that policy attaches to the
+      **execution** role, not the task role). Confirmed the execution role
+      does hold it: same call against `scorecard-api-staging-execution`
+      returned `allowed`. The boundary holds across both an unrelated bucket
+      and an entire resource category the task role was never meant to touch.
 - [ ] 9.8 Record actual cost after a week against the ~$110-145/month estimate,
       and confirm no per-request charge appears anywhere in the bill.
 
 ## 10. Closeout
 
-- [ ] 10.1 `openspec validate provision-aws --strict` passes.
-- [ ] 10.2 `tofu fmt -check`, `tofu validate`, and `make lint` clean; workflows
+- [x] 10.1 `openspec validate provision-aws --strict` passes.
+- [x] 10.2 `tofu fmt -check`, `tofu validate`, and `make lint` clean; workflows
       pass `actionlint` and `zizmor`.
-- [ ] 10.3 Confirm no provider account identifier appears in any **commit
+      **Verified 2026-08-29**: `tofu fmt -check -recursive -diff deploy/`
+      clean; every directory under `deploy/` containing a `.tf` file
+      (`bootstrap`, both environment roots, all six modules) passes
+      `tofu init -backend=false && tofu validate` independently, matching
+      `tofu.yml`'s own loop rather than trusting a caller to exercise every
+      module; `actionlint` and `zizmor .github/workflows/` both clean.
+- [x] 10.3 Confirm no provider account identifier appears in any **commit
       message** — AWS account numbers, Fastly service IDs, queue URLs that embed
       an account ID. Tracked files are fine; the message cannot be revised later.
-- [ ] 10.4 Confirm nothing committed names the destination operator or the reason
+      **Audited 2026-08-29** across all 27 commits touching
+      `openspec/changes/provision-aws/`, `deploy/api/`,
+      `scripts/cutover/capture-aws.sh`, and `scripts/api-conformance/` — clean.
+- [x] 10.4 Confirm nothing committed names the destination operator or the reason
       for the transition. Motivation is provider-agnosticism.
-- [ ] 10.5 Hand off to `migrate-api` group 6 with the staging origin proven, and
+      **Audited alongside 10.3** — clean.
+- [x] 10.5 Hand off to `migrate-api` group 6 with the staging origin proven, and
       to `migrate-batch-pipeline` with `deploy/cron/` reserved and unbuilt.
+      The staging origin is proven per 9.1–9.7. `migrate-api` 6.2a already
+      names this as the plan ("AWS becomes the staging origin first") and 6.2b
+      as the gate ("the production flip waits on
+      `scripts/api-conformance/conformance.sh` running clean against the
+      AWS-backed staging endpoint"). That evidence now exists there.
+      **Correction, same day:** this note originally claimed nothing was
+      unresolved in this change itself. A closer audit right after finding
+      10.5 the first time — triggered by noticing 3.2 had never actually been
+      checked off despite being done — turned up three more: 5.3 (duplicated
+      Fastly purge token, cross-cloud, not started), 7.3 (TLS verification
+      invalidated by this session's own network — see 7.3's note), and 9.2
+      (already recorded as blocked/superseded). The handoff to `migrate-api`
+      stands; the change is not fully closed.
