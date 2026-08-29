@@ -1,6 +1,6 @@
 # Tasks: Provision the AWS serving environment in OpenTofu
 
-Decision tags **A1**–**A13** are defined in `design.md`.
+Decision tags **A1**–**A15** are defined in `design.md`.
 
 ## 1. Discovery
 
@@ -17,8 +17,8 @@ Decision tags **A1**–**A13** are defined in `design.md`.
         `us-east-1`, with **AWS DataSync** writing to them — all 17 Secrets
         Manager entries are `aws-datasync!loc-*`. Adopt, do not create
         (**A13**).
-      * **No application secrets exist.** `github`, `gitlab`, and `fastly` are
-        all new.
+      * **No application secret exists.** The serving plane needs exactly one
+        (**A11**), which is narrower than the GKE inventory implied.
       * **No compute infrastructure exists at all** — zero EC2, EKS, load
         balancers, ACM certificates, NAT gateways, EIPs, VPC endpoints, and IAM
         OIDC providers. Only the default VPC.
@@ -52,15 +52,20 @@ Decision tags **A1**–**A13** are defined in `design.md`.
 
 ## 2. Toolchain and scaffolding
 
-- [ ] 2.1 Install OpenTofu >= 1.10 (**A3**). `use_lockfile` does not exist
-      before it; v1.9 documents only `dynamodb_table` and disables locking
-      without it. Latest stable is 1.12.6.
+- [x] 2.1 Install OpenTofu >= 1.10 (**A3**). **Upgraded 1.9.0 -> 1.12.6.**
+      `use_lockfile` does not exist before 1.10; v1.9 documents only
+      `dynamodb_table` and disables locking silently without it.
 - [x] 2.2 Add `deploy/api/` per the layout in **A2**. `bootstrap/`,
       `modules/state-backend/`, and `modules/network/` exist; `secrets/`,
       `service/`, `edge/`, `ci-oidc/`, and the two environment roots do not yet.
       Corrected while building: **there is no tree-wide `versions.tf`.** Root
       modules do not inherit a `terraform` block from a parent directory, so
-      each root carries its own. `.opentofu-version` pins 1.12.6.
+      each root carries its own.
+      The version pin sits at `deploy/.opentofu-version` rather than under
+      `api/`, so both planes share one number instead of two files drifting
+      apart. Safe because `tenv`/`tofuenv` resolve it by searching the working
+      directory, then parents, then home — verified against tenv's documented
+      precedence order, not assumed.
       Verified `required_version = ">= 1.10"` actually fires — OpenTofu 1.9.0
       refuses with `Unsupported OpenTofu Core version` naming the line, rather
       than failing later and further from the cause.
@@ -118,43 +123,73 @@ Decision tags **A1**–**A13** are defined in `design.md`.
 
 ## 5. Secrets (**A11**)
 
-- [ ] 5.1 `modules/secrets`: create `github`, `gitlab`, and `fastly` entries and
-      the task-role read policy. All three are new; Secrets Manager currently
-      holds only DataSync location entries.
-- [ ] 5.2 **Values are not carried in OpenTofu** — a value in a variable is a
-      value in state. Load out-of-band; `ignore_changes` on `secret_string`.
+- [x] 5.1 `modules/secrets`: **written and validated, not applied.** Creates
+      the `fastly` entry and a read policy scoped to exactly that ARN.
+      **Corrected while building: the serving plane needs one secret, not
+      three.** `api/` reads a single credential, `FASTLY_PURGE_TOKEN`
+      (`api/app/server/post_results.go:639`); there is no GitHub App credential
+      and no GitLab token anywhere in the tree. Its other three environment
+      variables are configuration, not secrets.
+- [x] 5.2 **Values are not carried in OpenTofu** — a value in a variable is a
+      value in state. **Corrected: no `ignore_changes` is involved.** The module
+      creates only `aws_secretsmanager_secret`, never
+      `aws_secretsmanager_secret_version`, which is the resource that would hold
+      the value. Nothing to ignore because nothing is managed. Loaded via
+      `aws secretsmanager put-secret-value`.
 - [ ] 5.3 Collapse the duplicated Fastly purge token to one secret. It exists in
       both Secret Manager and the GKE cluster today, and a rotation missing one
       copy leaves half the system purging with a dead token — silently, because a
       failed purge is indistinguishable from an unexpired cache.
-- [ ] 5.4 Decide whether the serving or batch plane owns `gitlab/auth_token`
-      before creating it. It gates batch scanning, not serving; creating it in
-      both places is worse than deciding once.
+- [x] 5.4 **Resolved: `gitlab/auth_token` is the batch plane's**, because the
+      batch plane is what reads it — `api/` never does. Not created here.
 
 ## 6. Service (**A7**, **A8**)
 
-- [ ] 6.1 `modules/service`: ECS cluster, task definition, and Fargate service.
+- [x] 6.1 `modules/service`: ECS cluster, task definition, and Fargate service.
       Tasks in private subnets, **no public IP**, ALB as the only public entry.
-- [ ] 6.2 One IAM task role for the API: read on the two buckets and its own
-      secrets, **nothing else**. Do not reproduce the breadth of the default
-      compute service account the Cloud Run service runs as today.
-- [ ] 6.3 Two tasks across two AZs as an availability floor (**A8**). This is
-      not a measurement — record it as provisional and revisit against origin
+      **Written and validated, not applied.** Deployment circuit breaker with
+      rollback, so a deployment that never goes healthy reverts itself rather
+      than sitting half-replaced.
+- [x] 6.2 Two roles, deliberately distinct: the **execution** role belongs to
+      the ECS agent (pull, logs, resolve secrets) and the **task** role is what
+      the application's own S3 calls authenticate as. Conflating them would hand
+      the application every secret the agent can resolve.
+      **Corrected while building: the S3 grant is asymmetric** (**A14**). The
+      publish path writes to the primary bucket only
+      (`post_results.go:167` -> `:279`); the read path falls back to the cron
+      bucket (`get_results.go:82`, `:94`). Primary gets `GetObject` +
+      `PutObject`, fallback gets `GetObject`. A uniform read-only grant — which
+      is what "read on the two buckets" would have produced — breaks publishing.
+      `s3:ListBucket` on both is required for correctness, not tidiness: without
+      it S3 answers a missing key with **403 instead of 404**, so an unscanned
+      repository becomes an error rather than a not-found, and conformance
+      checks that case.
+- [x] 6.3 Two tasks across two AZs as an availability floor (**A8**), recorded
+      as provisional in the variable's own documentation. Revisit against origin
       request rate after conformance.
 - [ ] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Environment:
       `SCORECARD_RESULTS_BUCKET_URL`, `SCORECARD_CRON_RESULTS_BUCKET_URL`,
       `API_BASE_URL`, `FASTLY_PURGE_TOKEN`.
-- [ ] 6.5 Images pinned by **digest**, never tag (`main` for staging, `api/v*`
-      for production).
-- [ ] 6.6 CloudWatch log group with a retention policy. Retention defaults to
-      "forever", which is a slow cost leak rather than a durability feature.
+- [x] 6.5 Images pinned by **digest**, never tag. Enforced by a variable
+      validation rejecting anything without `@sha256:<64 hex>`, so a tag is a
+      plan-time error rather than a rollback that silently lands on whatever the
+      tag means that day.
+- [x] 6.6 CloudWatch log group with 30-day retention. The default is "never
+      expire", which is a slow cost leak rather than a durability feature.
 
 ## 7. Edge (**A9**, **A10**)
 
-- [ ] 7.1 `modules/edge`: ACM certificate, ALB, target group, HTTPS listener.
-      OpenTofu owns all of it, so the origin's lifecycle is independent of any
-      workload object — the cutover and its rollback both turn on that hostname.
-      The account has no certificates and no load balancers today.
+- [x] 7.1 `modules/edge`: ACM certificate, ALB, target group, HTTPS listener,
+      HTTP->HTTPS redirect, and both security groups. **Written and validated,
+      not applied.** OpenTofu owns all of it, so the origin's lifecycle is
+      independent of any workload object; deletion protection is on.
+      **New finding (A15): the shipping API has no health endpoint.** Two routes
+      only, no `/health`, no `/readyz`, no Docker `HEALTHCHECK` — the
+      health-endpoint capability belongs to `internal/`, which is not what
+      deploys. The target group therefore probes `/` and accepts any non-5xx,
+      checking liveness rather than correctness. Probing a real `/projects` path
+      would fold S3 into target health and let one transient S3 fault drain the
+      entire pool at once.
 - [ ] 7.2 Emit the ACM validation records and the origin CNAME as outputs and
       create them in **Netlify DNS**. `aws_acm_certificate_validation` blocks
       until the validation records exist, which makes the manual step a visible

@@ -5,14 +5,16 @@ OpenTofu for the results API — the `api/` tree, which is the server that ships
 This deploys **only the serving plane**. The batch pipeline is a separate
 deployment under `deploy/cron/` and shares nothing here but the account. See
 `openspec/changes/provision-aws/` for the proposal, the decision record
-(**A1**–**A13**), and the task list.
+(**A1**–**A15**), and the task list.
 
 ## Requirements
 
 - **OpenTofu >= 1.10.** Not optional: state locking uses `use_lockfile`, native
   S3 conditional writes, which does not exist before 1.10 — v1.9 documents only
-  `dynamodb_table` and disables locking silently without it. `.opentofu-version`
-  pins the exact version.
+  `dynamodb_table` and disables locking silently without it. Each root module
+  declares the constraint; `../.opentofu-version` pins the exact version for
+  both planes, and version managers of the `tenv`/`tofuenv` family find it by
+  searching upward from wherever you are standing.
 - AWS credentials for the target account.
 - **Run off any TLS-intercepting network.** A VPN that re-signs certificates
   makes the AWS SDK fail with `SSL validation failed ... self-signed certificate

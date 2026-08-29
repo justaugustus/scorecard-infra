@@ -1,6 +1,6 @@
 # Design: the AWS serving environment
 
-Decision tags **A1**–**A13**. They are referenced from `tasks.md` and should be
+Decision tags **A1**–**A15**. They are referenced from `tasks.md` and should be
 cited in commit bodies, following the convention the other changes use.
 
 ## What the account actually contains
@@ -20,8 +20,8 @@ corpus and out of scope here.
 
 **The copy is running through AWS DataSync.** All 17 Secrets Manager entries are
 `aws-datasync!loc-*` location secrets. Nothing else is in Secrets Manager, so
-**none of the three application secrets exist yet** — `github`, `gitlab`, and
-`fastly` all have to be created.
+**no application secret exists yet.** The serving plane needs exactly one of
+them — see **A11**, which is narrower than the GKE inventory suggested.
 
 **There is no compute infrastructure at all.** Zero EC2 instances, zero EKS
 clusters, zero load balancers, zero ACM certificates, zero NAT gateways, zero
@@ -98,9 +98,9 @@ start lying the moment that happened. It also mirrors the existing top-level
 
 ```text
 deploy/
+  .opentofu-version           # both planes; version managers search upward
   api/                        # the serving plane; this change
     README.md
-    .opentofu-version
     bootstrap/                # root module; one-time, creates the state bucket
     modules/
       state-backend/          # used only by bootstrap/; see A4
@@ -133,9 +133,15 @@ serving plane (**A7**).
 **A3 — OpenTofu >= 1.10, pinned.** `use_lockfile` does not exist before 1.10:
 the [v1.9 S3 backend docs][v19] document only `dynamodb_table` and state that
 locking is disabled without it, while [v1.10][v110] adds `use_lockfile`. Latest
-stable is 1.12.6. The constraint is declared in `versions.tf` and the exact
-version in `.opentofu-version`, so the requirement surfaces as a readable error
-at plan time rather than a confusing backend failure at `init`.
+stable is 1.12.6, and it is what is installed. Each root module declares the
+constraint in its own `terraform` block, and `deploy/.opentofu-version` pins the
+exact version for both planes — one file rather than one per plane, since
+`tenv` and `tofuenv` resolve it by searching upward from the working directory.
+
+Verified rather than assumed: OpenTofu 1.9.0 against this constraint fails with
+`Unsupported OpenTofu Core version`, naming the line. That is the point — the
+requirement surfaces as a readable error at plan time rather than as a confusing
+backend failure at `init`.
 
 [v19]: https://opentofu.org/docs/v1.9/language/settings/backends/s3/
 [v110]: https://opentofu.org/docs/v1.10/language/settings/backends/s3/
@@ -271,6 +277,29 @@ origin verification — a security-posture change smuggled inside a migration
 whose entire acceptance claim is that behavior did not change. An ALB with an
 ACM certificate satisfies this directly.
 
+**A15 — the load balancer health check probes liveness, not correctness.**
+
+The shipping API has **no health endpoint**. Its contract is two routes —
+`/projects/{platform}/{org}/{repo}` and `.../badge` — with no `/health`, no
+`/readyz`, and no `HEALTHCHECK` in its Dockerfile. Earlier planning said the API
+"already supports health/readiness endpoints"; that is true of the
+provider-agnostic server in `internal/`, which is not what deploys (**A1**).
+
+So the target group probes `/` and accepts any non-5xx. The go-swagger router
+answers 404 there, and that 404 is the signal: the process is up, listening, and
+routing.
+
+Probing a real `/projects` path instead would be a mistake, and an attractive
+one. It would fold S3 availability into target health — and because every task
+runs the same probe against the same bucket, a transient S3 problem would fail
+all of them at once, drain the pool, and convert a degraded service into an
+unreachable one. A load balancer's question is "should this target receive
+traffic," not "is the system working." Cloud Run has no application health check
+today either, so this is also the closer match to the behavior being migrated.
+
+Worth revisiting when the freeze on `api/` lifts; adding a real health endpoint
+is a code change and does not belong in this one.
+
 The account has **no ACM certificates and no load balancers today**, so both are
 built here. Because the zones are on Netlify DNS, two record sets are created
 outside OpenTofu and emitted as outputs: the ACM DNS validation records, and the
@@ -318,27 +347,44 @@ access.
 
 **A11 — Secrets Manager holds the values; OpenTofu creates the containers.**
 
-The capture shows Secrets Manager currently holds only DataSync location
-entries, so all three application secrets are new: `github` (`app_id`,
-`app_key`, `installation_id`, `token`), `gitlab` (`auth_token`), and `fastly`
-(`purge_token`). Three further secrets in the GKE cluster belong to the separate
-`criticality-score` service and are not ours to move.
+**The serving plane needs exactly one secret**, and this was checked in the code
+rather than inherited from the GKE inventory. `api/` reads one credential:
+`FASTLY_PURGE_TOKEN`, at `api/app/server/post_results.go:639`. There is no
+GitHub App credential and no GitLab token anywhere in the tree. Its other three
+environment variables — `API_BASE_URL` and the two bucket URLs — are
+configuration, not secrets.
 
-OpenTofu creates the secret *resources* and the IAM policy granting the task
-role read access to only its own. It does **not** carry values: a value in a
-variable is a value in state, and the state bucket would then be a credential
-store with weaker controls than the service built for the purpose. Values are
-loaded out-of-band and `ignore_changes` covers `secret_string`.
+That settles the open question about GitLab ownership: **`gitlab/auth_token` is
+the batch plane's**, because the batch plane is what reads it. It gates GitLab
+scanning and there is a `cron/internal/data/gitlab-projects-releasetest.csv`
+lane, so it is required — just not here. Creating it in both places would be
+worse than creating it in either.
+
+OpenTofu creates the secret *resource* and the IAM policy granting read on
+exactly that ARN. It does **not** create an `aws_secretsmanager_secret_version`,
+which is the resource that would carry the value: a value passed to OpenTofu is
+a value written to state, and the state bucket would then be a credential store
+with weaker controls than the service built for the purpose. Because the version
+resource is simply absent, there is no value in state and **nothing to
+`ignore_changes` on** — an earlier draft of this design said otherwise and was
+wrong about which resource holds the value.
 
 **The duplicated Fastly purge token collapses to one secret.** It exists in both
 Secret Manager and the GKE cluster today, and a rotation that misses one copy
 leaves half the system purging with a dead token — silently, because a failed
 purge is indistinguishable from a cache that has not expired.
 
-**GitLab is required, not optional.** `gitlab/auth_token` gates GitLab scanning
-and there is a `cron/internal/data/gitlab-projects-releasetest.csv` lane. It
-belongs to the batch plane, so it is created here only if the batch plane is not
-going to own it — decide that before creating it, rather than creating it twice.
+**A14 — the task role's S3 grant is asymmetric, because the code is.** The
+publish path writes to the primary bucket only
+(`post_results.go:167` → `:279`); the read path tries the primary and falls back
+to the cron bucket (`get_results.go:82`, `:94`). So the primary gets
+`GetObject` + `PutObject` and the fallback gets `GetObject`. A uniform grant
+would either break publishing or hand out a write nothing uses.
+
+`s3:ListBucket` is granted on both, and it is not incidental: without it S3
+answers a `GET` for a missing key with **403 rather than 404**, so a repository
+that has never been scanned would surface as an error instead of "not found" —
+and that is a case the conformance harness checks.
 
 ## The gateway
 
