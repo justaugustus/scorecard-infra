@@ -338,9 +338,20 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       above adds the commit-scoped case: `content-type: application/json`,
       `cache-control: max-age=600`, and `surrogate-control: max-age=31557600`
       all matched exactly, origin-to-origin.
-- [ ] 9.7 Confirm the task role **cannot** reach a bucket or secret outside its
+- [x] 9.7 Confirm the task role **cannot** reach a bucket or secret outside its
       grant. A permissions test that only shows the allowed path working proves
       half of what is needed.
+      **Verified 2026-08-29** via `aws iam simulate-principal-policy` against
+      `scorecard-api-staging-task`: `allowed` for `s3:GetObject` on
+      `ossf-scorecard-results` (its actual grant), `implicitDeny` for the same
+      action on `ossf-scorecard-data2` (the batch plane's bucket), and
+      `implicitDeny` for `secretsmanager:GetSecretValue` on the Fastly
+      secret — the task role has no secrets grant at all by design
+      (`modules/service/main.tf:86-90`: that policy attaches to the
+      **execution** role, not the task role). Confirmed the execution role
+      does hold it: same call against `scorecard-api-staging-execution`
+      returned `allowed`. The boundary holds across both an unrelated bucket
+      and an entire resource category the task role was never meant to touch.
 - [ ] 9.8 Record actual cost after a week against the ~$110-145/month estimate,
       and confirm no per-request charge appears anywhere in the bill.
 
