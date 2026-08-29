@@ -32,11 +32,23 @@ Decision tags **A1**–**A13** are defined in `design.md`.
       that mean "not configured" being reported as failures; and empty result
       sets reported as plain `ok`. Sections now carry item counts. Helpers
       verified against the captured files.
-- [ ] 1.6 **Re-capture `ossf-scorecard-results` from a clean network.** Every
-      call against it failed on TLS interception (`self-signed certificate in
-      certificate chain`), so nothing is known about the configuration of the
-      most important bucket in the account. That error shape reads as a
-      permissions problem and is not one.
+- [x] 1.6 **Re-captured 2026-08-29 off the intercepting network.** The three
+      script fixes are confirmed working: sections now carry item counts, the
+      `NoSuch*` "not configured" cases report as `none`, and the one genuine
+      failure carries its reason. `ossf-scorecard-results` is now known:
+      SSE-S3 (`AES256`, bucket keys on, `SSE-C` blocked), all four public-access
+      blocks on, **versioning not enabled**, no lifecycle rules — the same shape
+      as every other bucket.
+      Its bucket *policy* is the one thing still uncaptured, on a lingering TLS
+      failure. Bounded rather than open: `BlockPublicPolicy` and
+      `RestrictPublicBuckets` are both on, so S3 would reject a public policy.
+      Whatever it says, it is not granting public access.
+- [x] 1.7 Inventory the IAM roles. All 21 are service-linked or DataSync-created
+      — seven `AWSDataSyncS3BucketAccess-*`, one per bucket, plus the
+      Application Migration Service set. **No application roles exist**, so the
+      task role, the execution role, and the CI deploy role are all new.
+      Elastic IP quota is 5, which bounds how many NAT gateways both planes can
+      hold between them.
 
 ## 2. Toolchain and scaffolding
 

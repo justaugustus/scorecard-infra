@@ -5,8 +5,9 @@ cited in commit bodies, following the convention the other changes use.
 
 ## What the account actually contains
 
-Captured 2026-08-29 with `scripts/cutover/capture-aws.sh`, 20 of 20 sections
-against the live account. Everything below is observed, not assumed.
+Captured 2026-08-29 with `scripts/cutover/capture-aws.sh`, across two runs — the
+second off the TLS-intercepting network that cost the first one a bucket.
+Everything below is observed, not assumed.
 
 **Region: `us-east-1`.** All seven buckets are there. This settles **A5** — the
 region was an observation waiting to be made, not a choice.
@@ -35,6 +36,12 @@ Two of those deserve to be stated rather than skimmed:
   builds on it.
 - **No Route 53 zones**, which confirms the DNS delegation to Netlify from the
   other direction rather than taking it on trust.
+
+**No application IAM roles exist either.** All 21 roles in the account are
+service-linked or DataSync-created — one `AWSDataSyncS3BucketAccess-*` per
+bucket, plus the Application Migration Service set. The task role, the execution
+role, and the CI deploy role are all new. The Elastic IP quota is 5, which is
+the ceiling both planes share for NAT gateways.
 
 One SQS queue exists, `openssf-scorecard`. It belongs to the batch plane, which
 this change does not touch.
@@ -282,10 +289,19 @@ The API needs exactly two: `ossf-scorecard-results` (primary, via
 `SCORECARD_RESULTS_BUCKET_URL`) and `ossf-scorecard-cron-results` (fallback, via
 `SCORECARD_CRON_RESULTS_BUCKET_URL`). The other four belong to the batch plane.
 
-One caveat on the capture: every call against `ossf-scorecard-results` failed on
-the TLS-interception error described in **A6**, so **nothing is yet known about
-that bucket's configuration** — and it is the most important one. Re-capture it
-from a clean network before relying on any property of it.
+All seven buckets share one shape, confirmed by the second capture: SSE-S3
+(`AES256`) with bucket keys on and `SSE-C` blocked, all four public-access
+blocks on, **versioning not enabled**, and no lifecycle rules. So the corpus is
+encrypted and closed to the public, and it is not protected against overwrite —
+which matters more here than it would elsewhere, because `latest` is an
+unconditional overwrite and a delayed run can regress it. That is a known
+correctness debt, it is real, and fixing it is still not this change's business.
+
+One item remains uncaptured: the bucket policy on `ossf-scorecard-results`, lost
+to a lingering TLS failure. The gap is bounded rather than open —
+`BlockPublicPolicy` and `RestrictPublicBuckets` are both on, so S3 rejects a
+public policy outright. Whatever that policy says, it is not granting public
+access.
 
 ## Secrets
 

@@ -96,13 +96,13 @@ and everything that will serve it is still unwritten.
 
 ## Open questions carried into implementation
 
-1. **`ossf-scorecard-results` was not successfully captured.** Every call against
-   it failed on a TLS-interception error from the network the capture ran on, so
-   nothing is known about the configuration of the single most important bucket.
-   Re-capture from a clean network before relying on any property of it.
-2. **Which plane owns the GitLab secret.** It gates batch scanning, not serving.
+1. **Which plane owns the GitLab secret.** It gates batch scanning, not serving.
    Creating it in both places is worse than deciding once.
-3. **Task count and size.** Two tasks is an availability floor, not a
+2. **Task count and size.** Two tasks is an availability floor, not a
    measurement. The number that should replace it is origin request rate — cache
    misses per second, not public traffic — and conformance has to run before
    there is anything to measure.
+3. **Versioning is off on every corpus bucket, including the one the API reads.**
+   Out of scope here, and worth its own decision soon: `latest` is an
+   unconditional overwrite, so a delayed run can regress it, and there is
+   currently nothing to recover from when it does.
