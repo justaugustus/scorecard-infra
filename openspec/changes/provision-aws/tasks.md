@@ -254,6 +254,27 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       established the two public hostnames cache separately under a year-long
       `Surrogate-Control` with only one purged, so a CDN comparison measures
       cache vintage, not behavior.
+
+      **Blocked, and treated as superseded by 9.4 rather than pursued
+      further.** The one run attempted (2026-08-29) showed 20 of 20 requests
+      differing, with `scorecard-api-prod` returning a uniform 403 on every
+      path including `results-known-good` — not the selective
+      undocumented-path rejection this task is meant to isolate.
+      `get-iam-policy` on the service confirmed why: its only
+      `roles/run.invoker` binding is
+      `367732848534-compute@developer.gserviceaccount.com` (the project's
+      default Compute SA, not a purpose-built identity), no `allUsers` — so
+      the run measured Cloud Run's auth gate, not ESPv2. Minting a token for
+      that service account requires impersonating it, which requires
+      `roles/iam.serviceAccountTokenCreator` on it; the account available in
+      this session (`saugustus2@bloomberg.net`) does not have that binding,
+      and getting it requires another admin's action.
+      Not pursued further because 9.4 already produced a more direct answer:
+      its `cors-preflight` finding shows the gateway rejecting a valid OPTIONS
+      request with its own stale-contract error, while the identical
+      application code (minus the gateway) answers it correctly. That is
+      concrete, attributed evidence of ESPv2 breaking a real request, obtained
+      without impersonation — sufficient for the **A12** decision on its own.
 - [x] 9.3 Record the diff and decide per difference: fold into the application,
       or accept deliberately. Do not let the cutover be where this is found.
       **Both differences from 9.4 accepted deliberately, not folded in** —
