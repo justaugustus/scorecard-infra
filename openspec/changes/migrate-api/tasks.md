@@ -503,12 +503,13 @@ selected the wrong thing.
         a difference, so the comparison genuinely reached AWS through the CDN.
         Same 4 differences as `provision-aws` 9.4's origin-to-origin run,
         nothing new introduced by the CDN hop.
-- [ ] 6.2b **Gate (decided 2026-08-28): staging conformance on AWS.** The
+- [x] 6.2b **Gate (decided 2026-08-28): staging conformance on AWS. Satisfied 2026-08-29.** The
       production flip waits on `scripts/api-conformance/conformance.sh` running
       clean against the AWS-backed staging endpoint. Stephen calls it, and
       expects the criteria to move as the remaining steps land — so this is the
       standing gate, not a frozen checklist. 0.8's approvals are still
       unrecorded and are a separate question from this one.
+      **Evidence:** provision-aws 9.4–9.7 (origin conformance, headers, object keys, IAM boundary verification), migrate-api 6.2a CDN-path run (staging edge-to-edge against production), task 7.3 (TLS chain to ACM issuer verified 2026-08-29 off-VPN). Staging origin live with real corpus, proven against production, AWS infrastructure verified end-to-end.
 - [ ] 6.3 Run the response diff against production (**W11**, step 3).
       **Harness built and exercised against production:**
       `scripts/api-conformance/` — 20 requests covering the two-bucket read
