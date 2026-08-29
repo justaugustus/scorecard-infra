@@ -267,8 +267,8 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       the run measured Cloud Run's auth gate, not ESPv2. Minting a token for
       that service account requires impersonating it, which requires
       `roles/iam.serviceAccountTokenCreator` on it; the account available in
-      this session (`saugustus2@bloomberg.net`) does not have that binding,
-      and getting it requires another admin's action.
+      this session does not have that binding, and getting it requires
+      another admin's action.
       Not pursued further because 9.4 already produced a more direct answer:
       its `cors-preflight` finding shows the gateway rejecting a valid OPTIONS
       request with its own stale-contract error, while the identical
