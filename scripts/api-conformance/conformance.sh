@@ -19,6 +19,12 @@
 #   ./conformance.sh capture  <base-url> <out-dir>
 #   ./conformance.sh compare  <base-url-a> <base-url-b> [out-dir]
 #
+# Base URLs must include an explicit scheme (https:// or http://). A bare
+# hostname's default scheme is not something to guess at: against an
+# ALB-fronted origin, plain HTTP hits the HTTP->HTTPS redirect listener before
+# reaching the application, so a bare host silently compares two redirect
+# pages instead of the app.
+#
 # `compare` queries both deployments and reports any request whose observable
 # behavior differs. It is the cutover gate: the migrated service must answer
 # identically to the one it replaces.
@@ -56,6 +62,18 @@ IGNORE_SCAN_METADATA=0
 SIGNIFICANT_HEADERS='^(content-type|location|cache-control|surrogate-control|surrogate-key|access-control-allow-origin|access-control-allow-methods|access-control-allow-headers|www-authenticate|retry-after):'
 
 die() { echo "error: $*" >&2; exit 1; }
+
+# A bare hostname's default scheme is not a safe assumption: curl's default
+# varies by version, and a plain-HTTP request to an ALB-fronted origin hits
+# its HTTP->HTTPS redirect listener before ever reaching the application --
+# silently producing a comparison of two redirect pages instead of the app.
+# Require the scheme explicitly rather than let that happen again.
+require_scheme() {
+  case "$1" in
+    http://*|https://*) ;;
+    *) die "'$1' has no scheme -- pass https://$1 (or http://), not a bare hostname. A bare host's default scheme is not guaranteed, and against an ALB origin it silently compares HTTP-redirect pages instead of the application." ;;
+  esac
+}
 
 usage() {
   sed -n '17,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -134,6 +152,7 @@ run_set() {
 cmd_capture() {
   local base="${1:-}" dir="${2:-}"
   [ -n "${base}" ] && [ -n "${dir}" ] || usage
+  require_scheme "${base}"
   echo "Capturing ${base} -> ${dir}"
   run_set "${base}" "${dir}"
   echo "Captured $(find "${dir}" -name '*.status' | wc -l | tr -d ' ') requests."
@@ -142,9 +161,16 @@ cmd_capture() {
 cmd_compare() {
   local a="${1:-}" b="${2:-}" dir="${3:-}"
   [ -n "${a}" ] && [ -n "${b}" ] || usage
+  require_scheme "${a}"
+  require_scheme "${b}"
   if [ -z "${dir}" ]; then
     dir="$(mktemp -d)"
-    trap 'rm -rf "${dir}"' EXIT
+    # Double-quoted so ${dir} is substituted now, while it's a local in this
+    # function's scope -- the trap only fires after the script's last command,
+    # by which point cmd_compare has returned and a deferred lookup of ${dir}
+    # would be unbound under `set -u`.
+    # shellcheck disable=SC2064
+    trap "rm -rf '${dir}'" EXIT
   fi
 
   echo "A: ${a}"
