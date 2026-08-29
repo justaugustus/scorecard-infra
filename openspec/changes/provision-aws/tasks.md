@@ -236,12 +236,20 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       driver is linked and the bucket URL is configuration, but this combination
       has never been executed by anyone. Treat a failure here as expected
       information.
-- [ ] 9.2 Measure the ESPv2 contribution (**A12**): run
-      `scripts/api-conformance/conformance.sh` between the gatewayed production
-      origin and the gateway-less staging origin. **Origin-to-origin, not
-      hostname-to-hostname** — finding 6.3a established the two public hostnames
-      cache separately under a year-long `Surrogate-Control` with only one
-      purged, so a CDN comparison measures cache vintage, not behavior.
+- [ ] 9.2 Measure the ESPv2 contribution (**A12**). **Runnable today — needs no
+      AWS resources**, so it does not have to wait behind the apply:
+      `conformance.sh compare <scorecard-endpoints-prod> <scorecard-api-prod>`.
+      **Corrected: compare the gateway against the application behind it, not
+      production against staging.** An earlier version of this task said
+      staging, which is confounded — finding 6.3b established production runs a
+      six-month-old image, so that diff mixes the gateway's contribution with a
+      deliberate code change and can attribute neither. Gateway-vs-app holds
+      application, data, and version constant. `scorecard-api-prod` has ingress
+      `all`, so it is directly addressable; both URLs are in the capture.
+      **Origin-to-origin, never hostname-to-hostname** — finding 6.3a
+      established the two public hostnames cache separately under a year-long
+      `Surrogate-Control` with only one purged, so a CDN comparison measures
+      cache vintage, not behavior.
 - [ ] 9.3 Record the diff and decide per difference: fold into the application,
       or accept deliberately. Do not let the cutover be where this is found.
 - [ ] 9.4 Run conformance against the AWS origin. Cover the two-bucket read

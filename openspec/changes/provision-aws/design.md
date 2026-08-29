@@ -428,17 +428,32 @@ codes on exactly the inputs nobody routes deliberately. The production gateway
 also enforces a 2023-08-30 configuration, so what it validates against is not
 what `openapi.yaml` currently says.
 
-The measurement is cheap and the harness exists. Run
-`scripts/api-conformance/conformance.sh` origin-to-origin between the gatewayed
-production path and the gateway-less staging path; the diff is precisely ESPv2's
-contribution. Whatever it shows is either folded into the application or
-accepted deliberately — the point is that the cutover should not be the first
-time anyone finds out.
+The measurement is cheap and the harness exists:
 
-Run it **origin-to-origin, not hostname-to-hostname**. Finding 6.3a established
-that the two public hostnames cache separately under a year-long
+```sh
+scripts/api-conformance/conformance.sh compare \
+  <scorecard-endpoints-prod URL> \
+  <scorecard-api-prod URL>
+```
+
+**Compare the gateway against the application behind it, not production against
+staging.** An earlier draft of this design said staging, and that comparison is
+confounded: finding 6.3b established that production runs a six-month-old image,
+so a prod-vs-staging diff mixes the gateway's contribution with a deliberate
+code change and cannot attribute either. Putting the gateway and the service it
+fronts side by side holds the application, the data, and the version constant,
+leaving ESPv2 as the only variable. The capture confirms `scorecard-api-prod`
+runs with ingress `all`, so it is directly addressable; both URLs are in the
+gitignored capture output.
+
+Run it **origin-to-origin, never hostname-to-hostname**. Finding 6.3a
+established that the two public hostnames cache separately under a year-long
 `Surrogate-Control` and only one is purged, so a CDN-level comparison measures
 cache vintage rather than behavior.
+
+Whatever the diff shows is either folded into the application or accepted
+deliberately. The point is that the cutover should not be the first time anyone
+finds out. This needs no AWS resources and can run today.
 
 ## What this change does not decide
 
