@@ -1,6 +1,6 @@
 # Design: the AWS serving environment
 
-Decision tags **A1**–**A15**. They are referenced from `tasks.md` and should be
+Decision tags **A1**–**A16**. They are referenced from `tasks.md` and should be
 cited in commit bodies, following the convention the other changes use.
 
 ## What the account actually contains
@@ -385,6 +385,33 @@ would either break publishing or hand out a write nothing uses.
 answers a `GET` for a missing key with **403 rather than 404**, so a repository
 that has never been scanned would surface as an error instead of "not found" —
 and that is a case the conformance harness checks.
+
+**A16 — staging and production share the corpus for reads; only production may
+write to it.**
+
+This one only became visible when the two environment roots were written
+side by side, and it is the sharpest hazard in the design.
+
+Staging has to read the *real* corpus. Conformance against an empty bucket
+proves nothing: every request would 404 identically whether the service worked
+or not, and the harness's whole value is comparing real responses to production.
+So both environments point at `ossf-scorecard-results`.
+
+But the API's publish path writes into whichever bucket it reads as primary. A
+staging task granted `PutObject` on that bucket could therefore overwrite
+production results with output from an unproven build — and because `latest` is
+an unconditional overwrite on buckets that have **no versioning enabled**, there
+would be nothing to restore from.
+
+So the write is gated behind `enable_publish_writes`, defaulting to **false**,
+and only the production root sets it true. Staging consequently fails the POST
+path by design. That costs nothing: the conformance harness is GET requests, and
+the publish path is gated separately by watching a real Action upload land
+(`migrate-api` task 6.6).
+
+The general form of the rule is worth stating, because the batch plane will meet
+it too: **sharing a data store between environments is safe in one direction
+only.**
 
 ## The gateway
 

@@ -5,7 +5,7 @@ OpenTofu for the results API — the `api/` tree, which is the server that ships
 This deploys **only the serving plane**. The batch pipeline is a separate
 deployment under `deploy/cron/` and shares nothing here but the account. See
 `openspec/changes/provision-aws/` for the proposal, the decision record
-(**A1**–**A15**), and the task list.
+(**A1**–**A16**), and the task list.
 
 ## Requirements
 
@@ -72,14 +72,52 @@ observation — wherever the result buckets already are — not a choice; a serv
 in a different region from its buckets loses the S3 gateway endpoint and pays
 NAT egress on every object read (**A5**).
 
-## Normal use
+## Apply order
+
+`bootstrap/` first, then `staging`, then `production`. The order is not
+cosmetic:
+
+- `bootstrap/` creates the state bucket every other root writes into.
+- **`staging` creates the GitHub OIDC provider; `production` consumes it.** AWS
+  permits one provider per issuer per account, so production sets
+  `create_oidc_provider = false` and takes `oidc_provider_arn` from staging's
+  output. Applying production first fails, or creates the provider in the wrong
+  root.
 
 ```sh
 cd environments/staging
-tofu init
+
+# The bucket is chosen at bootstrap, so it is supplied at init rather than
+# committed.
+tofu init -backend-config=bucket=<state bucket>
+
+# First run only: the certificate has to exist before its validation records
+# can be read, and they are created by hand in Netlify.
+tofu apply -target=module.edge.aws_acm_certificate.this
+tofu output -json certificate_validation_records   # create these in Netlify
+
 tofu plan
 tofu apply
 ```
+
+`image` and `origin_hostname` have no defaults and must be supplied.
+
+## Staging reads production's data and cannot write to it
+
+Both environments point at the same corpus buckets, because conformance against
+an empty bucket proves nothing — every request would 404 identically whether or
+not the service worked.
+
+Only production may **write**. The API's publish path writes into whichever
+bucket it reads as primary, so a staging task with `PutObject` could overwrite
+production results with output from an unproven build — and versioning is not
+enabled on those buckets, so there would be nothing to restore from. The write
+is gated behind `enable_publish_writes`, default `false`, set true only in
+`environments/production`.
+
+Staging therefore fails the `POST` path by design. That is not a gap in the
+rehearsal: the conformance harness is `GET` requests, and the publish path is
+gated separately by watching a real Action upload land.
 
 ## What this does not manage
 

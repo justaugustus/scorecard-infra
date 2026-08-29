@@ -1,0 +1,64 @@
+name: OpenTofu
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/tofu.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/tofu.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  # Formatting and schema validation only. This workflow deliberately holds no
+  # AWS credentials and never runs plan or apply: a pull-request check that can
+  # reach the account is a pull-request check that can be made to reach it by
+  # anyone who can open a pull request.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+      with:
+        egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
+
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Set up OpenTofu
+      uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+      with:
+        # Matches deploy/.opentofu-version. Kept literal because the action
+        # takes a version rather than a file, and a mismatch should be visible
+        # in the diff rather than resolved silently at run time.
+        tofu_version: 1.12.6
+        tofu_wrapper: false
+
+    - name: Check formatting
+      run: tofu fmt -check -recursive -diff deploy/
+
+    # Every root module and every module is validated independently. A module
+    # that only ever gets checked through its caller can carry a schema error
+    # that no caller happens to exercise.
+    - name: Validate
+      run: |
+        set -euo pipefail
+        failed=0
+        while IFS= read -r dir; do
+          echo "::group::validate ${dir}"
+          if ! (cd "${dir}" && tofu init -backend=false -input=false >/dev/null && tofu validate); then
+            echo "::error file=${dir}::tofu validate failed"
+            failed=1
+          fi
+          echo "::endgroup::"
+        done < <(find deploy -type f -name '*.tf' -exec dirname {} \; | sort -u)
+        exit "${failed}"

@@ -105,15 +105,27 @@ resource "aws_iam_role" "task" {
 # would either break publishing or hand out a write it does not need.
 data "aws_iam_policy_document" "task" {
   statement {
-    sid    = "ReadWritePrimaryResults"
-    effect = "Allow"
-
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-    ]
-
+    sid       = "ReadPrimaryResults"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
     resources = ["${local.results_arn}/*"]
+  }
+
+  # Split from the read above rather than folded into it, because staging and
+  # production share a corpus and must not share this. Conformance needs real
+  # data to be meaningful, so staging reads the production buckets -- but the
+  # publish path writes into whichever bucket it reads as primary, so a staging
+  # task with PutObject could overwrite production results with output from an
+  # unproven build. Reads are shared; writes are production-only.
+  dynamic "statement" {
+    for_each = var.enable_publish_writes ? [1] : []
+
+    content {
+      sid       = "WritePrimaryResults"
+      effect    = "Allow"
+      actions   = ["s3:PutObject"]
+      resources = ["${local.results_arn}/*"]
+    }
   }
 
   statement {

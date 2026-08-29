@@ -39,6 +39,26 @@ variable "cron_results_bucket" {
   type        = string
 }
 
+variable "enable_publish_writes" {
+  description = <<-EOT
+    Whether the task role may WRITE to the primary results bucket.
+
+    False by default, and that default is the safety-critical part. Staging and
+    production read the same corpus, because conformance against an empty bucket
+    would prove nothing -- every request would 404 identically whether or not
+    the service worked. But the API's publish path writes results into whichever
+    bucket it reads as primary, so a staging deployment granted PutObject would
+    be able to overwrite production results with output from an unproven build.
+
+    Reads are shared; writes are not. Only production sets this true. Staging
+    consequently fails the POST path by design, which costs nothing here: the
+    conformance harness is GET requests, and the publish path is gated
+    separately by watching a real Action upload land in production.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "api_base_url" {
   description = <<-EOT
     Public base URL, e.g. https://api.scorecard.dev. Used to build the URL the

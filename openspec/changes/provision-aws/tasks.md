@@ -1,6 +1,6 @@
 # Tasks: Provision the AWS serving environment in OpenTofu
 
-Decision tags **A1**–**A15** are defined in `design.md`.
+Decision tags **A1**–**A16** are defined in `design.md`.
 
 ## 1. Discovery
 
@@ -72,13 +72,21 @@ Decision tags **A1**–**A15** are defined in `design.md`.
 - [x] 2.3 Add `deploy/api/README.md`: how to run, the one-time state bootstrap
       and why a local `terraform.tfstate` is a mistake after it, and the manual
       Netlify DNS steps (**A10**).
-- [ ] 2.4 Gitignore OpenTofu working state — **done**: `.terraform/`,
-      `*.tfstate*`, `*.tfvars` with a `!*.tfvars.example` negation, and crash
-      logs. `.terraform.lock.hcl` deliberately stays tracked; it is the
+- [x] 2.4 Gitignore OpenTofu working state: `.terraform/`, `*.tfstate*`,
+      `*.tfvars` with a `!*.tfvars.example` negation, and crash logs.
+      `.terraform.lock.hcl` deliberately stays tracked; it is the
       provider-version lock and pinning it is the point.
-      **Still open:** `tofu fmt -check` and `tofu validate` in CI.
-- [ ] 2.5 Define a common tag set applied to every created resource, so anything
-      outside this tree is identifiable as drift.
+      CI added as `.github/workflows/tofu.yml`: `tofu fmt -check -recursive` and
+      `tofu validate` over **every** directory containing `.tf`, roots and
+      modules alike — a module only ever checked through its caller can carry a
+      schema error no caller happens to exercise.
+      The workflow holds **no AWS credentials** and never plans or applies. A
+      pull-request check that can reach the account is one that anyone who can
+      open a pull request can make reach it. Clean under `actionlint` and
+      `zizmor`.
+- [x] 2.5 Common tag set via the provider's `default_tags`, carrying Project,
+      Component, Environment, ManagedBy, and Source. Applied at the provider
+      rather than per-resource so a new resource cannot be added untagged.
 
 ## 3. State backend (**A4**)
 
@@ -109,13 +117,20 @@ Decision tags **A1**–**A15** are defined in `design.md`.
       spend them per-AZ by default.
       Private route tables are still created per-AZ so that flipping the flag
       later is a route change rather than re-associating every subnet.
-- [ ] 4.3 **Adopt the corpus buckets as `data` sources; never as resources**
-      (**A13**). Declaring them as `aws_s3_bucket` would put the corpus one
-      `tofu destroy` or one deleted block away from deletion, and OpenTofu
-      cannot distinguish "should not exist" from "someone removed the block."
-- [ ] 4.4 The API needs exactly two: `ossf-scorecard-results` (primary) and
-      `ossf-scorecard-cron-results` (fallback). Grant read on those two and
-      nothing else. The other four belong to the batch plane.
+- [x] 4.3 **Adopt the corpus buckets as `data` sources; never as resources**
+      (**A13**). Done in both environment roots. The data sources earn more than
+      documentation: they fail the **plan** if a bucket name is wrong or
+      unreachable, instead of letting the service deploy and 404 every request.
+- [x] 4.4 The API reaches exactly two: `ossf-scorecard-results` (primary) and
+      `ossf-scorecard-cron-results` (fallback). The other four belong to the
+      batch plane.
+      **New hazard found while writing the two roots (A16):** staging must read
+      the real corpus for conformance to mean anything, but the publish path
+      writes to whichever bucket it reads as primary — so a staging task with
+      `PutObject` could overwrite production results with an unproven build's
+      output, on buckets that have no versioning to restore from. Writes are
+      gated behind `enable_publish_writes`, default false, production only.
+      Staging fails the POST path by design.
 - [ ] 4.5 Do **not** create ECR (superseded by `ghcr.io`, #63), do **not** create
       any BigQuery equivalent, and do **not** change bucket versioning or
       lifecycle — that is live storage holding the corpus and wants its own
