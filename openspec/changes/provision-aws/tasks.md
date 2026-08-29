@@ -357,13 +357,30 @@ Decision tags **A1**–**A16** are defined in `design.md`.
 
 ## 10. Closeout
 
-- [ ] 10.1 `openspec validate provision-aws --strict` passes.
-- [ ] 10.2 `tofu fmt -check`, `tofu validate`, and `make lint` clean; workflows
+- [x] 10.1 `openspec validate provision-aws --strict` passes.
+- [x] 10.2 `tofu fmt -check`, `tofu validate`, and `make lint` clean; workflows
       pass `actionlint` and `zizmor`.
-- [ ] 10.3 Confirm no provider account identifier appears in any **commit
+      **Verified 2026-08-29**: `tofu fmt -check -recursive -diff deploy/`
+      clean; every directory under `deploy/` containing a `.tf` file
+      (`bootstrap`, both environment roots, all six modules) passes
+      `tofu init -backend=false && tofu validate` independently, matching
+      `tofu.yml`'s own loop rather than trusting a caller to exercise every
+      module; `actionlint` and `zizmor .github/workflows/` both clean.
+- [x] 10.3 Confirm no provider account identifier appears in any **commit
       message** — AWS account numbers, Fastly service IDs, queue URLs that embed
       an account ID. Tracked files are fine; the message cannot be revised later.
-- [ ] 10.4 Confirm nothing committed names the destination operator or the reason
+      **Audited 2026-08-29** across all 27 commits touching
+      `openspec/changes/provision-aws/`, `deploy/api/`,
+      `scripts/cutover/capture-aws.sh`, and `scripts/api-conformance/` — clean.
+- [x] 10.4 Confirm nothing committed names the destination operator or the reason
       for the transition. Motivation is provider-agnosticism.
-- [ ] 10.5 Hand off to `migrate-api` group 6 with the staging origin proven, and
+      **Audited alongside 10.3** — clean.
+- [x] 10.5 Hand off to `migrate-api` group 6 with the staging origin proven, and
       to `migrate-batch-pipeline` with `deploy/cron/` reserved and unbuilt.
+      The staging origin is proven per 9.1–9.7. `migrate-api` 6.2a already
+      names this as the plan ("AWS becomes the staging origin first") and 6.2b
+      as the gate ("the production flip waits on
+      `scripts/api-conformance/conformance.sh` running clean against the
+      AWS-backed staging endpoint"). That evidence now exists; 6.2a's own
+      caveats are what's still open there, not anything unresolved here —
+      see `migrate-api` tasks.md for the live status.
