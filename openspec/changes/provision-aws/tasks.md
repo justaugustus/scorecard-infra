@@ -131,7 +131,7 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       output, on buckets that have no versioning to restore from. Writes are
       gated behind `enable_publish_writes`, default false, production only.
       Staging fails the POST path by design.
-- [ ] 4.5 Do **not** create ECR (superseded by `ghcr.io`, #63), do **not** create
+- [x] 4.5 Do **not** create ECR (superseded by `ghcr.io`, #63), do **not** create
       any BigQuery equivalent, and do **not** change bucket versioning or
       lifecycle — that is live storage holding the corpus and wants its own
       decision.
@@ -182,7 +182,8 @@ Decision tags **A1**–**A16** are defined in `design.md`.
 - [x] 6.3 Two tasks across two AZs as an availability floor (**A8**), recorded
       as provisional in the variable's own documentation. Revisit against origin
       request rate after conformance.
-- [ ] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Environment:
+- [ ] 6.4 Deploy `api/` — **not `cmd/scorecard-api`** (**A1**). Task definition
+      written with the correct contract; not yet applied. Environment:
       `SCORECARD_RESULTS_BUCKET_URL`, `SCORECARD_CRON_RESULTS_BUCKET_URL`,
       `API_BASE_URL`, `FASTLY_PURGE_TOKEN`.
 - [x] 6.5 Images pinned by **digest**, never tag. Enforced by a variable
@@ -205,8 +206,9 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       checking liveness rather than correctness. Probing a real `/projects` path
       would fold S3 into target health and let one transient S3 fault drain the
       entire pool at once.
-- [ ] 7.2 Emit the ACM validation records and the origin CNAME as outputs and
-      create them in **Netlify DNS**. `aws_acm_certificate_validation` blocks
+- [ ] 7.2 **Outputs emitted** (`certificate_validation_records`, `alb_dns_name`)
+      in both environment roots; creating the records in **Netlify DNS** remains
+      an operational step. `aws_acm_certificate_validation` blocks
       until the validation records exist, which makes the manual step a visible
       gate.
 - [ ] 7.3 Verify the origin the way Fastly will: TLS handshake against the
@@ -215,10 +217,18 @@ Decision tags **A1**–**A16** are defined in `design.md`.
 
 ## 8. CI (**A9**)
 
-- [ ] 8.1 `modules/ci-oidc`: GitHub Actions OIDC provider and a deploy role whose
-      trust policy constrains the `sub` claim to this repository and a protected
-      environment — not to the org, and not to any branch. No provider exists in
-      the account today.
+- [x] 8.1 `modules/ci-oidc`: **written and validated, not applied.** Trust is
+      `StringEquals` on `repo:<owner>/<name>:environment:<env>` — no wildcard,
+      scoped to one repository and one environment rather than the org or a
+      branch, since a branch trust extends to anyone who can push one. `aud` is
+      pinned so a token minted for another audience cannot be replayed.
+      `iam:PassRole` is scoped to the two task roles **and** conditioned on
+      `iam:PassedToService = ecs-tasks.amazonaws.com`; unscoped, it would let CI
+      run a task as any role in the account.
+      Deliberately application-deploy only. `tofu apply` stays a human action,
+      because a role that can apply arbitrary OpenTofu can rewrite its own trust
+      policy. Staging creates the provider and production consumes it — AWS
+      permits one per issuer per account, and the account had none.
 
 ## 9. Verification
 
