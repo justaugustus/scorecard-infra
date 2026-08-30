@@ -169,10 +169,12 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       `aws_secretsmanager_secret_version`, which is the resource that would hold
       the value. Nothing to ignore because nothing is managed. Loaded via
       `aws secretsmanager put-secret-value`.
-- [ ] 5.3 Collapse the duplicated Fastly purge token to one secret. It exists in
-      both Secret Manager and the GKE cluster today, and a rotation missing one
-      copy leaves half the system purging with a dead token — silently, because a
-      failed purge is indistinguishable from an unexpired cache.
+- [x] 5.3 **Resolved: moot, not done.** Collapsing meant reconciling the GCP
+      Secret Manager copy against the GKE cluster's copy so a rotation
+      couldn't miss one. With GCP being decommissioned entirely rather than
+      run alongside AWS, that second copy is going away on its own — AWS
+      Secrets Manager holds exactly one Fastly purge-token secret
+      (`modules/secrets`), with nothing on the AWS side to duplicate it.
 - [x] 5.4 **Resolved: `gitlab/auth_token` is the batch plane's**, because the
       batch plane is what reads it — `api/` never does. Not created here.
 
@@ -387,8 +389,11 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       does hold it: same call against `scorecard-api-staging-execution`
       returned `allowed`. The boundary holds across both an unrelated bucket
       and an entire resource category the task role was never meant to touch.
-- [ ] 9.8 Record actual cost after a week against the ~$110-145/month estimate,
-      and confirm no per-request charge appears anywhere in the bill.
+- [ ] 9.8 **Tracked separately as
+      [#73](https://github.com/ossf/scorecard-infra/issues/73)**, not here. It's
+      gated on 2026-09-05 (a week of real traffic), which doesn't fit inside an
+      already-closed change; record actual cost against the ~$110-145/month
+      estimate and confirm no per-request charge appears anywhere in the bill.
 
 ## 10. Closeout
 
@@ -423,5 +428,17 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       checked off despite being done — turned up three more: 5.3 (duplicated
       Fastly purge token, cross-cloud, not started), 7.3 (TLS verification
       invalidated by this session's own network — see 7.3's note), and 9.2
-      (already recorded as blocked/superseded). The handoff to `migrate-api`
-      stands; the change is not fully closed.
+      (already recorded as blocked/superseded).
+
+      **Closed out 2026-08-30.** 7.3 re-ran clean off-VPN. 5.3 is moot: GCP is
+      being decommissioned outright rather than run alongside AWS, so the
+      second copy of the purge token it would have collapsed is going away on
+      its own. 9.8 is tracked in
+      [#73](https://github.com/ossf/scorecard-infra/issues/73) instead of
+      here, since it's gated on a date past this change's close. **9.2 is the
+      one item left un-decided**: it remains genuinely blocked (impersonating
+      the Cloud Run service account needs a binding this session never had),
+      and was deliberately not pursued further because 9.3/9.4 already gave
+      the **A12** decision sufficient evidence. Whether that's "close as
+      superseded" or "leave open" is a call for whoever signs off on this
+      archive, not one made unilaterally here.
