@@ -33,7 +33,7 @@ selected the wrong thing.
       so the Phase 3 diff stays empty and the import stays a pure relocation.
       Toolchain currency is a separate concern from a migration whose acceptance
       test is that nothing changed.
-- [ ] 0.4a **Recover the generator version, because nobody wrote it down.** The
+- [x] 0.4a **Recover the generator version, because nobody wrote it down.** The
       generated files carry no version stamp and the webapp pins go-swagger
       nowhere — its `Makefile` invokes whatever `swagger` is on `PATH`, the same
       unpinned-tool problem the pipeline import hit with `protoc`. Bisect
@@ -42,6 +42,16 @@ selected the wrong thing.
       that version where CI enforces it. If no release reproduces the tree
       exactly, say so and escalate to 0.4 rather than accepting a small diff
       quietly — a tree nobody can regenerate is a tree nobody can safely change.
+      **Resolved 2026-08-30, not by bisection.** The bisect-to-exact-match step
+      was never run; [PR #69](https://github.com/ossf/scorecard-infra/pull/69)
+      instead pinned forward to go-swagger **v0.36.5** (`SWAGGER_VERSION` in
+      `Makefile`), inlining several `openapi.yaml` schema references the newer
+      generator no longer honors. That is a deliberate diff from the pre-import
+      tree, not the exact reproduction this task originally asked for — but it
+      is pinned, and `make api-swagger` is now a no-op against it, which is
+      what the rest of this task's language ("nothing to regenerate with")
+      needed to unblock. Treated as resolving this task rather than escalating
+      to 0.4, per Stephen.
 - [x] 0.5 **Decided: administrative override.** 37 imported commits carry no
       sign-off and no honest code fix exists (**W13**). Same resolution the
       pipeline import reached, agreed in advance this time rather than at merge.
@@ -159,9 +169,12 @@ selected the wrong thing.
       **`govet` was deliberately left enabled**, and it earned it — see 3.8.
 - [x] 3.6 Verified clean both directions — `api/` imports nothing from
       `internal/`, `cmd/`, or `cron/`, and none of them imports `api/` (**W10**).
-- [ ] 3.7 Blocked on 0.4a, which trails past this week: the generator version
+- [x] 3.7 Blocked on 0.4a, which trails past this week: the generator version
       that produced the checked-in tree is unrecorded, so there is nothing to
       regenerate *with* yet. `make api-swagger` exists and is wired.
+      **Unblocked by 0.4a's resolution** — go-swagger is pinned
+      (`SWAGGER_VERSION = v0.36.5`) and `make api-swagger` regenerates against
+      it cleanly.
 - [x] 3.8 `go build ./...` and `golangci-lint run ./...` are clean with all
       three trees included. `go test ./... -race` is clean **except** for the
       imported end-to-end specs, which reach the network — see 3.8a and 3.8b.
@@ -225,8 +238,12 @@ selected the wrong thing.
 - [x] 4.3 `GITHUB_AUTH_TOKEN: ${{ github.token }}` added to the test job, fixing
       the rate-limit flake in 3.8a. **Verified in CI (PR #49): 8 specs pass, 0
       skip**, `api/app/server` at 64.6% statement coverage.
-- [ ] 4.4 Blocked on 0.4a, same as 3.7: there is no pinned generator to check
+- [x] 4.4 Blocked on 0.4a, same as 3.7: there is no pinned generator to check
       against yet.
+      **Satisfied by [PR #69](https://github.com/ossf/scorecard-infra/pull/69).**
+      Its `swagger-verify` CI job installs the pinned go-swagger version and
+      fails if `make api-swagger` is not a no-op against the committed spec —
+      exactly the check this task was blocked on having something to check.
 - [ ] 4.5 Deferred with the OSS-Fuzz repointing, per the scope call for this
       week. Porting the workflow alone would leave fuzzing pointed at the old
       source anyway.
