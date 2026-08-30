@@ -15,6 +15,16 @@ GET contract, so it is a drop-in `--base-url` target for
 [`uwu-tools/scorecard-mcp`](https://github.com/uwu-tools/scorecard-mcp) and any
 client of the public `api.scorecard.dev`.
 
+> **This is not the deployment path.** What serves `api.scorecard.dev` is
+> [`api/`](../../api/README.md), and that is where production API surface
+> belongs. This server was built here as a provider-agnostic implementation of
+> the same contract, on the assumption that its durable pieces would graft
+> outward into `ossf/scorecard-webapp` and `ossf/scorecard` — but both of those
+> trees were imported into *this* repository instead, so the graft reversed. It
+> is retained and still builds.
+> [`docs/upstream-graft.md`](../../docs/upstream-graft.md) explains the reversal
+> and what still genuinely grafts upstream.
+
 ## Why it exists
 
 The public Scorecard API only covers repositories that opted in via
@@ -23,10 +33,6 @@ that want results for **private** repos, for repos **not** in the weekly public
 scan, or on infrastructure they run themselves have no first-class option. This
 server fills that gap: it serves the same contract from **any** object store and
 computes results on demand.
-
-It is also the provider-agnostic serving tier the pipeline's own migration needs —
-the same reason it is structured to graft upstream rather than to persist as a
-third, divergent HTTP server.
 
 ## How it works
 
@@ -61,10 +67,10 @@ flowchart TD
 - **De-duplication:** concurrent requests for the same key coalesce into exactly
   one scan (single-flight), so a burst of clients can't trigger redundant scans
   or exhaust SCM rate limits.
-- **Upstream fallback (optional):** when enabled, a cache miss can reuse a recent
-  result from an upstream Scorecard API — before scanning (`fetch-first`) or only
-  when a scan can't run (`safety-net`). It is off by default and reported honestly
-  (`X-Scorecard-Source: upstream`); see [Upstream result fallback](#upstream-result-fallback).
+- **Upstream fallback (optional):** off by default. When enabled, a cache miss
+  can reuse a recent result from an upstream Scorecard API instead of scanning,
+  reported honestly as `X-Scorecard-Source: upstream` — see
+  [Upstream result fallback](#upstream-result-fallback).
 - **Persistence:** a live scan writes both the `latest` pointer and the
   commit-pinned object; a used upstream result is backfilled tagged as upstream.
   Results are immediately reusable by this server, the public webapp, and
@@ -73,26 +79,8 @@ flowchart TD
 ## Server components
 
 The binary wires nine focused packages: `config → store + scanner + flags →
-orchestrator (+ optional fallback) → HTTP`.
-
-```mermaid
-flowchart LR
-    CFG["config (env)"] --> ST["store"]
-    CFG --> SC["scan + tokens"]
-    CFG --> FL["flags (OpenFeature)"]
-    ST --> OR["orchestrator"]
-    SC --> OR
-    FL --> OR
-    OR --> API["httpapi"]
-    OR -. "optional" .-> FB["fallback"]
-    API -- "JSON2" --> CLI["scorecard-mcp / webapp clients"]
-    ST <-- "blob" --> BK[("object store")]
-    SC <-- "SCM API" --> GH[("GitHub / GitLab")]
-    FB <-- "GET /projects" --> UP[("upstream Scorecard API")]
-```
-
-The `model` package (JSON2 + provenance + repo-ref parsing) is shared across all
-of these.
+orchestrator (+ optional fallback) → HTTP`. The `model` package (JSON2 +
+provenance + repo-ref parsing) is shared across all of them.
 
 | Component | Path | Responsibility |
 | --- | --- | --- |
@@ -107,16 +95,6 @@ of these.
 | **config** | `internal/config` | 12-factor environment configuration with fail-fast validation. |
 | **flags** | `internal/flags` | Runtime feature-flag seam over OpenFeature; in-process env-seeded static provider with fail-safe defaults (gates the upstream fallback's `enabled`/`mode`). |
 
-> **This server is not currently the deployment path.** It was built here as a
-> provider-agnostic implementation of the results contract, on the assumption
-> that its durable pieces would graft outward into `ossf/scorecard-webapp` and
-> `ossf/scorecard`. Both of those graft targets have since been imported into
-> this repository instead — see [Results API](../../api/README.md) — so what
-> ships is the code already serving production. This package set is retained and
-> still builds; it is not where new API surface should go.
-> [`docs/upstream-graft.md`](../../docs/upstream-graft.md) explains the reversal
-> and what still genuinely grafts upstream.
-
 ## Prerequisites
 
 Beyond Go matching [`go.mod`](../../go.mod):
@@ -124,7 +102,8 @@ Beyond Go matching [`go.mod`](../../go.mod):
 - An **object store** reachable by a `gocloud.dev/blob` URL — a local directory
   (`file://…`) is enough to start; see [Storage backends](#storage-backends).
 - For **live scans only**: network egress (the engine calls the SCM API and
-  Scorecard's auxiliary data sources) and an **SCM token** (`GITHUB_AUTH_TOKEN`).
+  Scorecard's auxiliary data sources) and an **SCM token** — `GITHUB_AUTH_TOKEN`,
+  or `SCORECARD_GITHUB_TOKENS` for a pool fed into Scorecard's token rotation.
   Serving already-cached results needs neither.
 
 ## Build
@@ -266,11 +245,6 @@ All configuration comes from the environment. Only the bucket URL is required.
 | `SCORECARD_FALLBACK_URL` | — (disabled) | Upstream Scorecard API base URL (e.g. `https://api.scorecard.dev`); enables the fallback |
 | `SCORECARD_FALLBACK_TIMEOUT` | `5s` | Per-fetch timeout for the upstream fallback |
 | `SCORECARD_FALLBACK_MAX_AGE` | `168h` (7d) | Max age of an upstream result to use or backfill |
-
-Live scans call SCM and Scorecard's auxiliary data sources, so they need network
-egress and an SCM token (`GITHUB_AUTH_TOKEN`, or `SCORECARD_GITHUB_TOKENS` which
-is fed into Scorecard's token rotation). Serving already-cached results needs
-neither.
 
 ## Upstream result fallback
 
