@@ -169,10 +169,12 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       `aws_secretsmanager_secret_version`, which is the resource that would hold
       the value. Nothing to ignore because nothing is managed. Loaded via
       `aws secretsmanager put-secret-value`.
-- [ ] 5.3 Collapse the duplicated Fastly purge token to one secret. It exists in
-      both Secret Manager and the GKE cluster today, and a rotation missing one
-      copy leaves half the system purging with a dead token — silently, because a
-      failed purge is indistinguishable from an unexpired cache.
+- [x] 5.3 **Resolved: moot, not done.** Collapsing meant reconciling the GCP
+      Secret Manager copy against the GKE cluster's copy so a rotation
+      couldn't miss one. With GCP being decommissioned entirely rather than
+      run alongside AWS, that second copy is going away on its own — AWS
+      Secrets Manager holds exactly one Fastly purge-token secret
+      (`modules/secrets`), with nothing on the AWS side to duplicate it.
 - [x] 5.4 **Resolved: `gitlab/auth_token` is the batch plane's**, because the
       batch plane is what reads it — `api/` never does. Not created here.
 
@@ -237,7 +239,7 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       confirmed resolving. Production's certificate doesn't exist yet — its
       DNS records happen when production itself is applied, at cutover, same
       as 6.4.
-- [ ] 7.3 Verify the origin the way Fastly will: TLS handshake against the
+- [x] 7.3 Verify the origin the way Fastly will: TLS handshake against the
       hostname, valid chain, no SNI override and no disabled verification
       (**A10**).
       **Attempted 2026-08-29 and invalidated its own result**: this session's
@@ -247,13 +249,8 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       certificate verify ok` was verifying the wrong chain.
       This is the same class of trap the handoff notes already carried for
       the `aws` CLI, just previously unconfirmed for generic HTTPS from this
-      session. Needs re-running from a network that isn't intercepting TLS:
-      `curl -v https://origin-staging.scorecard.dev/projects/github.com/ossf/scorecard`,
-      confirm `issuer` traces to Amazon/ACM and `SSL certificate verify ok`
-      is checking that chain, not a local corporate one. This does not cast
-      doubt on any conformance *content* comparison in this change —
-      interception proxies re-sign the TLS layer but don't typically alter
-      payloads, so status/header/body diffs remain trustworthy.
+      session. 
+      **Re-run 2026-08-29 off-VPN:** confirmed issuer `C=US; O=Amazon; CN=Amazon RSA 2048 M04` (legitimate ACM), subject `origin-staging.scorecard.dev`, valid 2026-08-29 through 2027-03-14. TLS 1.3 / AEAD-AES128-GCM-SHA256, `SSL certificate verify ok` against the real chain. The application responds with 200 and valid scorecard JSON. Origin verified the way Fastly will see it.
 
 ## 8. CI (**A9**)
 
@@ -280,7 +277,7 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       `results-high-traffic`, `results-cron-only`, and `results-gitlab` all
       returned real S3-backed 200s from the staging origin, byte-identical to
       production. The driver worked on the first real attempt.
-- [ ] 9.2 Measure the ESPv2 contribution (**A12**). **Runnable today — needs no
+- [x] 9.2 Measure the ESPv2 contribution (**A12**). **Runnable today — needs no
       AWS resources**, so it does not have to wait behind the apply:
       `conformance.sh compare <scorecard-endpoints-prod> <scorecard-api-prod>`.
       **Corrected: compare the gateway against the application behind it, not
@@ -315,6 +312,9 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       application code (minus the gateway) answers it correctly. That is
       concrete, attributed evidence of ESPv2 breaking a real request, obtained
       without impersonation — sufficient for the **A12** decision on its own.
+      **Closed as superseded, 2026-08-30 — not coming back to this.** The
+      permission gap that blocked the direct measurement doesn't change; 9.4's
+      evidence stands as the basis for **A12** going forward.
 - [x] 9.3 Record the diff and decide per difference: fold into the application,
       or accept deliberately. Do not let the cutover be where this is found.
       **Both differences from 9.4 accepted deliberately, not folded in** —
@@ -392,8 +392,11 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       does hold it: same call against `scorecard-api-staging-execution`
       returned `allowed`. The boundary holds across both an unrelated bucket
       and an entire resource category the task role was never meant to touch.
-- [ ] 9.8 Record actual cost after a week against the ~$110-145/month estimate,
-      and confirm no per-request charge appears anywhere in the bill.
+- [ ] 9.8 **Tracked separately as
+      [#73](https://github.com/ossf/scorecard-infra/issues/73)**, not here. It's
+      gated on 2026-09-05 (a week of real traffic), which doesn't fit inside an
+      already-closed change; record actual cost against the ~$110-145/month
+      estimate and confirm no per-request charge appears anywhere in the bill.
 
 ## 10. Closeout
 
@@ -428,5 +431,19 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       checked off despite being done — turned up three more: 5.3 (duplicated
       Fastly purge token, cross-cloud, not started), 7.3 (TLS verification
       invalidated by this session's own network — see 7.3's note), and 9.2
-      (already recorded as blocked/superseded). The handoff to `migrate-api`
-      stands; the change is not fully closed.
+      (already recorded as blocked/superseded).
+
+      **Closed out 2026-08-30.** 7.3 re-ran clean off-VPN. 5.3 is moot: GCP is
+      being decommissioned outright rather than run alongside AWS, so the
+      second copy of the purge token it would have collapsed is going away on
+      its own. 9.8 is tracked in
+      [#73](https://github.com/ossf/scorecard-infra/issues/73) instead of
+      here, since it's gated on a date past this change's close. 9.2 is
+      closed as superseded, by decision: it remains genuinely blocked
+      (impersonating the Cloud Run service account needs a binding this
+      session never had), and 9.3/9.4 already gave the **A12** decision
+      sufficient evidence without it — not coming back to it.
+
+      **This change is now fully closed.** Every task is checked off or
+      explicitly tracked elsewhere (9.8, in #73); nothing is deferred inside
+      this archive.

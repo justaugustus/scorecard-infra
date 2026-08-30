@@ -41,9 +41,12 @@ variable "health_check_path" {
     two routes -- /projects/{platform}/{org}/{repo} and .../badge -- with no
     /health, no /readyz, and no HEALTHCHECK in its Dockerfile. (The
     health-endpoint capability belongs to the provider-agnostic server in
-    internal/, which is not what deploys.) So "/" returns a 404 from the
-    go-swagger router, and that 404 is the signal: the process is up, listening,
-    and routing.
+    internal/, which is not what deploys.) "/" actually returns 200 with the
+    generated Swagger UI, and that 200 is the signal: the process is up,
+    listening, and routing. Tightening the matcher to require exactly 200 would
+    couple target health to the Swagger UI assets being served, which is the
+    coupling this variable is meant to avoid -- hence health_check_matcher
+    below stays a wide range rather than narrowing to match this path.
   EOT
   type        = string
   default     = "/"
