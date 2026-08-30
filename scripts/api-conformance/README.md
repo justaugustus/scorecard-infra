@@ -50,10 +50,12 @@ survives a year unless purged, and `post_results.go` purges a single
 `API_BASE_URL`. A purge therefore refreshes one hostname and leaves the other
 serving whatever it last cached.
 
-Confirmed from the deployment rather than inferred: the Cloud Run service sets
-`API_BASE_URL=https://api.scorecard.dev`, and only `api.securityscorecards.dev`
-has an Endpoints service in front of it — so the two hostnames neither share a
-purge nor reach the backend by the same path.
+Confirmed from the deployment rather than inferred: the API's `API_BASE_URL`
+is `https://api.scorecard.dev`, so `post_results.go` only ever purges that one
+hostname — `api.securityscorecards.dev` has no purge path of its own. This
+predates the AWS cutover (it held under the old Cloud Run/Endpoints deployment
+too) and is unrelated to which cloud is behind the origin; it is a property of
+there being two published hostnames sharing one `API_BASE_URL`.
 
 Two consequences:
 
