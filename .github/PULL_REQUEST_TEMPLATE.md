@@ -34,7 +34,8 @@ the checklist below — see CONTRIBUTING.md#adding-repositories-to-the-weekly-sc
 
 If this PR touches the **batch pipeline** (`cron/`):
 
-- [ ] Runtime behavior is unchanged — the tree is behavior-frozen until cutover
+- [ ] Runtime behavior is unchanged — the tree stays equivalent to what
+      `ossf/scorecard` builds until cutover
 - [ ] No new import edges between `cron/` and `internal/` in either direction
 - [ ] If `cron/internal/format` changed, the corresponding engine change exists
       upstream and `schema_gen_test.go` passes
