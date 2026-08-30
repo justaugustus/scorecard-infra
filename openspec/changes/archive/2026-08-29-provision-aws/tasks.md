@@ -237,7 +237,7 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       confirmed resolving. Production's certificate doesn't exist yet — its
       DNS records happen when production itself is applied, at cutover, same
       as 6.4.
-- [ ] 7.3 Verify the origin the way Fastly will: TLS handshake against the
+- [x] 7.3 Verify the origin the way Fastly will: TLS handshake against the
       hostname, valid chain, no SNI override and no disabled verification
       (**A10**).
       **Attempted 2026-08-29 and invalidated its own result**: this session's
@@ -247,13 +247,8 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       certificate verify ok` was verifying the wrong chain.
       This is the same class of trap the handoff notes already carried for
       the `aws` CLI, just previously unconfirmed for generic HTTPS from this
-      session. Needs re-running from a network that isn't intercepting TLS:
-      `curl -v https://origin-staging.scorecard.dev/projects/github.com/ossf/scorecard`,
-      confirm `issuer` traces to Amazon/ACM and `SSL certificate verify ok`
-      is checking that chain, not a local corporate one. This does not cast
-      doubt on any conformance *content* comparison in this change —
-      interception proxies re-sign the TLS layer but don't typically alter
-      payloads, so status/header/body diffs remain trustworthy.
+      session. 
+      **Re-run 2026-08-29 off-VPN:** confirmed issuer `C=US; O=Amazon; CN=Amazon RSA 2048 M04` (legitimate ACM), subject `origin-staging.scorecard.dev`, valid 2026-08-29 through 2027-03-14. TLS 1.3 / AEAD-AES128-GCM-SHA256, `SSL certificate verify ok` against the real chain. The application responds with 200 and valid scorecard JSON. Origin verified the way Fastly will see it.
 
 ## 8. CI (**A9**)
 
