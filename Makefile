@@ -105,7 +105,7 @@ lint: ## Run golangci-lint
 # The imported API keeps its own Makefile with upstream's recipes, whose paths
 # are relative to api/ (design W5: upstream layout intact). These delegate to it
 # so the repository root stays the single entry point.
-.PHONY: api-build api-swagger api-docker
+.PHONY: api-build api-swagger api-docker api-docker-smoke
 api-build: ## Build the results API binary (api/scorecard-webapp)
 	$(MAKE) -C api scorecard-webapp
 
@@ -118,6 +118,39 @@ api-swagger: check-swagger
 api-docker: ## Build the results API image
 	DOCKER_BUILDKIT=1 docker build . --file api/Dockerfile \
 		--tag $(IMAGE_NAME)-api
+
+# A build proves the image compiles, which is not the same as proving it runs.
+# The distinction is not hypothetical: a spec-level change to `schemes` altered
+# the generated listener default, the ENTRYPOINT stopped being sufficient, and
+# the image built and published cleanly before failing to start at deploy time.
+# Running it is the cheapest check that separates the two.
+#
+# / is the target because it is what the load balancer health-checks and it
+# needs no cloud credentials -- /projects/... returns 404 without them, so it
+# would test the environment rather than the image.
+API_SMOKE_PORT ?= 18080
+API_SMOKE_NAME = $(IMAGE_NAME)-api-smoke
+api-docker-smoke: ## Run the results API image and require it to serve
+api-docker-smoke: api-docker
+	@docker rm -f $(API_SMOKE_NAME) >/dev/null 2>&1 || true; \
+	trap 'docker rm -f $(API_SMOKE_NAME) >/dev/null 2>&1 || true' EXIT; \
+	docker run -d --name $(API_SMOKE_NAME) \
+		-p 127.0.0.1:$(API_SMOKE_PORT):8080 $(IMAGE_NAME)-api >/dev/null || exit 1; \
+	for i in $$(seq 1 30); do \
+		if [ "$$(docker inspect -f '{{.State.Running}}' $(API_SMOKE_NAME) 2>/dev/null)" != "true" ]; then \
+			echo "the container exited instead of serving:"; \
+			docker logs $(API_SMOKE_NAME) 2>&1; \
+			exit 1; \
+		fi; \
+		if curl -fs --noproxy '*' -o /dev/null "http://127.0.0.1:$(API_SMOKE_PORT)/"; then \
+			echo "the image serves / after $${i}s"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "the container stayed up but never answered on /:"; \
+	docker logs $(API_SMOKE_NAME) 2>&1; \
+	exit 1
 
 ##@ Protobuf
 ###############################################################################
