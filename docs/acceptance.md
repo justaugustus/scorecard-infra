@@ -163,5 +163,5 @@ execution. This leg is outstanding for full 9.3 sign-off; the store already has
 an S3-compatible integration test gated on `SCORECARD_TEST_S3_URL` (task 3.5).
 
 **Verified 2026-08-05:** `TestRoundTripS3` passes against the local
-`docker-compose.s3.yml` store using this exact bucket URL — see memory
-`scorecard-api-docker-compose`.
+`cmd/scorecard-api/docker-compose.s3.yml` store using this exact bucket URL —
+see memory `scorecard-api-docker-compose`.

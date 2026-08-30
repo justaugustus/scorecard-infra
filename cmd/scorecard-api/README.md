@@ -299,9 +299,11 @@ and re-serves from cache.
 
 ## Running locally with Docker Compose
 
-Run from the repository root:
+Run from this directory — the compose stack and its `Dockerfile` live here,
+and build with the repository root as their context:
 
 ```sh
+cd cmd/scorecard-api
 cp .env.example .env   # set GITHUB_AUTH_TOKEN for live scans
 docker compose up --build
 ```

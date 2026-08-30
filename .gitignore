@@ -1,6 +1,9 @@
 /scorecard-api
 .env
-/data/
+
+# Docker Compose bind mount for the results API server's local store
+# (cmd/scorecard-api/docker-compose.yml).
+/cmd/scorecard-api/data/
 
 # Results API build artifact. Upstream ignored this as `scorecard-webapp` at its
 # repository root; the binary name is unchanged through cutover (design W5).
