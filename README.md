@@ -54,6 +54,40 @@ pipeline is a *producer* writing Scorecard results to a bucket; the API is the
 that the whole hosted data path lives in one place — which is the precondition
 for moving it.
 
+```mermaid
+flowchart LR
+    ACT["Scorecard<br/>GitHub Action"]
+
+    subgraph produce["Producer · cron/ — GCP, migrating to AWS"]
+        direction TB
+        CTL["batch controller"] --> WKR["scan workers"]
+        WKR --> COR[("weekly results")]
+        COR --> BQ[("BigQuery dataset")]
+    end
+
+    subgraph serve["Serving tier · api/ — AWS"]
+        direction TB
+        BKT[("results bucket")]
+        API["results API"]
+        BKT --> API
+        API -- "publish" --> BKT
+    end
+
+    COR -- "copied" --> BKT
+    ACT -- "POST · Sigstore-verified" --> API
+    API --> CDN{{"CDN<br/>api.scorecard.dev"}}
+    CDN --> VW["scorecard.dev<br/>viewer"]
+    CDN --> BDG["img.shields.io<br/>badge"]
+    CDN --> MCP["scorecard-mcp,<br/>other API clients"]
+```
+
+Arrows follow results, not requests. Two things the picture is worth reading
+carefully for: `cron/` still runs on GCP, so its output is **copied** into the
+bucket the API reads — removing that copy is what the pipeline's migration is
+for. And the Action's `POST` path is the only one that refreshes the edge
+promptly, because the cache purge fires from the publish handler; batch-produced
+results reach clients as the cache expires.
+
 They share a repository and **no code**. There are no import edges in any
 direction, enforced by CI, and that is deliberate. Converging them is the point
 of landing them together; it has not happened yet and should not happen
