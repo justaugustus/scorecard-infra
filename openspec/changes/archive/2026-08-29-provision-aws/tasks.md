@@ -277,7 +277,7 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       `results-high-traffic`, `results-cron-only`, and `results-gitlab` all
       returned real S3-backed 200s from the staging origin, byte-identical to
       production. The driver worked on the first real attempt.
-- [ ] 9.2 Measure the ESPv2 contribution (**A12**). **Runnable today — needs no
+- [x] 9.2 Measure the ESPv2 contribution (**A12**). **Runnable today — needs no
       AWS resources**, so it does not have to wait behind the apply:
       `conformance.sh compare <scorecard-endpoints-prod> <scorecard-api-prod>`.
       **Corrected: compare the gateway against the application behind it, not
@@ -312,6 +312,9 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       application code (minus the gateway) answers it correctly. That is
       concrete, attributed evidence of ESPv2 breaking a real request, obtained
       without impersonation — sufficient for the **A12** decision on its own.
+      **Closed as superseded, 2026-08-30 — not coming back to this.** The
+      permission gap that blocked the direct measurement doesn't change; 9.4's
+      evidence stands as the basis for **A12** going forward.
 - [x] 9.3 Record the diff and decide per difference: fold into the application,
       or accept deliberately. Do not let the cutover be where this is found.
       **Both differences from 9.4 accepted deliberately, not folded in** —
@@ -435,10 +438,12 @@ Decision tags **A1**–**A16** are defined in `design.md`.
       second copy of the purge token it would have collapsed is going away on
       its own. 9.8 is tracked in
       [#73](https://github.com/ossf/scorecard-infra/issues/73) instead of
-      here, since it's gated on a date past this change's close. **9.2 is the
-      one item left un-decided**: it remains genuinely blocked (impersonating
-      the Cloud Run service account needs a binding this session never had),
-      and was deliberately not pursued further because 9.3/9.4 already gave
-      the **A12** decision sufficient evidence. Whether that's "close as
-      superseded" or "leave open" is a call for whoever signs off on this
-      archive, not one made unilaterally here.
+      here, since it's gated on a date past this change's close. 9.2 is
+      closed as superseded, by decision: it remains genuinely blocked
+      (impersonating the Cloud Run service account needs a binding this
+      session never had), and 9.3/9.4 already gave the **A12** decision
+      sufficient evidence without it — not coming back to it.
+
+      **This change is now fully closed.** Every task is checked off or
+      explicitly tracked elsewhere (9.8, in #73); nothing is deferred inside
+      this archive.
