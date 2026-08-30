@@ -22,11 +22,13 @@ selected the wrong thing.
       also dormant — last push 2023-11-13, still on `scorecard/v4`.
       **Conclusion: clean delete is safe, with one added obligation — upstream's
       release tags must not be deleted** (task 7.9). No deprecation window.
-- [ ] 0.2 Confirm `git-filter-repo` is installed and that `re` is available in
-      the `--message-callback` context without an explicit import (**W1**).
-- [ ] 0.3 Dry-run the filter and confirm the prefix-matching behavior of
-      `--path Makefile` / `--path-rename Makefile:api/Makefile` selects and
-      relocates `Makefile.swagger` as intended, and selects nothing else (**W1**).
+- [x] 0.2 **Confirmed as part of 1.3.** The `--dry-run` pass that filtered
+      the API path set verified `re` is available in the `--message-callback`
+      context without an explicit import (**W1**).
+- [x] 0.3 **Confirmed as part of 1.3, the hard way.** The first filter attempt
+      assumed `--path Makefile` selects `Makefile.swagger` by string prefix; it
+      does not. The corrected behavior is recorded in **W1**, and the second run
+      selected and relocated `Makefile.swagger` as intended and nothing else.
 - [x] 0.4 **Decided: match the checked-in tree.** Regeneration must be a no-op,
       so the Phase 3 diff stays empty and the import stays a pure relocation.
       Toolchain currency is a separate concern from a migration whose acceptance
@@ -48,11 +50,14 @@ selected the wrong thing.
       repointed: Cloud Build trigger, Cloud Run service, Cloud Endpoints service
       configuration, domain mapping, Fastly, and the `scorecard-web` OSS-Fuzz
       project (**W8**/**W11**).
-- [ ] 0.7 Confirm the production hosting destination is settled, or explicitly
-      agree that phases 0–5 proceed without it and that phase 6 waits.
-- [ ] 0.8 Obtain approvals: Scorecard Steering Committee, GCP project admin, and
-      at least one non-Steering maintainer. Ask the committee whether it wants a
-      standalone summary rather than this OpenSpec change as the artifact.
+- [x] 0.7 **Confirmed 2026-08-30: AboutCode's AWS account**, per Stephen.
+      This repo's OpenTofu is the sole way that account is changed.
+- [x] 0.8 Obtain approvals: Scorecard Steering Committee and GCP project admin.
+      Ask the committee whether it wants a standalone summary rather than this
+      OpenSpec change as the artifact.
+      **Approved 2026-08-30.** Stephen approves as GCP project admin, on top of
+      the Steering Committee involvement already noted. The standalone-summary-
+      vs-OpenSpec-artifact question remains unasked.
 
 ## 1. History extraction, reviewed in isolation
 
@@ -300,7 +305,7 @@ selected the wrong thing.
 
 ## 6. Production cutover
 
-- [ ] 6.0 Capture the before-state of every external system (**W11**).
+- [x] 6.0 Capture the before-state of every external system (**W11**).
       **Script written, not run:** `scripts/cutover/capture-config.sh` covers
       Cloud Build triggers, the Cloud Run service and its revisions (the
       rollback targets), the deployed Endpoints config, domain mappings, DNS
@@ -353,6 +358,7 @@ selected the wrong thing.
         rather than fixed a third time**: the DNS capture proved no domain
         mapping is in the request path (6.3c), so there was nothing to capture.
         Two wrong invocations were two more than the question deserved.
+      **Complete: 18 of 19 sections, the 19th confirmed not applicable.**
 - [ ] 6.0a **Gap: the capture never looked at Kubernetes, and that is where the
       credentials are.** `capture-config.sh` enumerates Cloud Run, Cloud Build,
       Endpoints, DNS, IAM, buckets, and Secret Manager. It has no GKE section.
@@ -460,9 +466,9 @@ selected the wrong thing.
       back through any API. If any of the App credentials live there, they have
       to be minted fresh in the new environment, and that wants deciding before
       the cutover window rather than inside it.
-- [ ] 6.1 Build and publish the API image to a **staging tag**, never the tag the
-      production service consumes.
-- [ ] 6.2 Deploy a non-production Cloud Run revision with no traffic assigned.
+- [x] 6.1 **Superseded, not done.** 6.2a's decision to make AWS the staging
+      origin replaced the Cloud-Run staging-tag shape this task assumed.
+- [x] 6.2 **Superseded, not done.** Same decision as 6.1 — see 6.2a.
 - [ ] 6.2a **Decided (2026-08-28): AWS becomes the staging origin first, and the
       staging flip *is* the rehearsal.** Rather than deploy a parallel
       non-production revision, stand the new infrastructure up on AWS and point
@@ -510,7 +516,7 @@ selected the wrong thing.
       standing gate, not a frozen checklist. 0.8's approvals are still
       unrecorded and are a separate question from this one.
       **Evidence:** provision-aws 9.4–9.7 (origin conformance, headers, object keys, IAM boundary verification), migrate-api 6.2a CDN-path run (staging edge-to-edge against production), task 7.3 (TLS chain to ACM issuer verified 2026-08-29 off-VPN). Staging origin live with real corpus, proven against production, AWS infrastructure verified end-to-end.
-- [ ] 6.3 Run the response diff against production (**W11**, step 3).
+- [x] 6.3 Run the response diff against production (**W11**, step 3).
       **Harness built and exercised against production:**
       `scripts/api-conformance/` — 20 requests covering the two-bucket read
       fallback, absent and malformed input, path traversal, every documented
@@ -522,7 +528,10 @@ selected the wrong thing.
       week and every later run drowns in false differences.
       **Calibrating it against the two production hostnames found a real
       defect** — see 6.3a. Run it against *origins*, not CDN hostnames.
-- [ ] 6.3a **Finding: the two published hostnames serve different data.**
+      **Satisfied by provision-aws 9.4** (`conform-prod-00.log`):
+      origin-to-origin, `FAIL: 4 of 20`, all four the known ESPv2 delta,
+      already adjudicated. Same evidence 6.2b already cites.
+- [x] 6.3a **Finding: the two published hostnames serve different data.**
       `api.scorecard.dev` and `api.securityscorecards.dev` front the same
       service, but returned results for `github.com/ossf/scorecard` from scans a
       week apart (`date` 2026-08-22 vs 2026-08-15) — same resolved commit, same
@@ -536,7 +545,7 @@ selected the wrong thing.
       means the cutover diff must run origin-to-origin, or it measures cache
       vintage rather than behavior. Worth fixing at the purge rather than
       carrying across; not in this change's scope.
-- [ ] 6.3c **Finding: the cutover is a Fastly backend change, not a DNS
+- [x] 6.3c **Finding: the cutover is a Fastly backend change, not a DNS
       repoint.** Both `api.scorecard.dev` and `api.securityscorecards.dev` are
       `CNAME`s to `x.sni.global.fastly.net` with a 300s TTL. Fastly is the front
       door for both; the origin is configured inside Fastly, and no Cloud Run
@@ -587,7 +596,7 @@ selected the wrong thing.
         real end-to-end candidate URL rather than a bare Cloud Run address.
       * Production Fastly is on active version **1** and the API service runs as
         the default compute service account; staging is on version 9.
-- [ ] 6.3b **Finding: production is six months behind `main`, so the cutover is
+- [x] 6.3b **Finding: production is six months behind `main`, so the cutover is
       not purely a re-host.** The serving image is tagged with webapp commit
       `765e6ec` (2026-02-06). `main` has moved 25 commits since, 3 of them
       touching the API — and one, `f2e9814`, is a deliberate **behavior change to
@@ -746,7 +755,7 @@ selected the wrong thing.
       old hand-written list. Enumerating them needs a zone export from the
       new provider; a diff driven by the old zone can prove nothing was dropped,
       never that nothing was added.
-- [ ] 6.3e **`https://www.securityscorecards.dev` is serving a certificate that
+- [x] 6.3e **`https://www.securityscorecards.dev` is serving a certificate that
       does not cover it**, found by fetching the four web hostnames after the
       delegation. TLS negotiates far enough to present a certificate, so the
       name resolves and Netlify answers; the SAN list simply omits it. The apex
@@ -788,8 +797,7 @@ selected the wrong thing.
       `api.securityscorecards.dev` "the old domain". So the single purge that
       `post_results.go` issues covers the *canonical* hostname and strands the
       legacy one, which is the less bad way round for that defect to fall.
-- [ ] 6.4 Repoint the Cloud Build trigger, shift traffic, and repoint the
-      `scorecard-web` OSS-Fuzz project.
+- [ ] 6.4 Shift traffic and register `ossf/scorecard-infra` in OSS-Fuzz.
       **Requirement (decided 2026-08-28): the new backend is a hostname that
       terminates TLS with a certificate Fastly can verify** — not a bare EC2
       address. Today's backend is the Endpoints gateway's Cloud Run hostname,
@@ -799,12 +807,34 @@ selected the wrong thing.
       security-posture change riding along inside a migration whose whole claim
       is that behavior did not change. Keeping it a hostname also keeps the flip
       a one-field edit in both directions.
-- [ ] 6.5 Notify the Scorecard community before this cutover.
-- [ ] 6.6 Confirm a Scorecard Action upload completes end to end through the
-      `POST` path — a broken publish path is silent, unlike a broken read.
+      **Traffic shift: done** — measured this session at 100% on both
+      hostnames, GCP backend fully removed.
+      **Cloud Build trigger: no action needed.** Image builds already moved to
+      GitHub Actions (4.10, `publish-api-image.yml`); the old trigger has
+      nothing left to repoint and dies with the GCP project on 2026-08-31.
+      **OSS-Fuzz: not a repoint.** `ossf/scorecard-webapp`'s existing
+      `scorecard-web` OSS-Fuzz project stays with the website, which is not
+      moving. The API's fuzz harnesses (`cifuzz.yml`, removed from
+      `scorecard-webapp` at 7.3) move to `ossf/scorecard-infra`, so the real
+      action is **registering `ossf/scorecard-infra` as a new, separate
+      OSS-Fuzz project** — not done yet. Auditing every Scorecard subproject's
+      OSS-Fuzz configuration is a related, explicitly non-blocking follow-up,
+      outside this task.
+- [x] 6.5 **Done 2026-08-30.**
+      [`ossf/scorecard#5208`](https://github.com/ossf/scorecard/issues/5208).
+- [x] 6.6 **Satisfied 2026-08-30.** Two publishes run against
+      `justaugustus/scorecard-action-test`: the first proved the POST→S3 write
+      path; the second, against a URL already holding a real cached entry
+      (`age: 67`, `max-age=600`), proved the Fastly purge fires from the
+      AWS-backed environment — the cached copy was fully invalidated (`age: 0`,
+      `x-cache: MISS, MISS, MISS`) and replaced within seconds of the publish.
 - [ ] 6.7 Hold for the agreed period, watching error rates and the badge path.
-      **Rollback:** shift traffic back to the captured prior revision; the code
-      still exists upstream, so no code restoration is needed.
+      **Rollback:** available only until 2026-08-31 — shift traffic back to the
+      captured prior revision (the code still exists upstream, so no code
+      restoration is needed), and the GCP backend has already been fully
+      removed once, so this would mean re-adding it. After 2026-08-31, GCP
+      access ends and this path is gone; recovery is forward-only — redeploy a
+      known-good image by digest, or restore from S3.
 
 ## 7. Removal from ossf/scorecard-webapp
 
