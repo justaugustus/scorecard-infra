@@ -18,11 +18,11 @@ client of the public `api.scorecard.dev`.
 ## Why it exists
 
 The public Scorecard API only covers repositories that opted in via
-`publish_results: true`, and its production stack is wedded to Google Cloud. Teams
+`publish_results: true`, and it is a hosted service you do not operate. Teams
 that want results for **private** repos, for repos **not** in the weekly public
-scan, or on **non-GCP** infrastructure have no first-class option. This server
-fills that gap: it serves the same contract from **any** object store and computes
-results on demand.
+scan, or on infrastructure they run themselves have no first-class option. This
+server fills that gap: it serves the same contract from **any** object store and
+computes results on demand.
 
 It is also the provider-agnostic serving tier the pipeline's own migration needs —
 the same reason it is structured to graft upstream rather than to persist as a

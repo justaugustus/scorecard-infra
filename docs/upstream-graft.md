@@ -26,7 +26,7 @@ This is the detailed companion to design decision **W10** (and touches **D4**,
 
 Four things, in two categories.
 
-**Arrived to stay, behavior-frozen:**
+**Arrived to stay, imported with history:**
 
 | Tree | What it is | Provenance |
 | --- | --- | --- |
@@ -95,21 +95,26 @@ than one that is argued with.
 - **"This repo is an incubator, not a permanent fork."** It was never a fork, and
   it is no longer an incubator. It is where the infrastructure lives.
 
-## Rules while the frozen trees are frozen
-
-These are prohibitions, and they hold until production cutover completes:
+## Rules for the imported trees
 
 - **No import edges** between `api/`, `cron/`, and this repository's own packages,
   in any direction. Enforced by the `import-edges` job in `presubmits.yml`. This
   is not a claim that the trees are unrelated — it is what keeps each one
-  byte-comparable to what production runs.
-- **The hardcoded `gs://` constants in `api/` stay**, notwithstanding this
-  repository's cloud-agnostic rules, which govern its own code. Making them
-  configurable is a follow-on change, deliberately separate so the import stays a
-  provable relocation.
-- **`api/openapi.yaml` is not edited.** It is simultaneously the published
-  contract and the API gateway's deployment configuration. Editing it changes a
-  deployed service.
+  byte-comparable to what production runs. This one is permanent until a
+  convergence spec says otherwise (**C11**).
+- **`cron/` stays equivalent to what `ossf/scorecard` builds** until its
+  production cutover completes. That equivalence is the cutover's acceptance test
+  and its rollback path.
+- **`api/openapi.yaml` is not edited** without its own change. It is
+  simultaneously the published contract and the GCP API gateway's deployment
+  configuration. Now that the API serves from AWS, the gateway half is likely
+  vestigial — confirm before relying on either reading.
+
+The hardcoded `gs://` constants in `api/` were a rule here and no longer are:
+`configure-result-buckets` replaced them with `SCORECARD_RESULTS_BUCKET_URL` and
+`SCORECARD_CRON_RESULTS_BUCKET_URL`, defaulting to the values that had been
+compiled in. That is what lifting one of these looks like — its own change, with
+defaults that preserve the deployed behavior.
 
 ## References
 

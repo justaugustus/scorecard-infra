@@ -14,11 +14,17 @@ migrations exist only as commit messages.
 [`initial-graft.md`](initial-graft.md) records the terms of that import,
 including what could not come across and where to trace it.
 
-Read it before working in this tree. Two rules apply here and nowhere else in the
-repository: the tree is behavior-frozen until cutover, and `cron/internal/format`
-serializes a data model that lives upstream, so a schema edit here without the
-corresponding engine change breaks the published contract silently
-(`schema_gen_test.go` is what catches it).
+Read it before working in this tree. Two rules apply here and nowhere else in
+the repository:
+
+- **Keep the tree equivalent to what `ossf/scorecard` builds** until the
+  production cutover to AWS completes. That equivalence is the cutover's
+  acceptance test *and* its rollback path, so refactors, restructuring into this
+  repository's `internal/` + `cmd/` layout, and cleanups are deferred by design —
+  not overlooked.
+- **`cron/internal/format` serializes a data model that lives upstream**, so a
+  schema edit here without the corresponding engine change breaks the published
+  contract silently (`schema_gen_test.go` is what catches it).
 
 ## Pipeline components
 

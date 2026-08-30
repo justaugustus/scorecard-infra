@@ -62,11 +62,12 @@ ordinary code in this repository. Read
 [`cron/initial-graft.md`](cron/initial-graft.md) first, then note two rules that
 apply here and nowhere else:
 
-- **The tree is behavior-frozen** until the production cutover completes. It must
-  stay equivalent to what `ossf/scorecard` builds, because that equivalence is the
-  migration's acceptance test *and* its rollback path. Refactors, restructuring
-  into this repo's `internal/` + `cmd/` layout, and cleanups are deferred by
-  design — not overlooked.
+- **Keep the tree equivalent to what `ossf/scorecard` builds** until the
+  production cutover completes, because that equivalence is the migration's
+  acceptance test *and* its rollback path. Refactors, restructuring into this
+  repo's `internal/` + `cmd/` layout, and cleanups are deferred by design — not
+  overlooked. This is a scoping rule, not a closed door: changes that serve the
+  migration are welcome here.
 - **`cron/internal/format` owns a published contract.** It serializes a data model
   that lives upstream in the Scorecard engine, so a schema edit here without the
   corresponding engine change breaks the BigQuery/JSON contract silently.

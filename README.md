@@ -44,8 +44,8 @@ stack off any single cloud provider.
 
 | | Path | Role | State |
 | --- | --- | --- | --- |
-| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production. GCP-bound. Imported from `ossf/scorecard`; behavior-frozen. |
-| **Results API** | `api/` | **Serving tier** — the service behind `api.scorecard.dev` | Production. GCP-bound. Imported from `ossf/scorecard-webapp`; behavior-frozen. **This is what ships.** |
+| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production on GCP; migration to AWS in progress. Imported from `ossf/scorecard`. |
+| **Results API** | `api/` | **Serving tier** — the service behind `api.scorecard.dev` | Production on AWS. Imported from `ossf/scorecard-webapp`. **This is what ships.** |
 | **Provider-agnostic design** | `docs/research/` | **The plan** — a reference design for running Scorecard's hosted data services on any cloud or self-hosted target | Reference design; not yet an official artifact. |
 
 These are one system's present and future, not three unrelated projects. The
@@ -55,13 +55,19 @@ that the whole hosted data path lives in one place — which is the precondition
 for moving it.
 
 They share a repository and **no code**. There are no import edges in any
-direction, enforced by CI, and that is deliberate: both imported trees are
-**behavior-frozen** until their production cutovers complete, because equivalence
-with what they replaced is both the acceptance test and the rollback path.
-Converging them is the point of landing them together; it has not happened yet
-and should not happen incidentally (designs **C11** and **W10**, in
+direction, enforced by CI, and that is deliberate. Converging them is the point
+of landing them together; it has not happened yet and should not happen
+incidentally (designs **C11** and **W10**, in
 [`migrate-batch-pipeline`](openspec/changes/migrate-batch-pipeline/design.md) and
 [`migrate-api`](openspec/changes/migrate-api/design.md)).
+
+**Where the effort is going.** Both trees are actively developed, but the work
+is scoped to what supports the migration described in
+[`scorecard#5208`](https://github.com/ossf/scorecard/issues/5208). For `cron/`,
+that additionally means keeping the tree equivalent to what `ossf/scorecard`
+builds until its cutover completes — that equivalence is the acceptance test and
+the rollback path. Contributions outside that scope are welcome but will
+generally wait.
 
 ## Getting Started
 
@@ -166,21 +172,22 @@ pipeline out of `ossf/scorecard` is the precondition for it, not the work itself
 
 ## Roadmap
 
-**Batch pipeline.** The migration out of `ossf/scorecard` is underway: the import
-landed with full history and the build, CI, and image targets are ported. Still
-ahead — staging image builds diffed against their production equivalents,
-repointing the Cloud Build triggers, a full clean scan cycle on infra-built
-images, and only then removal from upstream. Tracked in
-[`openspec/changes/migrate-batch-pipeline/`](openspec/changes/migrate-batch-pipeline/).
+The infrastructure migration — what is moving, what has already moved, and what
+it means for consumers — is announced and tracked in
+[`ossf/scorecard#5208`](https://github.com/ossf/scorecard/issues/5208).
 
-**Results API.** Tracked with the migration in
-[`openspec/changes/migrate-api/`](openspec/changes/migrate-api/).
+Backlog ownership across the Scorecard repositories, including which issues
+belong here, is in
+[`#77`](https://github.com/ossf/scorecard-infra/issues/77).
+
+Per-change plans live in [`openspec/changes/`](openspec/changes/); `openspec
+list` shows their live status.
 
 ## Contributing
 
 Contributions are welcome. For detailed contributing guidelines — including how
-to add a repository to the weekly scan, and the rules that apply to the
-behavior-frozen `cron/` tree — please see [CONTRIBUTING.md](CONTRIBUTING.md).
+to add a repository to the weekly scan, and the rules that apply to the `cron/`
+tree — please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```sh
 make build     # go build ./...

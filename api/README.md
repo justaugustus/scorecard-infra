@@ -40,12 +40,14 @@ tag. Deploy the digest it reports, not a tag.
 For the deployment itself — the AWS serving environment, its OpenTofu, and the
 runbook — see [`deploy/api/README.md`](../deploy/api/README.md).
 
-## Two things that look like mistakes and are not
+## One thing that looks like a mistake and is not
 
-- **The binary is named `scorecard-webapp`** while this repository's own server
-  binary is `scorecard-api` — which inverts what each one actually is. Renaming
-  changes image contents, and image equivalence is the migration's cutover gate,
-  so it is deferred until after cutover.
-- **The tree hardcodes `gs://` bucket URLs**, which the cloud-agnostic rules
-  elsewhere in this repository forbid. It is behavior-frozen until cutover
-  completes; making storage configurable is a separate, planned change.
+**The binary is named `scorecard-webapp`** while this repository's own server
+binary is `scorecard-api` — which inverts what each one actually is. Renaming
+changes image contents, so it is deferred: it does nothing for the migration and
+costs a rebuild of the artifact every consumer is served from.
+
+The tree used to hardcode `gs://` bucket URLs, which was the other entry here.
+That is fixed — they are now `SCORECARD_RESULTS_BUCKET_URL` and
+`SCORECARD_CRON_RESULTS_BUCKET_URL`, defaulting to the values that had been
+compiled in, and the S3 driver is linked in alongside GCS.

@@ -10,8 +10,8 @@ edges in any direction:
 
 | Part | What it is |
 | --- | --- |
-| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. Production, GCP-bound, **behavior-frozen**. |
-| `api/` | **The results API** serving `api.scorecard.dev`. Imported from `ossf/scorecard-webapp` with history. Production, GCP-bound, **behavior-frozen**. This is the server that ships. |
+| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. Production on GCP; **cutover to AWS still ahead**, so keep it equivalent to what upstream builds. |
+| `api/` | **The results API** serving `api.scorecard.dev`. Imported from `ossf/scorecard-webapp` with history. **Production on AWS; cutover complete.** This is the server that ships. |
 | `internal/`, `cmd/` | **A provider-agnostic hybrid API server**, built here. Implements the same contract as `api/`. Currently **off the deployment path** — see below. |
 | `docs/research/` | The provider-agnostic design. Proposal-flavored. |
 
@@ -33,17 +33,22 @@ not ambiguous. See [`docs/upstream-graft.md`](docs/upstream-graft.md).
 
 ## Quarantined: do not "fix" these
 
-Both frozen trees violate rules stated further down this file. That is
-deliberate, and reverting the violation breaks the migration's acceptance test,
-which is that the deployed behavior did not change.
+Both imported trees violate rules stated further down this file. That is
+deliberate: for `cron/`, reverting the violation breaks the cutover's acceptance
+test, which is that the deployed behavior did not change. Do not "fix" these
+opportunistically — each needs its own change.
 
 - **`api/openapi.yaml` carries an `x-google-backend` block.** It is both the
-  published contract and the API gateway's deployment configuration. Editing it
-  changes a deployed service.
-- **`cron/` retains its own GCS write path.** Same reasoning (**C11**).
+  published contract and the GCP API gateway's deployment configuration.
+  **Re-evaluate:** the API now serves from AWS, so this block is likely
+  vestigial — but confirm the Endpoints gateway is actually decommissioned
+  before touching it, and do it as its own change.
+- **`cron/` retains its own GCS write path.** Its cutover has not happened, so
+  the original reasoning still holds (**C11**).
 - **`.golangci.yml` applies a narrower linter set to `api/`.** The imported tree
   ran a different config upstream; the block is scoped to `api/` and marked for
-  removal when the freeze lifts, not a general relaxation.
+  removal, not a general relaxation. Its condition — the `api/` cutover
+  completing — is now met; see `migrate-api` task 5.7.
 
 `api/app/server`'s hardcoded `gs://` bucket URLs were on this list and are not
 any more — they became `SCORECARD_RESULTS_BUCKET_URL` and
@@ -95,12 +100,12 @@ this is the map:
 Imported from `ossf/scorecard` with full history. Read
 [`cron/initial-graft.md`](cron/initial-graft.md) before working in this tree.
 
-Two rules apply here and nowhere else. The tree is **behavior-frozen** until
-production cutover completes — it must stay equivalent to what `ossf/scorecard`
-builds, because that equivalence is the migration's acceptance test and its
-rollback path. And `cron/internal/format` serializes a data model that lives
-upstream, so a schema edit here without the corresponding engine change breaks
-the contract silently — `schema_gen_test.go` is what catches it.
+Two rules apply here and nowhere else. **Keep the tree equivalent to what
+`ossf/scorecard` builds** until production cutover completes, because that
+equivalence is the cutover's acceptance test and its rollback path. And
+`cron/internal/format` serializes a data model that lives upstream, so a schema
+edit here without the corresponding engine change breaks the contract silently —
+`schema_gen_test.go` is what catches it.
 
 ## The results API (api/)
 
