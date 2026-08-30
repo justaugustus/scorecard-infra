@@ -32,5 +32,14 @@ FROM golang:1.26.6@sha256:0d1d3a794be25f809dd2cb3160d8c73276c4056a9f8242a138e908
 COPY --from=builder /opt/app-root/src/api/scorecard-webapp /usr/local/bin/scorecard-webapp
 
 # Set the binary as the entrypoint of the container
-ENTRYPOINT scorecard-webapp --host="0.0.0.0" --port=8080
+#
+# --scheme=http is required, not a default. go-swagger derives the server's
+# built-in listener default from the spec's `schemes`, which is `https`; with
+# that default in force the binary refuses to start without --tls-certificate
+# and --tls-key. TLS terminates at the load balancer and the container is
+# reached over plain HTTP on the port below, so the listener is selected here
+# rather than by changing the spec -- `schemes: [https]` is what the published
+# document advertises and what generated clients default to, and both are
+# correct.
+ENTRYPOINT scorecard-webapp --scheme=http --host="0.0.0.0" --port=8080
 EXPOSE 8080

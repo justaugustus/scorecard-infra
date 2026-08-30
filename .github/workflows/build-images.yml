@@ -121,3 +121,15 @@ jobs:
           done
           echo "::error::${{ matrix.target }} failed after 3 attempts"
           exit 1
+
+      # The API is the only image here that is a long-running server with a
+      # health endpoint, so it is the only one this is cheap for. The pipeline
+      # images are batch jobs that need credentials and a PubSub subscription to
+      # do anything, and starting them would test the runner's environment
+      # rather than the image. See the api-docker-smoke comment in the Makefile.
+      #
+      # Not retried: unlike the build, this reaches nothing over the network, so
+      # a failure here is the image and not the module proxy.
+      - name: The API image serves
+        if: (matrix.target == 'api-docker' && needs.docs_only_check.outputs.docs_only != 'true')
+        run: make api-docker-smoke
