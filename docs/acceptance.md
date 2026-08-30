@@ -162,6 +162,17 @@ Running a local S3-compatible store needs Docker, which was unavailable at last
 execution. This leg is outstanding for full 9.3 sign-off; the store already has
 an S3-compatible integration test gated on `SCORECARD_TEST_S3_URL` (task 3.5).
 
-**Verified 2026-08-05:** `TestRoundTripS3` passes against the local
-`docker-compose.s3.yml` store using this exact bucket URL — see memory
-`scorecard-api-docker-compose`.
+**Verified 2026-08-05:** `TestRoundTripS3` (`internal/store/store_test.go`)
+passes against the local `cmd/scorecard-api/docker-compose.s3.yml` store using
+this exact bucket URL. To reproduce:
+
+```sh
+cd cmd/scorecard-api
+docker compose -f docker-compose.yml -f docker-compose.s3.yml up -d s3
+
+SCORECARD_TEST_S3_URL="s3://scorecard-results?region=us-east-1&endpoint=http://localhost:8333&hostname_immutable=true&use_path_style=true" \
+AWS_ACCESS_KEY_ID=admin AWS_SECRET_ACCESS_KEY=secret \
+  go test ../../internal/store/... -run TestRoundTripS3 -v
+```
+
+The test skips rather than fails when `SCORECARD_TEST_S3_URL` is unset.

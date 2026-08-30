@@ -15,7 +15,11 @@
 
 services:
   scorecard-api:
-    build: .
+    # Context is the repository root because go.mod lives there; the Dockerfile
+    # builds ./cmd/scorecard-api.
+    build:
+      context: ../..
+      dockerfile: cmd/scorecard-api/Dockerfile
     ports:
       - "8080:8080"
     environment:
