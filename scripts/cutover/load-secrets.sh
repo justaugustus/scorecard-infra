@@ -42,7 +42,7 @@ set -uo pipefail
 CAPTURE_DIR="${1:?usage: $0 <gke-capture-dir> [cluster] [namespace]}"
 CLUSTER="${2:-openssf}"
 NAMESPACE="${3:-default}"
-NAME_PREFIX="scorecard/batch"
+NAME_PREFIX="scorecard/cron"
 
 # The secrets this script is willing to load. Add to this list deliberately,
 # not by making the script take whatever the capture happens to contain --

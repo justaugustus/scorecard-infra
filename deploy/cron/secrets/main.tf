@@ -12,7 +12,7 @@
 # Like its sibling, this declares containers only. No aws_secretsmanager_secret_version
 # here -- load values out of band, e.g. with scripts/cutover/load-secrets.sh.
 #
-# This does not stand up any batch/cron compute. That migration is its own,
+# This does not stand up any batch compute. That migration is its own,
 # separate, deferred thread; this root only reserves where its credentials
 # live, so they have a destination before GCP access ends.
 
@@ -47,7 +47,7 @@ provider "aws" {
 locals {
   tags = {
     Project   = "scorecard"
-    Component = "batch"
+    Component = "cron"
     ManagedBy = "opentofu"
     Source    = "ossf/scorecard-infra//deploy/cron/secrets"
   }
@@ -56,7 +56,11 @@ locals {
 module "secrets" {
   source = "../../api/modules/secrets"
 
-  name_prefix = "scorecard/batch"
+  # Named for the tree it serves (cron/), matching how deploy/api tags and
+  # prefixes track api/. "Batch plane" stays the prose name for the function;
+  # identifiers follow the directory, because that is the name the
+  # upstream-equivalence rule pins in place.
+  name_prefix = "scorecard/cron"
   tags        = local.tags
 
   # One secret per Kubernetes Secret found in the openssf/default GKE
