@@ -119,6 +119,21 @@ Staging therefore fails the `POST` path by design. That is not a gap in the
 rehearsal: the conformance harness is `GET` requests, and the publish path is
 gated separately by watching a real Action upload land.
 
+## Application configuration
+
+`modules/service/main.tf` sets every environment variable and secret the API
+reads. This is the mapping from that Terraform to the code that consumes it:
+
+| Variable | Source here | Consumed at |
+| --- | --- | --- |
+| `API_BASE_URL` | `var.api_base_url`, plain env | `post_results.go`'s `getPurger` — the hostname a post-publish CDN purge targets; purging is disabled if unset |
+| `SCORECARD_RESULTS_BUCKET_URL` | `s3://${var.results_bucket}?region=...`, plain env | `api/app/server/config.go`'s `resultsBucketURL` — the primary bucket, read and written |
+| `SCORECARD_CRON_RESULTS_BUCKET_URL` | `s3://${var.cron_results_bucket}?region=...`, plain env | `api/app/server/config.go`'s `cronResultsBucketURL` — the weekly-scan bucket, read-only fallback |
+| `FASTLY_PURGE_TOKEN` | Secrets Manager, via `var.fastly_secret_arn` | `post_results.go`'s `getPurger` — the only credential the API reads; purging is disabled if unset |
+
+The `?region=` on both bucket URLs is required: `gocloud.dev/blob`'s `s3blob`
+resolves the region from the URL, not from the task's own AWS region.
+
 ## What this does not manage
 
 - **The corpus buckets.** They already exist and hold data, so they are

@@ -46,21 +46,43 @@
 - [x] 3.6 Unit tests in `config_test.go` covering: defaults when unset (against
       literal strings, per **B2**), `s3://` and `file://` overrides, empty-means-
       unset, and the read/write bucket invariant from **B4**.
-- [ ] 3.7 **Not covered here: a real read from a real S3 bucket.** Deferred to
-      staging deployment, which needs a bucket, credentials, and an IAM policy
-      that do not exist yet. This change is verified as *configurable*, not as
-      *working on AWS* — do not report it as the latter.
+- [x] 3.7 **Verified 2026-08-30, via the deployed service rather than raw AWS
+      CLI.** Local `aws s3`/`aws s3api` calls hit a Python/certifi CA-bundle gap
+      specific to this sandbox — `curl` reaches the same S3 endpoints over the
+      same network fine, so it is not a connectivity or credentials problem,
+      just this tool. Verified the property this task actually cares about
+      instead: `deploy/api/modules/service/main.tf` sets
+      `SCORECARD_RESULTS_BUCKET_URL` / `SCORECARD_CRON_RESULTS_BUCKET_URL` to
+      `s3://...` in the applied production task definition, and a live
+      `GET https://api.scorecard.dev/projects/github.com/ossf/scorecard-infra`
+      returned `x-cache: MISS, MISS, MISS` and `age: 0` — an origin round trip,
+      not a CDN cache hit — with a real JSON2 result. **Verified as working on
+      AWS**, not just configurable.
 
 ## 4. Documentation
 
 - [x] 4.1 Remove the bucket entry from the quarantine list in `AGENTS.md`,
       leaving the other three (**B7**).
 - [x] 4.2 Same in `openspec/config.yaml`'s context block.
-- [ ] 4.3 Document the two variables where an operator will look for them,
-      alongside `API_BASE_URL` and `FASTLY_PURGE_TOKEN`. There is no deployment
-      runbook in this repository yet; this lands with the one the cutover needs.
+- [x] 4.3 Documented in `deploy/api/README.md`'s new **Application
+      configuration** section: a table mapping all four environment
+      variables/secrets the production task definition sets — including
+      `SCORECARD_RESULTS_BUCKET_URL` and `SCORECARD_CRON_RESULTS_BUCKET_URL`
+      alongside `API_BASE_URL` and `FASTLY_PURGE_TOKEN` — to the code that
+      reads each one. `deploy/api/README.md` is already what `api/README.md`
+      calls "the runbook"; it had no configuration-reference section until
+      now. Issue #75 is a different, narrower gap (`docs/dns.md`'s stale GCP
+      DNS description) and does not cover this.
 
 ## 5. Follow-on, not in this change
+
+> **Pending move, 2026-08-30.** These are the AWS batch plane's storage
+> prerequisites, not this change's — 5.2 in particular is what
+> `migrate-batch-pipeline`'s freeze (now lifted) was blocking. They belong in
+> that change's proposal as inherited prerequisites rather than staying here
+> under a heading that already says "not in this change." Held here, not yet
+> moved, until that change exists to receive them; this change closes on
+> groups 1–4 and does not wait on this move.
 
 - [ ] 5.1 Set the variables to `s3://…` in the staging deployment and run
       `scripts/api-conformance/conformance.sh compare` against production.
