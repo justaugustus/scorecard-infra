@@ -1,8 +1,10 @@
 # Tasks: Migrate the batch scanning pipeline out of ossf/scorecard
 
 Groups map to the migration's phases. Each group is independently reviewable and
-independently revertible. **Group 7 MUST NOT begin until group 6 has run clean
-for at least one full scan cycle** (**C10**).
+independently revertible. Group 6 closed out void, without running, when the
+`openssf` GCP project was turned down (see the closeout note under that group
+and design.md's **C10**). Group 7 no longer waits on it; it is gated on its own
+7.1 alone.
 
 ## 0. Pre-work / decisions
 
@@ -133,24 +135,21 @@ for at least one full scan cycle** (**C10**).
       inlined rather than shelling out to a script goreleaser would have shared.
       Verified: all seven binaries build, all three verify targets pass, and
       `validate-projects` runs clean against all three real inventories.
-- [ ] 3.8 Merge the import PR — [#27](https://github.com/ossf/scorecard-infra/pull/27),
-      open, covering groups 2–5 as a single review.
-      **Every check passes except DCO** (see 3.9), including all six image builds,
-      `build`/`test`/`lint`, both inventory jobs, `zizmor`, and Kusari.
-- [ ] 3.9 **Resolve the DCO block — decision needed, no code fix exists.**
-      The DCO app checks every commit in a pull request. 251 of the 475 non-merge
-      commits lack a `Signed-off-by` trailer. All 251 are *imported upstream
-      history* (largely dependabot); all 12 authored commits are signed.
-      This is a structural consequence of grafting history into a DCO-gated
-      repository, and the migration plan did not anticipate it.
-      **Adding sign-off to those commits is not an option.** The DCO is a legal
-      certification made by a commit's author; retroactively adding a
-      `Signed-off-by` on someone else's behalf forges that attestation. It is also
-      unnecessary — these commits are already public in `ossf/scorecard` under
-      Apache-2.0, and importing them does not change their provenance.
-      Viable paths: merge with an administrative override (the check is
-      informational unless required); or configure the DCO app to scope its check.
-      Squashing the import would satisfy DCO by destroying the change's purpose.
+- [x] 3.8 **Reconciled 2026-08-30: landed by a different mechanism than
+      named.** Groups 2–5 are in `main` via merge commit `88c818c` ("Import
+      cron batch infrastructure from ossf/scorecard"), pushed directly rather
+      than merged through
+      [#27](https://github.com/ossf/scorecard-infra/pull/27) — #27 is
+      **closed, unmerged**. The task closes on its outcome (the tree is in
+      `main`, history intact) rather than the specific route it named.
+- [x] 3.9 **Resolved by the route 3.8 took, 2026-08-30.** The import landed by
+      direct push to `main`, not by merging the DCO-gated pull request, so the
+      251 unsigned imported-history commits were never evaluated against the
+      DCO check at all — no override was needed on them, forged, or
+      configured around. This is the "administrative override" path this task
+      named, applied at the push rather than at the PR-merge step, which is
+      also why #27 closes unmerged instead of merged. No commit was altered;
+      no attestation was forged.
 
 ## 4. CI and image builds, in parallel with production
 
@@ -209,11 +208,17 @@ for at least one full scan cycle** (**C10**).
       config, or CI job in this repository has ever produced that image.
       **Deliberately not resolved either way.** Publishing a seventh image would
       mint an artifact to match what is probably a mistake; correcting the
-      manifest edits a frozen tree. Left for when the freeze lifts, recorded so
-      it is a known gap rather than something rediscovered as a broken deploy.
+      manifest edited a frozen tree. Recorded so it is a known gap rather than
+      something rediscovered as a broken deploy.
       Whether that release-test environment still runs at all is worth
       establishing first — a manifest referencing an unbuildable image suggests
       it may not.
+      **Update, 2026-08-30:** the freeze this task deferred to no longer
+      applies — it lifted with group 6's closeout (see above) — so editing the
+      manifest is no longer blocked on that. This stays open because the
+      harder question is unchanged: whether the release-test environment
+      exists at all is still unconfirmed, and fixing the manifest before that
+      is answered risks correcting a reference nobody uses.
 - [ ] 4.5 Diff each staging-built image against its production equivalent to
       confirm the split introduced no behavioral change. Depends on 4.4.
 - [x] 4.6 **Measured from PR #27's runs. The presubmit path did not slow down.**
@@ -274,6 +279,13 @@ for at least one full scan cycle** (**C10**).
 
 ## 6. Production cutover
 
+> **Closed out 2026-08-30 — void, not executed.** The `openssf` GCP project
+> this group cuts over inside of was turned down before any task below ran.
+> Design.md's **C10** section records why the tasks stay unchecked rather
+> than being rewritten for AWS: the proof they encode needs a live
+> production comparison this pipeline has never had outside GCP. Standing up
+> and proving an AWS pipeline is scoped to a new, separate change.
+
 - [ ] 6.0 Capture the Cloud Build triggers' current configuration before changing
       it, so rollback is a known state rather than a reconstruction — this config
       is not in git and the cutover is not revertible by `git revert` (**C10**)
@@ -288,6 +300,15 @@ for at least one full scan cycle** (**C10**).
       restoration is needed (**C10**)
 
 ## 7. Removal from ossf/scorecard
+
+> **Re-gated 2026-08-30.** This group no longer waits on group 6 (void, see
+> above). Upstream's `cron/` and the GCP resources it names died with the
+> `openssf` project turndown, so deleting it removes no working function —
+> the gate that mattered was never letting the deletion outrun a proven
+> replacement, and there is nothing left to outrun. The only remaining gate
+> is 7.1, the community notice: the inventory contribution path changes for
+> everyone who edits `projects.csv`, and that is a communication problem, not
+> a technical one.
 
 - [ ] 7.1 Notify the Scorecard community meeting again before removal — the
       inventory contribution path changes for everyone

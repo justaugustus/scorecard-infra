@@ -162,3 +162,47 @@ working tree.
 - **This table is a point-in-time snapshot** taken during the migration. It is
   not maintained against upstream drift, and it does not need to be — its
   subject stopped changing when the pipeline moved.
+
+## Equivalence snapshot, 2026-08-30
+
+Kept so that when upstream deletes its own copy of `cron/`
+(`migrate-batch-pipeline` group 7), confirming nothing but tracked migration
+work diverged in between is a lookup rather than an investigation. Background
+on why this is recorded here rather than assumed: `migrate-batch-pipeline`
+design, **C10**.
+
+Comparison basis: `ossf/scorecard` `main` @
+`d1fab88f54636ff366076edfc5c239f97b3c8e66` (2026-08-15) — the same commit this
+tree was extracted from; `main` has not moved since.
+
+`git diff --stat` of that commit's `cron/` against this repository's `cron/`,
+taken when the freeze lifted:
+
+```
+38 files changed, 480 insertions(+), 197 deletions(-)
+```
+
+None of it is drift; every departure traces to a task already in this
+change's tracker:
+
+- **Most `.go` files change by one or two lines** — the import-path rewrite
+  (task 3.1) plus the `gofmt`/`gci` import-block reordering it triggered
+  (task 3.4).
+- **`cron/data/metadata.pb.go` and `request.pb.go`** carry a larger diff from
+  regenerating with `protoc-gen-go` v1.36.11 in place of the checked-in
+  v1.28.1 output (task 3.2); the wire format is unchanged.
+- **The `Dockerfile` under each of `bq`, `cii`, `controller`, `webhook`, and
+  `worker`** differs only in the pinned `golang` and `distroless/base` image
+  digests — routine Dependabot bumps in this repository since the extraction
+  point, unrelated to the migration itself.
+- **`cron/internal/githubserver/*` shows as wholly new** in a `cron/`-only
+  diff because its upstream original lives outside `cron/`, at
+  `clients/githubrepo/roundtripper/tokens/server/` (task 1.3, **C6**). Its
+  `Dockerfile` and `cloudbuild.yaml` also carry the path fix from `80a45d8`,
+  correcting the `COPY`/`ENTRYPOINT` references the relocation moved the
+  files out from under but did not update inside them.
+- **`cron/README.md` and this file** are new — documentation added by the
+  migration, absent upstream.
+
+If this snapshot is retaken later and a difference turns up that is *not*
+one of the above, that is the signal the freeze was protecting against.

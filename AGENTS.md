@@ -10,7 +10,7 @@ edges in any direction:
 
 | Part | What it is |
 | --- | --- |
-| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. Production on GCP; **cutover to AWS still ahead**, so keep it equivalent to what upstream builds. |
+| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. **GCP production was shut down 2026-08-30, ahead of the `openssf` project's 2026-08-31 turndown; AWS cutover has not happened yet.** |
 | `api/` | **The results API** serving `api.scorecard.dev`. Imported from `ossf/scorecard-webapp` with history. **Production on AWS; cutover complete.** This is the server that ships. |
 | `internal/`, `cmd/` | **A provider-agnostic hybrid API server**, built here. Implements the same contract as `api/`. Currently **off the deployment path** — see below. |
 | `docs/research/` | The provider-agnostic design. Proposal-flavored. |
@@ -100,12 +100,10 @@ this is the map:
 Imported from `ossf/scorecard` with full history. Read
 [`cron/initial-graft.md`](cron/initial-graft.md) before working in this tree.
 
-Two rules apply here and nowhere else. **Keep the tree equivalent to what
-`ossf/scorecard` builds** until production cutover completes, because that
-equivalence is the cutover's acceptance test and its rollback path. And
-`cron/internal/format` serializes a data model that lives upstream, so a schema
-edit here without the corresponding engine change breaks the contract silently —
-`schema_gen_test.go` is what catches it.
+One rule applies here and nowhere else: `cron/internal/format` serializes a
+data model that lives upstream, so a schema edit here without the
+corresponding engine change breaks the contract silently — `schema_gen_test.go`
+is what catches it.
 
 ## The results API (api/)
 

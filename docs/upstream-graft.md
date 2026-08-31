@@ -102,9 +102,6 @@ than one that is argued with.
   is not a claim that the trees are unrelated — it is what keeps each one
   byte-comparable to what production runs. This one is permanent until a
   convergence spec says otherwise (**C11**).
-- **`cron/` stays equivalent to what `ossf/scorecard` builds** until its
-  production cutover completes. That equivalence is the cutover's acceptance test
-  and its rollback path.
 - **`api/openapi.yaml` is not edited** without its own change. It is
   simultaneously the published contract and the GCP API gateway's deployment
   configuration. Now that the API serves from AWS, the gateway half is likely

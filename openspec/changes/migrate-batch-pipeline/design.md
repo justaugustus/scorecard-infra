@@ -255,6 +255,30 @@ Until step 6, **rollback is repointing the triggers back**. The code still exist
 upstream, so there is nothing to restore. That property is the entire reason
 deletion is last, and it is why step 5 must not be compressed for schedule.
 
+**Closeout, 2026-08-30 — void, not executed.** The `openssf` GCP project was
+turned down (cron stopped 2026-08-30; the project's billing ends 2026-08-31)
+before any of the six steps above ran. Every element the ordering depends on
+lived in that project: the Cloud Build triggers being repointed, the
+PubSub → GCS → BigQuery cycle being run and compared, and the rollback target
+the triggers would be pointed back to. None of it survives the turndown.
+
+This is not a missed deadline to return to — the infrastructure the steps
+name will not exist after the turndown, so there is nothing left to execute
+them against. Group 6's tasks stay unchecked as the record of what was
+planned; they are not rewritten to describe an AWS cutover, because the
+proof they encode (build here, show behavior matches, delete only after one
+clean cycle) needs a live "before" to compare against, and this pipeline has
+never run in production outside GCP to provide one. Standing up and proving
+an equivalent pipeline on AWS is a new change, with its own phase ordering
+built for AWS's compute, queue, and scheduling rather than an edit to these
+six steps.
+
+Group 7 (removal from `ossf/scorecard`) no longer waits on this group. Its
+gate was always the risk of deleting a working thing before its replacement
+was proven; upstream's `cron/` died with the same GCP turndown, so there is
+no working thing left to protect. Group 7 is re-gated on its own 7.1, the
+community notice — see that group's heading.
+
 ### C11 — Convergence with the API server is deferred, deliberately
 
 There is an obvious strategic question here: this repository already contains a
