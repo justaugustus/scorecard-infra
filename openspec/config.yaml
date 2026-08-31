@@ -21,12 +21,14 @@ context: |
   (design W10). Retained and building; do not add new API surface here expecting
   it to ship. Revisitable, but not ambiguous.
 
-  Both imported trees are BEHAVIOR-FROZEN until their production cutovers
-  complete, and share no import edges with each other or with internal/ in any
-  direction (designs C11 and W10, enforced by presubmits.yml's import-edges job).
-  Converging the two serving-tier implementations is the point of landing them
-  together; it is deferred to its own change. Do not wire them together
-  opportunistically.
+  `api/` and `cron/` share no import edges with each other or with internal/ in
+  any direction (designs C11 and W10, enforced by presubmits.yml's import-edges
+  job). `cron/`'s equivalence freeze against ossf/scorecard lifted 2026-08-30,
+  once the openssf GCP project's turndown preempted the cutover it was tied
+  to — see cron/initial-graft.md for the equivalence snapshot taken at that
+  point. Converging the two serving-tier implementations is the point of
+  landing them together; it is deferred to its own change. Do not wire them
+  together opportunistically.
 
   Direction of travel is INBOUND. This repository was originally framed as an
   incubator whose pieces would graft upstream; two of those three graft targets
