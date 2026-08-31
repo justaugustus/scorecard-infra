@@ -46,4 +46,4 @@
 ## 6. Change closeout
 
 - [x] 6.1 `openspec validate add-feature-flagging --strict` passes
-- [ ] 6.2 Archive the change once implemented and merged
+- [x] 6.2 Archive the change once implemented and merged

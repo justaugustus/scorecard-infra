@@ -81,4 +81,4 @@
 ## 9. Change closeout
 
 - [x] 9.1 `openspec validate add-upstream-fallback --strict` passes
-- [ ] 9.2 Archive the change once implemented and merged
+- [x] 9.2 Archive the change once implemented and merged
