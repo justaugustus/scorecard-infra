@@ -450,10 +450,17 @@ attribute, CloudWatch and route-table sections the first script has none of.
 
 ## 7. Workload manifests
 
-- [ ] 7.1 Port `cron/k8s/controller.yaml`, `worker.yaml`, `cii.yaml`,
+- [x] 7.1 Port `cron/k8s/controller.yaml`, `worker.yaml`, `cii.yaml`,
       `auth.yaml` for EKS: the new `awssqs://` topic/subscription URLs and
-      the AWS config overlay's bucket URLs (`s3://...`). Registry references
-      already point at `ghcr.io` — no image changes. Three things group 5
+      the AWS config overlay's bucket URLs (`s3://...`). ~~Registry references
+      already point at `ghcr.io` — no image changes.~~ **Wrong, corrected
+      2026-09-05: all four named `gcr.io/openssf/*:stable`. The registry moves
+      to `ghcr.io/ossf`, and the tag moves off `:stable`, which
+      `publish-cron-images.yml` has never published — checked against the
+      registry directly, where `:main` returns 200 while `:latest` and
+      `:stable` both 404. `:main` is the checked-in reference until task 8.2
+      deploys by digest; this does not settle `migrate-batch-pipeline` 4.4.**
+      Three things group 5
       requires here, none of them optional:
       - A distinct `ServiceAccount` object per manifest, with
         `serviceAccountName` set to match the cluster module's
@@ -468,6 +475,21 @@ attribute, CloudWatch and route-table sections the first script has none of.
         a toleration on `worker.yaml` for the worker pool's `NoSchedule`
         taint (**E1**). Without the toleration the worker Deployment stays
         `Pending` — deliberately loud.
+      **All three done, plus a fourth this task did not anticipate:
+      `auth.yaml`'s Service pinned `clusterIP: 10.4.4.210`, an address from
+      the GKE service range. EKS allocates from its own and refuses anything
+      outside it, so that Service would have been rejected outright. The
+      literal was referenced nowhere, so the pin is simply gone.**
+      **Pool placement: the worker takes the worker pool and its toleration;
+      the controller, CII job and token server take the system pool. The CII
+      job fetches from the Best Practices API once a month rather than
+      cloning repositories, so it has no claim on a scanning node.**
+      **The `awssqs://` URLs are not in the manifests. They arrive as
+      `SCORECARD_REQUEST_TOPIC_URL` (controller) and
+      `SCORECARD_REQUEST_SUBSCRIPTION_URL` (worker) from a `scorecard-queue`
+      ConfigMap — a queue URL embeds the AWS account ID, and this repository
+      is public. Same reasoning that scrubbed live resource IDs from the
+      proposal.**
 - [ ] 7.2 Add an AWS config overlay (e.g. `deploy/cron/config-aws.yaml` or a
       ConfigMap generated from one) analogous to `cron/config/config.yaml`,
       pointing at the test buckets (**E7**) until group 9 passes, and leaving
@@ -481,8 +503,48 @@ attribute, CloudWatch and route-table sections the first script has none of.
       obvious candidate and authenticates via exactly the Pod Identity 5.4
       set up. Until this lands, the `secretsmanager:GetSecretValue` grants
       are a permission with no caller.
-- [ ] 7.3 Confirm the `*.release.yaml` tier and `transfer*.yaml` are **not**
+      **Overlay done, credential delivery still open — this task stays
+      unchecked on the second half.**
+      **`deploy/cron/config-aws.yaml` carries the four test buckets and the
+      adopted read-only `input-projects`, and omits BigQuery entirely rather
+      than naming a dataset nothing writes. Two findings came from reading the
+      consumers instead of assuming: `metric-exporter` cannot be blank, since
+      `cron/monitoring`'s `GetExporter` treats empty as an error and
+      `cron/internal/worker` calls it during start-up — so "metrics off"
+      spelled as an empty string is a `CrashLoopBackOff`. It is `printer`, the
+      in-tree no-backend exporter. `project-id` survives for the same reason,
+      read only on paths that do not run here.**
+      **`cron/config/config_aws_test.go` parses the overlay through this
+      package's own parser, so drift fails in CI rather than in a pod. It also
+      asserts every writable bucket is a `-test` one, which makes task 9.7
+      edit a test to reach production rather than quietly changing a URL.**
+      **Credential delivery is deferred to its own change: the CSI driver
+      needs an EKS addon in `deploy/cron/modules/cluster`, `SecretProviderClass`
+      objects, and another human-run apply, which does not belong in a
+      manifest port. `cron/k8s/README.md` documents creating the three Secrets
+      by hand in the meantime — the same thing GKE did — with the exact key
+      names `worker.yaml` and `auth.yaml` expect, since a missing key surfaces
+      only as `CreateContainerConfigError`.**
+- [x] 7.3 Confirm the `*.release.yaml` tier and `transfer*.yaml` are **not**
       ported — out of scope (proposal non-goals).
+      **Confirmed untouched: `controller.release.yaml`, `worker.release.yaml`,
+      `webhook.release.yaml`, `transfer.yaml`, `transfer-raw.yaml`,
+      `transfer.release.yaml`, `transfer.release-raw.yaml`. They still name
+      `gcr.io` images and `gs://` buckets, which is the correct state for a
+      tier this change does not deploy — `migrate-batch-pipeline` 4.4a records
+      that `webhook.release.yaml` names an image nothing has ever built, and
+      whether that environment still exists is unanswered. Recorded in
+      `cron/k8s/README.md` so the mixed tree is legible rather than looking
+      like a half-finished port.**
+- [ ] 7.4 Convert `cron/k8s/` to a Kustomize base plus overlays. 7.1 edited the
+      manifests in place, which was right while there is exactly one cluster:
+      GKE is gone, so a second copy would only drift. That stops being true as
+      soon as the `*.release.yaml` tier is revived or a staging cluster
+      appears, and the seams are already visible — the four AWS workloads
+      differ from their `.release` counterparts by image tag, bucket set and
+      queue, which is precisely what an overlay expresses. Deferred rather
+      than done now because it introduces Kustomize to a repository with none,
+      and group 8's deploy step would have to learn it in the same change.
 
 ## 8. CI/deploy
 
