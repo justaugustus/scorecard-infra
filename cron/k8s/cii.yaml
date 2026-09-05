@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Its own ServiceAccount, like every other workload here: Pod Identity binds
+# one IAM role per ServiceAccount, and this one is scoped to the cii-data
+# bucket alone.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scorecard-cii-worker
+---
+
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -25,9 +34,15 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          serviceAccountName: scorecard-cii-worker
+          # System pool. This fetches from the OpenSSF Best Practices API once
+          # a month rather than cloning repositories, so it does not need a
+          # scanning node and should not displace one.
+          nodeSelector:
+            scorecard.dev/pool: system
           containers:
             - name: cii-worker
-              image: gcr.io/openssf/scorecard-cii-worker:stable
+              image: ghcr.io/ossf/scorecard-cii-worker:main
               args: ["--config=/etc/scorecard/config.yaml"]
               imagePullPolicy: Always
               volumeMounts:

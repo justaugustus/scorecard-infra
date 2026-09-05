@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# EKS Pod Identity binds one IAM role per ServiceAccount, so each workload
+# needs its own. Sharing "default" across all four, as this tree did on GKE,
+# would leave every association in deploy/cron/modules/cluster with no subject.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scorecard-batch-worker
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,12 +35,31 @@ spec:
       labels:
         app.kubernetes.io/name: worker
     spec:
+      serviceAccountName: scorecard-batch-worker
+      # The worker pool is tainted so 14 scanning pods cannot land on the
+      # system node alongside CoreDNS and the controller. Without the
+      # toleration this Deployment stays Pending -- deliberately loud.
+      nodeSelector:
+        scorecard.dev/pool: worker
+      tolerations:
+        - key: scorecard.dev/pool
+          operator: Equal
+          value: worker
+          effect: NoSchedule
       containers:
         - name: worker
-          image: gcr.io/openssf/scorecard-batch-worker:stable
+          image: ghcr.io/ossf/scorecard-batch-worker:main
           args: ["--ignoreRuntimeErrors=true", "--config=/etc/scorecard/config.yaml"]
           imagePullPolicy: Always
           env:
+            # The queue URL embeds the AWS account ID, so it is supplied at
+            # deploy time rather than committed to a public repository. See
+            # this directory's README.
+            - name: SCORECARD_REQUEST_SUBSCRIPTION_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: scorecard-queue
+                  key: request-subscription-url
             - name: GITHUB_APP_KEY_PATH
               value: /etc/github/app_key
             - name: GITHUB_APP_ID
