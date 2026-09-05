@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# One ServiceAccount per workload: EKS Pod Identity binds a single IAM role to
+# a ServiceAccount, so the four associations in deploy/cron/modules/cluster
+# cannot all hang off "default".
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scorecard-batch-controller
+---
+
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -32,8 +41,11 @@ roleRef:
   kind: Role
   name: scorecard-batch-controller
 subjects:
+  # Repointed off "default" with the ServiceAccount above: the rollout restart
+  # below runs in this CronJob's pod, so the grant has to follow the identity
+  # that pod actually runs as.
   - kind: ServiceAccount
-    name: default
+    name: scorecard-batch-controller
 ---
 
 apiVersion: batch/v1
@@ -49,9 +61,14 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          serviceAccountName: scorecard-batch-controller
+          # System pool: this bursts to one pod a week and wants 1Gi, so it has
+          # no business competing with the scanning workers for a node.
+          nodeSelector:
+            scorecard.dev/pool: system
           containers:
             - name: controller
-              image: gcr.io/openssf/scorecard-batch-controller:stable
+              image: ghcr.io/ossf/scorecard-batch-controller:main
               args: [
                 "--config=/etc/scorecard/config.yaml",
                 "cron/internal/data/projects.csv",
@@ -61,6 +78,13 @@ spec:
               env:
                 - name: GOMEMLIMIT
                   value: "950MiB"
+                # Supplied at deploy time -- the queue URL embeds the AWS
+                # account ID. See this directory's README.
+                - name: SCORECARD_REQUEST_TOPIC_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: scorecard-queue
+                      key: request-topic-url
               resources:
                 limits:
                   memory: 1Gi

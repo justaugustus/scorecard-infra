@@ -13,11 +13,20 @@
 # limitations under the License.
 
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scorecard-github-server
+---
+
+apiVersion: v1
 kind: Service
 metadata:
   name: scorecard-github-service
 spec:
-  clusterIP: 10.4.4.210
+  # No clusterIP pin. This carried 10.4.4.210, an address from the GKE
+  # cluster's service range; EKS allocates from its own and rejects an address
+  # outside it, so the Service would not have been created at all. Nothing
+  # referenced the literal -- consumers resolve the Service by name.
   selector:
     app.kubernetes.io/name: github-auth-server
   ports:
@@ -40,9 +49,14 @@ spec:
       labels:
         app.kubernetes.io/name: github-auth-server
     spec:
+      serviceAccountName: scorecard-github-server
+      # System pool, alongside the controller: small, always-on, and not
+      # scanning anything.
+      nodeSelector:
+        scorecard.dev/pool: system
       containers:
       - name: github-auth-server
-        image: gcr.io/openssf/scorecard-github-server:stable
+        image: ghcr.io/ossf/scorecard-github-server:main
         imagePullPolicy: Always
         env:
         - name: GITHUB_AUTH_TOKEN
