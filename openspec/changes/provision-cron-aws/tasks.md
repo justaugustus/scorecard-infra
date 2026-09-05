@@ -393,6 +393,19 @@ attribute, CloudWatch and route-table sections the first script has none of.
       still can't (e.g. `:stable`, per the open `migrate-batch-pipeline` 4.4
       question) rather than silently accepting a mutable tag.
 - [ ] 8.3 `actionlint` and `zizmor` clean on the new workflow.
+- [ ] 8.4 Evaluate closing the cluster's public API endpoint, once 8.1 has
+      shown what the deploy path actually needs. Raised in review against
+      task 5.1's open `public_access_cidrs`, and recorded here rather than
+      fixed there because it is not a value change: allowlisting
+      GitHub-hosted runners is impossible, not merely unpleasant.
+      `api.github.com/meta` advertised **7,251** CIDR blocks under `actions`
+      on 2026-09-05 against an EKS quota of **40** that AWS documents as not
+      adjustable. Closing the endpoint therefore means moving the caller
+      inside the VPC — self-hosted runners in group 3's private subnets, or
+      a bastion — which trades one open-but-IAM-guarded endpoint for runner
+      infrastructure this plane would then own and patch. Decide with 8.1's
+      workflow in hand; a human `kubectl` path (5.1's bootstrap admin) has to
+      survive whatever is chosen.
 
 ## 9. Verification
 

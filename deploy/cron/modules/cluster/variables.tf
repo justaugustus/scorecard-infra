@@ -60,10 +60,21 @@ variable "endpoint_public_access" {
 
 variable "public_access_cidrs" {
   description = <<-EOT
-    Left open deliberately, not by omission: GitHub-hosted runners have no
-    stable egress range worth allowlisting, so IAM and EKS access entries are
-    the access control here, not the network. Narrow this the moment CI has a
-    fixed egress address.
+    Left open deliberately, not by omission: IAM and EKS access entries are
+    the access control here, not the network.
+
+    Allowlisting GitHub-hosted runners is not an available middle ground, and
+    the numbers are worth writing down because this looks like a tunable and
+    is not one. api.github.com/meta advertised 7,251 CIDR blocks under
+    "actions" on 2026-09-05, and the blocks churn. The EKS quota "Public
+    endpoint access CIDR ranges per cluster" is 40, and AWS documents it as
+    not adjustable -- no support ticket raises it. The allowlist is therefore
+    two orders of magnitude too small, permanently, and any partial list
+    would lock group 8's deploy out the first time a runner came up in an
+    unlisted range.
+
+    That leaves the real fix architectural rather than a value here: a
+    private-only endpoint reached from inside the VPC. Tracked as task 8.4.
   EOT
   type        = list(string)
   default     = ["0.0.0.0/0"]

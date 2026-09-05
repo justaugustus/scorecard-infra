@@ -91,6 +91,20 @@ resource "aws_eks_cluster" "this" {
   role_arn = aws_iam_role.cluster.arn
   version  = var.cluster_version
 
+  # No encryption_config block, and that is not the same as no envelope
+  # encryption. Since Kubernetes 1.28 EKS envelope-encrypts every Kubernetes
+  # API object -- not only Secrets -- through KMS v2 with an AWS-owned key,
+  # with no configuration required; var.cluster_version is well past that.
+  # An encryption_config block would only swap that AWS-owned key encryption
+  # for a customer-managed one, and the trade is bad here: the CMK becomes a
+  # way to destroy the cluster. Disabling it puts the control plane in a
+  # degraded state within one API server restart, and deleting it degrades
+  # the cluster "beyond recovery" in AWS's own words -- no restore path, at
+  # any price. What that buys is CloudTrail visibility and unilateral key
+  # deletion over a corpus of public repository scan results. Revisit only
+  # if a compliance regime demands a customer-held key, and pair it with a
+  # key policy and CloudWatch alarm that make accidental disablement hard.
+
   # Control-plane audit trail. Off by default in EKS, which means a cluster
   # holding the corpus's write credentials would have no record of who called
   # the API. "api", "audit" and "authenticator" are the three that answer
@@ -105,9 +119,10 @@ resource "aws_eks_cluster" "this" {
     # hairpinning through the shared NAT Gateway, which matters here because
     # E5 shares that NAT with the serving plane and its data processing is
     # billed. Public access stays on because group 8's CI deploy runs on
-    # GitHub-hosted runners, which have no stable egress range to allowlist --
-    # so public_access_cidrs is left open and IAM, not the network, is the
-    # access control. Tighten both if CI ever moves into the VPC.
+    # GitHub-hosted runners, whose published ranges outnumber the EKS
+    # allowlist quota by two orders of magnitude -- see var.public_access_cidrs
+    # for the numbers. IAM and access entries are the control, not the
+    # network. Closing the endpoint is task 8.4, not a value change here.
     endpoint_private_access = var.endpoint_private_access
     endpoint_public_access  = var.endpoint_public_access
     public_access_cidrs     = var.public_access_cidrs
