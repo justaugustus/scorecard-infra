@@ -413,6 +413,40 @@ attribute, CloudWatch and route-table sections the first script has none of.
       **All three clean, plus `go mod tidy` with no resulting diff. `sqs`,
       `aws-sdk-go-v2` and `smithy-go` move from indirect to direct; `sns`
       joins as indirect via the driver.**
+- [x] 6.7 Prove the driver's runtime shapes against a live queue, not a mock.
+      Added while closing 6.5: `As()` conversions either match the driver or
+      they do not, and a mock agrees with whatever the test hands it, so the
+      one thing group 6 could not self-verify was whether
+      `msg.As(&sqstypes.Message)` returns anything at runtime. If it does not,
+      `SynchronousPull` fails on the first message and every worker dies.
+      **`subscriber_sqs_integration_test.go`, behind a build tag and skipped
+      unless `SCORECARD_SQS_TEST_QUEUE_URL` is set, so the default suite
+      implies no credentials. Publishes one marked message through
+      `CreatePublisher`, receives it through `CreateSubscriber`, holds it past
+      several renewal windows, acks it, and reads the queue's own depth to
+      confirm the delete rather than inferring it.**
+      **Run against `scorecard-batch-requests` 2026-09-05: receipt handle
+      recovered (412 bytes), three renewals accepted by SQS, heartbeat stopped
+      on ack, queue drained to zero visible and zero in flight.**
+      **It failed on its first run, which is the argument for having written
+      it. `SynchronousPull` returns a nil message only once the context is
+      cancelled, and a nil message is the only thing that breaks
+      `cron/worker`'s loop, so `Close` was reachable by no route other than a
+      dead context — and it passed that context to `Shutdown`, failing every
+      graceful shutdown by construction. The loud symptom was a non-zero exit
+      on SIGTERM; the quiet one was that `Shutdown` flushes gocloud's pending
+      ack batch, so the just-finished shard's ack was dropped and SQS
+      redelivered it. Fourteen duplicate scans per rollout, and it would have
+      read as ordinary at-least-once noise rather than a defect. `Close` now
+      detaches the context and takes ten seconds of its own, inside
+      Kubernetes' default termination grace period.**
+      **The existing mock could not have caught it — its `Shutdown` ignored
+      the context. The regression test uses one that fails on a dead context
+      like the real subscription, and was confirmed red against the previous
+      behaviour before being kept.**
+      **This harness is what tasks 9.2–9.5 need against the test buckets, so
+      it is a file rather than a throwaway script. It does not close 9.2:
+      that wants the real worker running in-cluster, not a published marker.**
 
 ## 7. Workload manifests
 
