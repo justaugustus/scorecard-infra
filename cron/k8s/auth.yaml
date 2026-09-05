@@ -50,6 +50,10 @@ spec:
         app.kubernetes.io/name: github-auth-server
     spec:
       serviceAccountName: scorecard-github-server
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       # System pool, alongside the controller: small, always-on, and not
       # scanning anything.
       nodeSelector:
@@ -58,12 +62,29 @@ spec:
       - name: github-auth-server
         image: ghcr.io/ossf/scorecard-github-server:main
         imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
         env:
         - name: GITHUB_AUTH_TOKEN
           valueFrom:
             secretKeyRef:
               name: github
               key: token
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
   strategy:
     type: "RollingUpdate"
     rollingUpdate:
