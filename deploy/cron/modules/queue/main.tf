@@ -27,11 +27,24 @@ terraform {
 resource "aws_sqs_queue" "dlq" {
   name = "${var.name}-dlq"
 
+  # Stated rather than inherited. SQS turns SSE-SQS on for queues created
+  # over HTTPS without encryption attributes, which is how the provider
+  # creates them -- so this is most likely already the live state and this
+  # line pins it instead of leaving it to a service default that a future
+  # provider version could start sending explicitly. SSE-SQS, not SSE-KMS:
+  # the messages are repository URLs and scan metadata, and a CMK would add
+  # per-request KMS charges on a queue every worker polls continuously (E2)
+  # to protect data that is public on the other side of the scan.
+  sqs_managed_sse_enabled = true
+
   tags = var.tags
 }
 
 resource "aws_sqs_queue" "this" {
   name = var.name
+
+  # See aws_sqs_queue.dlq above.
+  sqs_managed_sse_enabled = true
 
   visibility_timeout_seconds = var.visibility_timeout_seconds
   receive_wait_time_seconds  = var.receive_wait_time_seconds

@@ -171,6 +171,12 @@ attribute, CloudWatch and route-table sections the first script has none of.
       all). Wired into `deploy/cron/production` as `module "queue"`. Applied
       2026-08-31: 2 added, 0 changed, 0 destroyed, matching the plan
       exactly.**
+      **Amended after review (Kusari AWS-0096): both queues now state
+      `sqs_managed_sse_enabled = true` rather than inheriting SQS's service
+      default. Needs a re-apply of `deploy/cron/production`, and that plan
+      output is the evidence for which it was all along — no diff means the
+      default had already encrypted them, `false -> true` means it had
+      not.**
 - [x] 4.3 Size the visibility timeout default to comfortably exceed a typical
       scan's duration — this is a starting value the heartbeat (**E3**)
       extends, not the sole protection against redelivery.
