@@ -29,9 +29,11 @@ resource "aws_sqs_queue" "dlq" {
 
   # Stated rather than inherited. SQS turns SSE-SQS on for queues created
   # over HTTPS without encryption attributes, which is how the provider
-  # creates them -- so this is most likely already the live state and this
-  # line pins it instead of leaving it to a service default that a future
-  # provider version could start sending explicitly. SSE-SQS, not SSE-KMS:
+  # creates them -- confirmed on these two, since adding this line planned
+  # clean against the live queues rather than flipping them. It stays
+  # because a stated intent survives a future provider version that starts
+  # sending the attribute, where an inherited one does not. Not a gap that
+  # was closed here; a default that is now written down. SSE-SQS, not SSE-KMS:
   # the messages are repository URLs and scan metadata, and a CMK would add
   # per-request KMS charges on a queue every worker polls continuously (E2)
   # to protect data that is public on the other side of the scan.

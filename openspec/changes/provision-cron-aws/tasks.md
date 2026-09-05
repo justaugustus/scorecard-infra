@@ -173,10 +173,13 @@ attribute, CloudWatch and route-table sections the first script has none of.
       exactly.**
       **Amended after review (Kusari AWS-0096): both queues now state
       `sqs_managed_sse_enabled = true` rather than inheriting SQS's service
-      default. Needs a re-apply of `deploy/cron/production`, and that plan
-      output is the evidence for which it was all along — no diff means the
-      default had already encrypted them, `false -> true` means it had
-      not.**
+      default. Re-applied 2026-09-05 and the plan answered the question it
+      existed to answer — "No changes", so the default had already encrypted
+      both queues and the finding was a false positive. The line stays
+      anyway: a stated intent survives a future provider version that starts
+      sending the attribute, where an inherited one does not. Same refresh
+      covered every resource in this root and found no drift against groups
+      3, 4 and 5.**
 - [x] 4.3 Size the visibility timeout default to comfortably exceed a typical
       scan's duration — this is a starting value the heartbeat (**E3**)
       extends, not the sole protection against redelivery.
