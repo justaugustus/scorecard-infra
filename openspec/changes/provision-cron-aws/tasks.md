@@ -484,6 +484,27 @@ attribute, CloudWatch and route-table sections the first script has none of.
       the controller, CII job and token server take the system pool. The CII
       job fetches from the Best Practices API once a month rather than
       cloning repositories, so it has no claim on a scanning node.**
+      **Hardening, which the port inherited rather than introduced: no
+      manifest declared a `securityContext` and none but the controller
+      declared `resources`. Every pod now sets `runAsNonRoot` and
+      `RuntimeDefault` seccomp; every container drops all capabilities,
+      refuses privilege escalation, and runs read-only. The images already
+      resolve to non-root UIDs (65532 for the distroless bases, 1001 for the
+      kubectl sidecar), both numeric, which is what lets the kubelet verify
+      `runAsNonRoot` instead of refusing to start on an unresolvable name —
+      but these are enforced regardless of what an image claims about
+      itself.**
+      **A read-only root needs a writable `/tmp`: the scanning path extracts
+      repositories via `os.MkdirTemp("", ...)` and `kubectl` caches discovery
+      under `$HOME`. Both get an `emptyDir`, and the sidecar's `HOME` is
+      repointed at it. This is the one part of the port that cannot be
+      verified before a deploy — a write path outside `/tmp` would surface as
+      a failing scan, not a failing apply.**
+      **Worker resource bounds are sized to the cluster module's own
+      m5.xlarge reasoning: 14 pods requesting 28Gi across three nodes, with a
+      memory ceiling so one hostile repository pressures its own pod rather
+      than the node. No CPU limit — throttling a scan makes it slow, not
+      safe. Starting values per A8.**
       **The `awssqs://` URLs are not in the manifests. They arrive as
       `SCORECARD_REQUEST_TOPIC_URL` (controller) and
       `SCORECARD_REQUEST_SUBSCRIPTION_URL` (worker) from a `scorecard-queue`
