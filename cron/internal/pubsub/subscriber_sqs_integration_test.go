@@ -158,11 +158,14 @@ func TestSQSRoundTrip(t *testing.T) {
 	sqsSub.extension = integrationExtension
 	sqsSub.grace = integrationGrace
 
-	t.Cleanup(func() {
+	// defer, not t.Cleanup: cleanup callbacks run after the test function's
+	// deferred calls, so the cancel above would already have fired. Registering
+	// this later means LIFO closes the subscriber first, then cancels.
+	defer func() {
 		if err := subscriber.Close(); err != nil {
 			t.Errorf("subscriber.Close: %v", err)
 		}
-	})
+	}()
 
 	got, err := subscriber.SynchronousPull()
 	if err != nil {
