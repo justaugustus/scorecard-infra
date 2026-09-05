@@ -25,6 +25,7 @@ import (
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob" // Needed to read file:/// buckets. Intended primarily for testing, though needed here for tests outside the package.
 	_ "gocloud.dev/blob/gcsblob"  // Needed to link in GCP drivers.
+	_ "gocloud.dev/blob/s3blob"   // Needed to link in AWS drivers, for the s3:// buckets the batch plane writes.
 
 	"github.com/ossf/scorecard-infra/cron/config"
 )

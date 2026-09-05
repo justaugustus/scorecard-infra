@@ -29,6 +29,8 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sns v1.39.14 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.24 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/go-openapi/analysis v0.26.2 // indirect

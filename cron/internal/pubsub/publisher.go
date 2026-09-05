@@ -23,6 +23,11 @@ import (
 	"sync/atomic"
 
 	"gocloud.dev/pubsub"
+	// Needed to link in AWS drivers. Publishing needs no more than this: the
+	// driver registers awssqs:// on the default URLMux, and publisherImpl's
+	// batching and error accounting are provider-agnostic already. The
+	// subscriber side cannot be this simple -- see subscriber_sqs.go.
+	_ "gocloud.dev/pubsub/awssnssqs"
 	// Needed to link in GCP drivers.
 	_ "gocloud.dev/pubsub/gcppubsub"
 	"google.golang.org/protobuf/encoding/protojson"
