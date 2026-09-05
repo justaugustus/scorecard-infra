@@ -36,6 +36,14 @@ spec:
         app.kubernetes.io/name: worker
     spec:
       serviceAccountName: scorecard-batch-worker
+      # The distroless:nonroot base already runs as UID 65532, but that is the
+      # image's own claim about itself. These are enforced by the kubelet
+      # whatever the image declares, which is why they are worth stating even
+      # though the effective user does not change.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       # The worker pool is tainted so 14 scanning pods cannot land on the
       # system node alongside CoreDNS and the controller. Without the
       # toleration this Deployment stays Pending -- deliberately loud.
@@ -51,6 +59,26 @@ spec:
           image: ghcr.io/ossf/scorecard-batch-worker:main
           args: ["--ignoreRuntimeErrors=true", "--config=/etc/scorecard/config.yaml"]
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # There was no limit at all here. Scorecard parses whole files from
+          # repositories it does not control, and some of that parsing
+          # allocates a large multiple of the input, so one hostile repository
+          # could pressure the node rather than just its own pod -- with
+          # replicas: 14, that is everyone's problem. Starting values, tunable
+          # per A8: the cluster module sizes m5.xlarge for roughly one vCPU
+          # and 4Gi per pod, so 14 pods request 28Gi across three nodes.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              # No CPU limit on purpose -- throttling a scan makes it slow
+              # rather than safe, and the memory ceiling is what F4 needs.
+              memory: 3Gi
           env:
             # The queue URL embeds the AWS account ID, so it is supplied at
             # deploy time rather than committed to a public repository. See
@@ -89,6 +117,11 @@ spec:
             - name: github-app-key
               mountPath: "/etc/github/"
               readOnly: true
+            # readOnlyRootFilesystem needs somewhere to put the repositories
+            # it scans: scorecard's tarball client calls os.MkdirTemp("", ...),
+            # which lands in /tmp. Without this every scan fails on extract.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: config-volume
           configMap:
@@ -96,6 +129,8 @@ spec:
         - name: github-app-key
           secret:
             secretName: github
+        - name: tmp
+          emptyDir: {}
   strategy:
     type: "RollingUpdate"
     rollingUpdate:

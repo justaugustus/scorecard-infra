@@ -35,6 +35,10 @@ spec:
         spec:
           restartPolicy: Never
           serviceAccountName: scorecard-cii-worker
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           # System pool. This fetches from the OpenSSF Best Practices API once
           # a month rather than cloning repositories, so it does not need a
           # scanning node and should not displace one.
@@ -45,11 +49,26 @@ spec:
               image: ghcr.io/ossf/scorecard-cii-worker:main
               args: ["--config=/etc/scorecard/config.yaml"]
               imagePullPolicy: Always
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 512Mi
               volumeMounts:
                 - name: config-volume
                   mountPath: /etc/scorecard
                   readOnly: true
+                - name: tmp
+                  mountPath: /tmp
           volumes:
             - name: config-volume
               configMap:
                 name: scorecard-config
+            - name: tmp
+              emptyDir: {}

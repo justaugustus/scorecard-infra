@@ -62,6 +62,14 @@ spec:
         spec:
           restartPolicy: Never
           serviceAccountName: scorecard-batch-controller
+          # Both containers here resolve to numeric non-root users in their
+          # image config -- 65532 for distroless:nonroot, 1001 for
+          # bitnami/kubectl -- so runAsNonRoot gives the kubelet a UID it can
+          # verify rather than a username it would refuse to start on.
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           # System pool: this bursts to one pod a week and wants 1Gi, so it has
           # no business competing with the scanning workers for a node.
           nodeSelector:
@@ -75,6 +83,11 @@ spec:
                 "cron/internal/data/gitlab-projects.csv",
               ]
               imagePullPolicy: Always
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
               env:
                 - name: GOMEMLIMIT
                   value: "950MiB"
@@ -94,6 +107,8 @@ spec:
                 - name: config-volume
                   mountPath: /etc/scorecard
                   readOnly: true
+                - name: tmp
+                  mountPath: /tmp
             - name: worker-update
               image: bitnami/kubectl@sha256:44468c0f5b348e6dcf5e11feb6fdcc969c874bba2856150fe50eb1aacb3bdfee
               command:
@@ -101,7 +116,29 @@ spec:
                 - "rollout"
                 - "restart"
                 - "deployment/scorecard-batch-worker"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              env:
+                # kubectl writes its discovery cache under $HOME/.kube; with a
+                # read-only root that has to point somewhere writable or the
+                # rollout fails on a cache write rather than on anything real.
+                - name: HOME
+                  value: /tmp
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 128Mi
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
           volumes:
             - name: config-volume
               configMap:
                 name: scorecard-config
+            - name: tmp
+              emptyDir: {}
