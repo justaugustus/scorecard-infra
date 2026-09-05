@@ -1,0 +1,92 @@
+# Copyright 2026 OpenSSF Scorecard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The AWS batch plane's config overlay, replacing cron/config/config.yaml on
+# EKS. Becomes the `scorecard-config` ConfigMap every workload mounts at
+# /etc/scorecard/config.yaml; see cron/k8s/README.md for the command.
+#
+# Buckets point at the four TEST buckets (E7), not the six adopted production
+# ones. Task 9.7 repoints them, and only after 9.1-9.6 and 9.9 pass. Until
+# then no verification run can write the corpus, which is the invariant the
+# IAM policies in deploy/cron/modules/cluster are built to enforce -- none of
+# them names a production bucket.
+
+# Read only by the Stackdriver exporter and the BigQuery transfer job, neither
+# of which runs here. Kept rather than dropped because an absent value returns
+# ErrEmptyConfigValue if anything reaches for it, and a stale-but-harmless
+# string beats a start-up failure in a path nobody exercises.
+project-id: openssf
+
+# Deliberately absent, supplied per-workload from the `scorecard-queue`
+# ConfigMap as SCORECARD_REQUEST_TOPIC_URL and
+# SCORECARD_REQUEST_SUBSCRIPTION_URL:
+#
+#   request-topic-url
+#   request-subscription-url
+#
+# An SQS queue URL contains the AWS account ID and this repository is public,
+# following the same reasoning that scrubbed live resource IDs out of the
+# proposal. Both point at the one queue: SQS has no separate topic and
+# subscription, so publish and consume address the same resource.
+
+# BigQuery is not part of this change -- the transfer jobs are not ported
+# (task 7.3) and no AWS equivalent is wired up, so bigquery-dataset,
+# bigquery-table and raw-bigquery-table are all omitted rather than left
+# pointing at a dataset nothing writes.
+
+completion-threshold: 0.99
+shard-size: 10
+webhook-url:
+
+# Not stackdriver: that is a GCP product and there is no project to export to.
+# Not empty either -- cron/monitoring's GetExporter returns
+# ErrEmptyConfigValue for a blank value and cron/internal/worker calls it
+# during start-up, so a blank here is a CrashLoopBackOff rather than metrics
+# quietly switched off. `printer` is the in-tree no-backend exporter. A real
+# CloudWatch exporter is out of scope for this change.
+metric-exporter: printer
+
+result-data-bucket-url: s3://ossf-scorecard-data2-test
+
+# TODO temporarily leaving old variables until changes propagate to production
+#
+# Read-only from the controller's side, so it has no test counterpart and
+# points at the real adopted bucket (E7). Reading the live inventory during
+# verification carries no write risk.
+input-bucket-url: s3://ossf-scorecard-input-projects
+# Can be used to specify directories within a bucket. Can be empty.
+input-bucket-prefix:
+
+additional-params:
+  input-bucket:
+    url: s3://ossf-scorecard-input-projects
+    # Optional prefix to limit files used as input files within a bucket (e.g. a specific file or directory)
+    prefix:
+    # Optional file to read a prefix from, instead of statically defining prefix above (note: prefix must be blank to use this option)
+    # This is good in situations where the prefix changes frequently (e.g. always using the most recent folder in a bucket)
+    prefix-file:
+
+  scorecard:
+    # for sending PURGE requests to CDN
+    api-base-url: https://api.scorecard.dev
+    # API results bucket
+    api-results-bucket-url: s3://ossf-scorecard-cron-results-test
+    # TODO: Temporarily remove SAST and CI-Tests which require lot of GitHub API tokens.
+    # TODO(#859): Re-add Contributors after fixing inconsistencies.
+    # TODO: Dependency-Update-Tool and SAST are search heavy
+    # TODO: Vulnerabilities is slow on repos with lots of dependencies
+    blacklisted-checks: CI-Tests,Contributors,Dependency-Update-Tool,Webhooks
+    cii-data-bucket-url: s3://ossf-scorecard-cii-data-test
+    # Raw results.
+    raw-result-data-bucket-url: s3://ossf-scorecard-rawdata-test
