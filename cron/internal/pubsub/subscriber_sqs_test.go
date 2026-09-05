@@ -401,6 +401,33 @@ func TestSQSSubscriberMissingReceiptHandle(t *testing.T) {
 	}
 }
 
+// ctxAwareReceiver fails Shutdown on a dead context, the way gocloud's real
+// subscription does.
+type ctxAwareReceiver struct {
+	scriptedReceiver
+}
+
+func (r *ctxAwareReceiver) Shutdown(ctx context.Context) error {
+	return ctx.Err()
+}
+
+// TestSQSSubscriberCloseSurvivesCancelledContext pins the one route
+// cron/worker can actually take to Close. SynchronousPull returns a nil
+// message only after the context is cancelled, so if Close reused that
+// context every graceful shutdown would fail and the pending ack batch would
+// never flush, re-scanning the last message on every pod termination.
+func TestSQSSubscriberCloseSurvivesCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	subscriber := newTestSubscriber(ctx, &ctxAwareReceiver{}, &countingVisibilityChanger{}, "handle-1")
+	cancel()
+
+	if err := subscriber.Close(); err != nil {
+		t.Errorf("Close after context cancel: got %v, want nil", err)
+	}
+}
+
 func TestSQSSubscriberCloseReturnsShutdownError(t *testing.T) {
 	t.Parallel()
 

@@ -51,6 +51,11 @@ const (
 	// Bounds on the retry delay after a transient Receive failure.
 	minReceiveBackoff = 1 * time.Second
 	maxReceiveBackoff = 30 * time.Second
+
+	// How long Shutdown gets to flush pending acks once the subscriber's own
+	// context is gone. Comfortably inside Kubernetes' 30s default termination
+	// grace period, so the pod is not killed mid-flush.
+	shutdownGracePeriod = 10 * time.Second
 )
 
 var (
@@ -297,9 +302,19 @@ func (subscriber *sqsSubscriber) Nack() {
 	}
 }
 
+// Close detaches from the subscriber's own context on purpose. SynchronousPull
+// returns a nil message only once that context is cancelled, so cron/worker can
+// reach Close by no other route than a cancelled context -- handing it that
+// context would fail every graceful shutdown by construction. Worse, Shutdown
+// is what flushes gocloud's pending ack batch, so a failed one redelivers the
+// last message and re-scans it. A short window of its own avoids both.
 func (subscriber *sqsSubscriber) Close() error {
 	subscriber.stopHeartbeat()
-	if err := subscriber.subscription.Shutdown(subscriber.ctx); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(subscriber.ctx), shutdownGracePeriod)
+	defer cancel()
+
+	if err := subscriber.subscription.Shutdown(ctx); err != nil {
 		return fmt.Errorf("error during subscription.Shutdown: %w", err)
 	}
 	return nil
