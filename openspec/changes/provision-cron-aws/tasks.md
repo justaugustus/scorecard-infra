@@ -330,23 +330,89 @@ attribute, CloudWatch and route-table sections the first script has none of.
 
 ## 6. Code
 
-- [ ] 6.1 Link `gocloud.dev/blob/s3blob` in `cron/data/blob.go` alongside
+- [x] 6.1 Link `gocloud.dev/blob/s3blob` in `cron/data/blob.go` alongside
       `fileblob` and `gcsblob`.
-- [ ] 6.2 Implement `cron/internal/pubsub/subscriber_sqs.go` (**E3**): long
+      **One blank import. `blob.OpenBucket` is already a scheme registry, so
+      `s3://` needs nothing else, and the S3 SDK was already present for the
+      serving plane.**
+- [x] 6.2 Implement `cron/internal/pubsub/subscriber_sqs.go` (**E3**): long
       polling `ReceiveMessage`, an initial visibility timeout, a heartbeat
       goroutine calling `ChangeMessageVisibility` before expiry, `Ack` →
       `DeleteMessage`, `Nack` → `ChangeMessageVisibility` to zero, heartbeat
       stopped on ack/nack/shutdown/cancellation.
-- [ ] 6.3 Add a matching SQS publisher alongside the existing GCP one in
+      **Built on gocloud's driver rather than a hand-rolled SQS client. The
+      renewal rides on `As()`, gocloud's documented escape hatch for provider
+      behaviour the portable API does not cover, and `Ack`/`Nack` delegate to
+      the driver — its `Nack` already issues `ChangeMessageVisibility` with a
+      timeout of zero, so the task's requirement is met without writing it.**
+      **Renewal is 600s with a 60s grace, matching `subscriber_gcs.go`'s
+      existing `ackDeadlineExtensionInSec`/`gracePeriodInSec` rather than
+      introducing a second, differently-tuned pair. Cost is not a factor at
+      any plausible interval: `shard-size: 10` makes 1.3M repos/week roughly
+      130k messages, only long shards renew at all, and even assuming every
+      message renewed three times it is under a dollar a month. Idle long
+      polling by 14 replicas costs more, and 4.3 already fixed that.**
+      **Three deliberate departures from `subscriber_gcs.go`: a failed
+      renewal is logged and retried rather than `log.Fatal` (losing one
+      message to redelivery beats losing every scan in flight on the worker);
+      heartbeat shutdown is idempotent, so `Close` after `Ack` cannot panic on
+      a second channel close; and a transient `Receive` error backs off and
+      retries instead of returning `(nil, nil)`, which `cron/worker` reads as
+      "stop" and turns into an exit 0 — a momentary SQS error would otherwise
+      cycle every replica and report it as a clean shutdown. `AccessDenied`
+      and a missing queue still return, since retrying those forever stops
+      scanning just as effectively and says nothing about why.**
+      **The subscription is opened through an explicitly configured
+      `awssnssqs.URLOpener`, not the one the driver registers on the default
+      mux: the default receive batcher prefetches ten messages while the
+      worker processes one, leaving nine buffered with nothing renewing them.
+      That option is reachable only through the exported opener, not through
+      URL query parameters. One message may still be buffered ahead, which is
+      safe — the driver never sets `VisibilityTimeout` on `ReceiveMessage`, so
+      it inherits the queue's own hour-long default from 4.3.**
+- [x] 6.3 Add a matching SQS publisher alongside the existing GCP one in
       `cron/internal/pubsub/publisher.go`.
-- [ ] 6.4 Switch subscriber/publisher selection to URL scheme
+      **A blank import of `gocloud.dev/pubsub/awssnssqs`, and nothing else.
+      `CreatePublisher` already routes through `pubsub.OpenTopic`, and
+      `publisherImpl`'s batching and error accounting never knew which cloud
+      it was talking to. The publish side has no heartbeat to add, so
+      gocloud's abstraction is sufficient here in a way it is not for the
+      subscriber.**
+- [x] 6.4 Switch subscriber/publisher selection to URL scheme
       (`gcppubsub://` vs `awssqs://`) rather than the current
       always-GCP-unless-emulated default.
-- [ ] 6.5 Unit tests: heartbeat renewal, ack/nack/DLQ paths, a deliberately
+      **`CreateSubscriber` switches on the parsed scheme using the drivers'
+      own exported constants (`awssnssqs.SQSScheme`, `gcppubsub.Scheme`), so a
+      URL this accepts is a URL those drivers accept, and an unrecognised one
+      returns a wrapped `errUnsupportedScheme` instead of defaulting to a
+      backend nobody asked for. The `PUBSUB_EMULATOR_HOST` check moved into
+      `createGCPSubscriber` unchanged — it now selects between the two GCP
+      implementations rather than between GCP and everything else.**
+      **The publisher needs no equivalent: `pubsub.OpenTopic` on the default
+      mux already dispatches on scheme off the blank imports.**
+- [x] 6.5 Unit tests: heartbeat renewal, ack/nack/DLQ paths, a deliberately
       slow consumer that outlives one visibility window without losing the
       message, malformed URLs, and the existing GCP paths unchanged.
-- [ ] 6.6 `go build ./...`, `go test ./... -race`, `golangci-lint run ./...`
+      **`subscriber_sqs_test.go` and `subscriber_test.go`. The slow-consumer
+      case was verified by deleting the heartbeat and confirming it goes red
+      with the message it was written to emit, rather than trusting a green
+      assertion. Also covered: renewal stops on each of ack/nack/close/context
+      cancel, `Close` after `Ack` does not panic, a failed renewal is retried
+      rather than fatal, transient receive errors retry while permanent ones
+      return, a missing receipt handle fails loudly instead of running on
+      without a heartbeat, and scheme dispatch including unknown, absent and
+      malformed URLs.**
+      **Messages come from gocloud's in-memory driver, because
+      `pubsub.Message`'s ack hooks are unexported and a zero value panics on
+      `Ack`. No GCP construction is tested: both GCP constructors reach for
+      real credentials, and a test needing a GCP project proves nothing about
+      routing. That path is a verbatim move and stays covered by the existing
+      `TestSubscriber`.**
+- [x] 6.6 `go build ./...`, `go test ./... -race`, `golangci-lint run ./...`
       clean with both subscriber implementations compiled in.
+      **All three clean, plus `go mod tidy` with no resulting diff. `sqs`,
+      `aws-sdk-go-v2` and `smithy-go` move from indirect to direct; `sns`
+      joins as indirect via the driver.**
 
 ## 7. Workload manifests
 
