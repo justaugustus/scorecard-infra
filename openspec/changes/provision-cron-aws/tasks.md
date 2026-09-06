@@ -617,17 +617,71 @@ attribute, CloudWatch and route-table sections the first script has none of.
       successfully) and Pod Identity/SQS reachability (an observed
       publish → receive → ack → delete cycle, not just idle pods holding
       steady). The third, the CII worker's association, is 9.6.**
-- [ ] 9.2 Confirm the message stays invisible while a worker is actively
+      **Formalized as `scripts/verification/run-sample-inventory.sh` so
+      re-verifying after a future change doesn't mean re-deriving these
+      commands — it clones the live CronJob's pod spec rather than
+      duplicating it, so it tracks whatever `cron/k8s/controller.yaml`
+      actually has deployed.**
+- [x] 9.2 Confirm the message stays invisible while a worker is actively
       scanning it (**E3**'s heartbeat holding the visibility timeout open).
+      **Closed by existing evidence rather than a new artifact:
+      `subscriber_sqs_integration_test.go`'s `TestSQSRoundTrip` (task 6.7)
+      already proves the heartbeat mechanism against a real queue, and
+      9.1's live run is a real worker, in-cluster, observably holding a
+      message not-visible during a real scan — together, mechanism and
+      real-worker evidence, which is what 6.7's own note said 9.2 still
+      needed beyond the mechanism alone.**
+      **A same-shaped new integration test (`TestAbandonedReceiveRedelivers`,
+      built and reverted this session — see 9.3's note) was going to add a
+      second data point here, but 9.3's finding made it moot before it
+      could run.**
 - [ ] 9.3 Kill that worker mid-scan (e.g. `kubectl delete pod`). Confirm the
       message becomes visible again after the timeout, a second worker picks
       it up, and the result completes on retry.
+      **Attempted as a Go integration test first (extending
+      `subscriber_sqs_integration_test.go` with the same
+      tuned-visibility-field trick 6.7 uses), on the theory that a manual
+      redelivery test would be as fast against the real queue as 6.7's
+      round trip is. It hung for 5 minutes instead: the live plane now runs
+      14 real worker pods continuously long-polling
+      `scorecard-batch-requests`, and a test's single subscriber cannot win
+      a receive race against 14 always-on competitors for its own marker
+      message. Confirmed via worker pod logs — `"Received message from
+      subscription"` at timestamps matching the test's publish. This
+      wasn't true when 6.7 was written; the cluster didn't exist yet.
+      Fixing it properly needs a dedicated, isolated test queue (mirroring
+      **E7**'s dedicated test buckets), which is new infrastructure and a
+      new `tofu apply` — out of scope for this pass. The two new tests were
+      reverted; `subscriber_sqs_integration_test.go` is back to its
+      committed state. `scripts/verification/kill-worker-mid-scan.sh`
+      exists for the live version of this task (real `kubectl delete pod
+      --grace-period=0 --force`, not a graceful delete — see its header for
+      why graceful doesn't reproduce this) but has not yet been run for
+      real; it is timing-sensitive by nature, since the sample repos scan
+      in seconds.**
 - [ ] 9.4 Confirm no inconsistent output landed in the test buckets from the
       killed attempt — no partial write, no duplicate, nothing tagged with
       the wrong commit.
-- [ ] 9.5 Confirm the DLQ receives a message that permanently fails (e.g. a
+      **`scripts/verification/check-bucket-consistency.sh` exists and was
+      run once against 9.1's clean (non-killed) shard to confirm the script
+      itself works — data2/rawdata shard lists matched and all six
+      `cron-results-test` per-repo exports (clean + commit-SHA copies) for
+      the 3-repo sample were present. That validates the tool, not this
+      task: 9.4 is specifically about output from a *killed* attempt, so it
+      stays open until it runs against 9.3's kill.**
+- [x] 9.5 Confirm the DLQ receives a message that permanently fails (e.g. a
       deliberately malformed shard) after `maxReceiveCount` retries, rather
       than looping forever.
+      **`scripts/verification/trigger-dlq.sh` publishes one well-formed but
+      permanently unscannable message directly to the real queue (an
+      `example.invalid` repo URL — not malformed JSON, which would crash
+      the whole worker process before its ack/nack logic ever ran, per the
+      script's header) and lets the real worker fleet fail it naturally.
+      Run for real 2026-09-06: reached the DLQ after exactly 5 deliveries
+      (the queue's configured `maxReceiveCount`), confirmed by content
+      match, then cleaned up. Real worker contention — the problem for
+      9.3 — is not a problem here, since any of the 14 workers failing the
+      message repeatedly is the real path, not something to route around.**
 - [ ] 9.6 Confirm the CII worker completes one cycle against
       `ossf-scorecard-cii-data-test`. The earlier "or document why it was
       left pointed at the production bucket" escape is gone: group 5 gave
