@@ -196,6 +196,17 @@ func TestGetStringConfigValue(t *testing.T) {
 			hasError:    true,
 			expectedErr: ErrEmptyConfigValue,
 		},
+		{
+			// A field name the config struct does not have used to reach
+			// reflect.Value.Type on the zero Value FieldByName returns, which
+			// panics -- inside the very expression building the error message.
+			name:        "NoSuchField",
+			setEnv:      false,
+			filename:    "testdata/basic.yaml",
+			fieldName:   "NoSuchField",
+			hasError:    true,
+			expectedErr: ErrNoSuchConfigField,
+		},
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
@@ -415,6 +426,36 @@ func TestGetAPIResultsBucketURL(t *testing.T) {
 		}
 		if bucket != prodAPIBucketURL {
 			t.Errorf("test failed: expected - %s, got = %s", prodAPIBucketURL, bucket)
+		}
+	})
+}
+
+//nolint:paralleltest // Since os.Setenv is used.
+func TestGetAPIBaseURL(t *testing.T) {
+	// The config-file path is the one that was broken: api-base-url is an
+	// additional-params/scorecard key, so a top-level field lookup found
+	// nothing and panicked. Unset the override so this reads the file.
+	t.Run("FromConfigFile", func(t *testing.T) {
+		os.Unsetenv(envVarName("scorecard", "api-base-url"))
+		url, err := GetAPIBaseURL()
+		if err != nil {
+			t.Errorf("failed to get production API base URL from config: %v", err)
+		}
+		if url != prodAPIBaseURL {
+			t.Errorf("test failed: expected - %s, got = %s", prodAPIBaseURL, url)
+		}
+	})
+
+	// Empty is how the batch plane disables CDN purging, so it has to be a
+	// value this returns rather than something it crashes on.
+	t.Run("EmptyEnvOverride", func(t *testing.T) {
+		t.Setenv(envVarName("scorecard", "api-base-url"), "")
+		url, err := GetAPIBaseURL()
+		if err != nil {
+			t.Errorf("test failed: expected - no error, got - %v", err)
+		}
+		if url != "" {
+			t.Errorf("test failed: expected empty, got = %s", url)
 		}
 	})
 }

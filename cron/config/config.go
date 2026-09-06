@@ -56,7 +56,6 @@ const (
 	apiResultsBucketURL     string = "SCORECARD_API_RESULTS_BUCKET_URL"
 	inputBucketURL          string = "SCORECARD_INPUT_BUCKET_URL"
 	inputBucketPrefix       string = "SCORECARD_INPUT_BUCKET_PREFIX"
-	apiBaseURL              string = "SCORECARD_API_BASE_URL"
 )
 
 var (
@@ -69,6 +68,11 @@ var (
 	ErrValueConversion = errors.New("unexpected type, cannot convert value")
 	// ErrNoConfig indicates no config file was provided, or flag.Parse() was not called.
 	ErrNoConfig = errors.New("no configuration file provided with --" + configFlag)
+	// ErrNoSuchConfigField indicates a getter named a field the config struct does
+	// not have. That is a mistake in this package rather than in a config file, but
+	// it has to surface as an error: reflect.Value.Type panics on the zero Value a
+	// missing field produces, so the alternative is a crash inside error formatting.
+	ErrNoSuchConfigField = errors.New("no such field on config struct")
 	//go:embed config.yaml
 	configYAML     []byte
 	configFilename = flag.String(configFlag, configDefault, configUsage)
@@ -106,7 +110,11 @@ func getReflectedValueFromConfig(byteValue []byte, fieldName string) (reflect.Va
 	if err != nil {
 		return reflect.ValueOf(parsedConfig), fmt.Errorf("error parsing config file: %w", err)
 	}
-	return reflect.ValueOf(parsedConfig).FieldByName(fieldName), nil
+	value := reflect.ValueOf(parsedConfig).FieldByName(fieldName)
+	if !value.IsValid() {
+		return value, fmt.Errorf("%w: %s", ErrNoSuchConfigField, fieldName)
+	}
+	return value, nil
 }
 
 func getConfigValue(envVar string, byteValue []byte, fieldName string) (reflect.Value, error) {
@@ -361,5 +369,9 @@ func GetCriticalityValues() (map[string]string, error) {
 
 // GetAPIBaseURL returns the base URL for the Scorecard API.
 func GetAPIBaseURL() (string, error) {
-	return getStringConfigValue(apiBaseURL, configYAML, "APIBaseURL", "api-base-url")
+	// api-base-url is an additional-params/scorecard key, the same as the
+	// api-results-bucket-url it sits beside in config.yaml -- not a top-level
+	// config field. getScorecardParam picks up a SCORECARD_API_BASE_URL
+	// override on the way through, so the environment still wins.
+	return getScorecardParam("api-base-url")
 }
