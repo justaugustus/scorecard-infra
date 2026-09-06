@@ -82,11 +82,18 @@ additional-params:
     api-base-url: https://api.scorecard.dev
     # API results bucket
     api-results-bucket-url: s3://ossf-scorecard-cron-results-test
-    # TODO: Temporarily remove SAST and CI-Tests which require lot of GitHub API tokens.
+    # CI-Tests needs a lot of GitHub API tokens, Dependency-Update-Tool is
+    # search heavy, and Vulnerabilities is slow on repos with lots of
+    # dependencies.
     # TODO(#859): Re-add Contributors after fixing inconsistencies.
-    # TODO: Dependency-Update-Tool and SAST are search heavy
-    # TODO: Vulnerabilities is slow on repos with lots of dependencies
-    blacklisted-checks: CI-Tests,Contributors,Dependency-Update-Tool,Webhooks
+    #
+    # Vulnerabilities matches what GCP's cron actually ran. Its last records
+    # carry 14 checks without it in every repository sampled, while this
+    # file's grafted value lists four exclusions and would emit 15. The drift
+    # lived in the deployed ConfigMap -- no manifest ever set an env override
+    # -- and cannot be confirmed now that GCP is shut down, so this follows
+    # what cron-served results actually contained.
+    blacklisted-checks: CI-Tests,Contributors,Dependency-Update-Tool,Vulnerabilities,Webhooks
     cii-data-bucket-url: s3://ossf-scorecard-cii-data-test
     # Raw results.
     raw-result-data-bucket-url: s3://ossf-scorecard-rawdata-test
