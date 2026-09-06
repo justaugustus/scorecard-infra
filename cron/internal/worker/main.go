@@ -46,6 +46,7 @@ import (
 	"github.com/ossf/scorecard-infra/cron/data"
 	"github.com/ossf/scorecard-infra/cron/internal/cdn"
 	format "github.com/ossf/scorecard-infra/cron/internal/format"
+	"github.com/ossf/scorecard-infra/cron/internal/provenance"
 	"github.com/ossf/scorecard-infra/cron/monitoring"
 	"github.com/ossf/scorecard-infra/cron/worker"
 )
@@ -259,6 +260,16 @@ func processRequest(ctx context.Context,
 			// TODO(log): Previously Warn. Consider logging an error here.
 			logger.Info(errorMsg)
 		}
+		// scorecard.Run fills result.Scorecard from the running binary's own
+		// module version. That was the engine's before the graft, when cron
+		// lived in ossf/scorecard; now it is scorecard-infra's, which is the
+		// wrong answer for a field api/openapi.yaml documents as "SHA1 value
+		// of the Scorecard commit used for analysis" and which
+		// docs.GetDocumentationURL turns into a github.com/ossf/scorecard
+		// blob link. Correct it here rather than in format, so the serializers
+		// stay serializers.
+		result.Scorecard.Version, result.Scorecard.CommitSHA = provenance.Engine()
+
 		result.Date = batchRequest.GetJobTime().AsTime()
 
 		if err := format.AsJSON2(&result, true /*showDetails*/, log.InfoLevel, checkDocs, &buffer2); err != nil {
