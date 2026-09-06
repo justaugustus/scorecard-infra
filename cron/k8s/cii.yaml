@@ -26,8 +26,17 @@ kind: CronJob
 metadata:
   name: scorecard-cii-worker
 spec:
-  # At 00:00UTC on 1st of every month.
-  schedule: "0 20 * * 0"
+  # At 22:00UTC on Sunday, four hours ahead of the controller's Monday 02:00
+  # run, so the CII corpus this scan reads is refreshed first.
+  #
+  # Moved from 20:00 on 2026-09-06 and applied live with `kubectl patch`. The
+  # gap to the controller was two hours, which is not enough to look at what
+  # the refresh produced before the scan that consumes it starts -- and the
+  # cycle is a full, unthrottleable pass over bestpractices.dev at 1 QPS, so
+  # it is not something to cut short once it is running. The stale comment
+  # above it ("00:00UTC on 1st of every month") never matched the value and
+  # is gone with it.
+  schedule: "0 22 * * 0"
   concurrencyPolicy: "Forbid"
   jobTemplate:
     spec:
