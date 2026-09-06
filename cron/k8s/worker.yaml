@@ -88,6 +88,12 @@ spec:
                 configMapKeyRef:
                   name: scorecard-queue
                   key: request-subscription-url
+            # Present-but-empty, which is what turns CDN purging off: this
+            # plane writes to the -test buckets, and a purge would invalidate
+            # entries on the production api.scorecard.dev CDN that nothing
+            # here published.
+            - name: SCORECARD_API_BASE_URL
+              value: ""
             - name: GITHUB_APP_KEY_PATH
               value: /etc/github/app_key
             - name: GITHUB_APP_ID
