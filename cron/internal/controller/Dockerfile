@@ -22,12 +22,22 @@ COPY . ./
 FROM base AS shuffle
 ARG TARGETOS
 ARG TARGETARCH
+ARG GIT_HASH
+ARG GIT_VERSION
+ARG GIT_TREESTATE
+ARG SOURCE_DATE_EPOCH
+ARG SCORECARD_ENGINE_COMMIT
 RUN CGO_ENABLED=0 make build-shuffler
 RUN ./cron/internal/shuffle/shuffle 2500 cron/internal/data/projects.csv cron/internal/data/projects.release.csv
 
 FROM base AS controller
 ARG TARGETOS
 ARG TARGETARCH
+ARG GIT_HASH
+ARG GIT_VERSION
+ARG GIT_TREESTATE
+ARG SOURCE_DATE_EPOCH
+ARG SCORECARD_ENGINE_COMMIT
 RUN CGO_ENABLED=0 make build-controller
 
 FROM gcr.io/distroless/base:nonroot@sha256:d199d20fb09c898d8822ae5cbd5cf3c6d424e9b5e1fc2eb9a719a7752cd9d861

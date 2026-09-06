@@ -262,8 +262,39 @@ attribute, CloudWatch and route-table sections the first script has none of.
       worker:
       `sqs:ReceiveMessage`/`DeleteMessage`/`ChangeMessageVisibility`/`GetQueueAttributes`
       on the main queue, read/write on the `cron-results`/`data2`/`rawdata`
-      test buckets (not `cii-data-test` — that belongs to the CII worker
-      alone), plus the combined secrets read policy. CII worker: the
+      test buckets ~~(not `cii-data-test` — that belongs to the CII worker
+      alone)~~ **corrected 2026-09-06: plus read-only (`s3:GetObject`,
+      `s3:ListBucket`) on `cii-data-test`. "Belongs to the CII worker alone"
+      is right about writes and wrong about reads. Every scan builds
+      `clients.BlobCIIBestPracticesClient` over
+      `config.GetCIIDataBucketURL()` (`cron/internal/worker/main.go`) and the
+      CII-Best-Practices check calls `bucket.Exists` then `bucket.ReadAll` on
+      `<repo>/result.json` in that bucket. Observed live 2026-09-06 via
+      `scripts/verification/run-sample-inventory.sh`: 3 of 3 repos, every run,
+      `check CII-Best-Practices has a runtime error: ... code=PermissionDenied
+      ... HeadObject ... 403`. It does not crash the worker — a per-check
+      runtime error degrades and moves on, like the unrelated
+      Branch-Protection token limitation in the same log — so it would have
+      reached the full inventory as silently missing scores rather than as a
+      failure. Root cause is the same shape as 9.9's `rawdata` finding: a
+      design-time assumption about what a workload needs, wrong about what the
+      code does at runtime. GCP never surfaced it because no `cron/k8s`
+      manifest set `serviceAccountName` before 7.1, so all four workloads
+      shared the namespace's `default` ServiceAccount and one identity; the
+      worker held the CII job's access by accident. Splitting into four roles
+      was right, dropping this read was not. Granted as its own read-only
+      statement (`ReadCIIData`) rather than a fourth `worker_bucket_keys`
+      entry, which would have added `PutObject`/`DeleteObject` over the CII
+      corpus. Applied and verified 2026-09-06: the same three repos, same
+      script, zero CII runtime errors afterwards, with no worker restart —
+      Pod Identity evaluates the role's policy per request, so the running
+      fleet picked the grant up immediately. The published records show what
+      was actually at stake: CII went from `-1` on all three to `5`/`0`/`0`,
+      and because a `-1` check is excluded from the aggregate, every
+      aggregate score moved too (8.9→8.8, 6.2→6.0, 3.1→3.0). This was not a
+      blank field in the output; it was every repository's score computed
+      from 15 checks instead of 16**, plus the combined secrets read policy.
+      CII worker: the
       narrowest of the four — read/write on `cii-data-test` and nothing
       else, since `cron/internal/cii/main.go` fetches the OpenSSF Best
       Practices pages over plain HTTP and writes one bucket, with no queue

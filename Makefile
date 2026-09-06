@@ -1,8 +1,19 @@
 SHELL := /bin/bash
-GIT_HASH := $(shell git rev-parse HEAD)
-GIT_VERSION ?= $(shell git describe --tags --always --dirty)
-GIT_TREESTATE = $(shell if git diff --quiet; then echo "clean"; else echo "dirty"; fi)
-SOURCE_DATE_EPOCH = $(shell git log --date=iso8601-strict -1 --pretty=%ct)
+# Derived from git locally, overridable by the image build, which has no .git
+# at all -- .dockerignore excludes it, so every `git` call below returns empty
+# there and the link flags baked "" into the binary. $(or ...) rather than ?=
+# because BuildKit exports a declared-but-unpassed ARG as an empty string,
+# which ?= would accept as "already set" and reintroduce exactly that bug.
+GIT_HASH := $(or $(GIT_HASH),$(shell git rev-parse HEAD 2>/dev/null))
+GIT_VERSION := $(or $(GIT_VERSION),$(shell git describe --tags --always --dirty 2>/dev/null))
+GIT_TREESTATE := $(or $(GIT_TREESTATE),$(shell if git diff --quiet 2>/dev/null; then echo "clean"; else echo "dirty"; fi))
+SOURCE_DATE_EPOCH := $(or $(SOURCE_DATE_EPOCH),$(shell git log --date=iso8601-strict -1 --pretty=%ct 2>/dev/null))
+
+# The ossf/scorecard commit the linked engine module was cut from. The build
+# graph knows the module version but not its SHA, and api/openapi.yaml wants a
+# SHA -- so the workflow resolves it and passes it in. Empty is safe: docs
+# treats it as unknown and links against `main`.
+SCORECARD_ENGINE_COMMIT ?=
 IMAGE_NAME = scorecard
 PLATFORM = "linux/amd64,linux/arm64,linux/386,linux/arm"
 
@@ -10,10 +21,14 @@ PLATFORM = "linux/amd64,linux/arm64,linux/386,linux/arm"
 # this in scripts/version-ldflags because .goreleaser.yml shares it; there is no
 # goreleaser here, so it is inlined.
 VERSION_PKG = sigs.k8s.io/release-utils/version
+# A -X for a package that is not linked into a given binary is a no-op, so the
+# cron-only provenance flag can live in the shared set.
+PROVENANCE_PKG = github.com/ossf/scorecard-infra/cron/internal/provenance
 LDFLAGS = -X $(VERSION_PKG).gitVersion=$(GIT_VERSION) \
           -X $(VERSION_PKG).gitCommit=$(GIT_HASH) \
           -X $(VERSION_PKG).gitTreeState=$(GIT_TREESTATE) \
           -X $(VERSION_PKG).buildDate=$(SOURCE_DATE_EPOCH) \
+          -X $(PROVENANCE_PKG).engineCommit=$(SCORECARD_ENGINE_COMMIT) \
           -w -extldflags "-static"
 
 ############################### make help #####################################
