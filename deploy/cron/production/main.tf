@@ -196,6 +196,83 @@ resource "aws_s3_bucket_public_access_block" "test" {
   restrict_public_buckets = true
 }
 
+# --- Storage: versioning on the six adopted corpus buckets (E6) --------------
+#
+# The gate on writing production results at all. Two of the four buckets this
+# pipeline touches overwrite by design -- cron-results' <repo>/results.json and
+# <repo>/raw.json are the "latest" pointers the live API reads as its fallback,
+# and cii-data's <repo>/result.json is rewritten every refresh -- and with
+# versioning off, a bad run destroys the previous week irrecoverably. data2 and
+# rawdata are keyed YYYY.MM.DD/HHMMSS/ and cannot collide, but a corpus where
+# only some buckets are recoverable is a corpus nobody can reason about under
+# pressure, so all six get it.
+#
+# E6 says never declare these as aws_s3_bucket, and that still holds: the rule
+# protects against OpenTofu deleting the corpus when a block is removed, which
+# only aws_s3_bucket can do. These sub-resources take a bucket *name*, so
+# versioning and lifecycle can be managed without the bucket ever entering
+# state as a deletable resource. Removing one of these blocks stops managing a
+# setting; it destroys nothing.
+#
+# ossf-scorecard-results is written by api/'s POST path, not by cron, and
+# deploy/api/environments/production reads it as a data source. It is here
+# because the durability decision was made for the corpus as a whole and one
+# root is easier to reason about than two -- but if deploy/api ever wants to
+# own its own bucket's lifecycle, this is the block to move.
+locals {
+  adopted_buckets = toset([
+    "ossf-scorecard-cii-data",
+    "ossf-scorecard-cron-results",
+    "ossf-scorecard-data2",
+    "ossf-scorecard-input-projects",
+    "ossf-scorecard-rawdata",
+    "ossf-scorecard-results",
+  ])
+}
+
+resource "aws_s3_bucket_versioning" "adopted" {
+  for_each = local.adopted_buckets
+
+  bucket = each.value
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Versioning without expiry is an archive, not a safety net. cron-results takes
+# ~2.66M overwrites a week (1.33M repos x results.json + raw.json) at roughly
+# 16KB each, so unbounded retention adds ~40GB a week forever.
+#
+# Retention is counted in runs rather than days because the producer is weekly:
+# newer_noncurrent_versions = 3 keeps the last three runs recoverable no matter
+# how the schedule moves. noncurrent_days is not an alternative to that -- S3
+# requires it alongside, as the minimum age before the count is enforced -- so
+# 30 days is the floor and the count is the real bound.
+#
+# Verified 2026-09-06 that none of the six had any lifecycle configuration
+# before this: aws_s3_bucket_lifecycle_configuration *replaces* whatever is on
+# the bucket, so applying it blind would have silently dropped existing rules.
+resource "aws_s3_bucket_lifecycle_configuration" "adopted" {
+  for_each = local.adopted_buckets
+
+  bucket = each.value
+
+  rule {
+    id     = "expire-noncurrent-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      newer_noncurrent_versions = 3
+      noncurrent_days           = 30
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.adopted]
+}
+
 # --- Queue: SQS Standard + DLQ (E2), replacing GCP Pub/Sub -------------------
 
 module "queue" {
