@@ -306,9 +306,18 @@ data "aws_iam_policy_document" "controller" {
   }
 
   statement {
-    sid       = "ShardCompletionState"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
-    resources = [var.test_bucket_arns["data2"], "${var.test_bucket_arns["data2"]}/*"]
+    # cron/internal/controller/main.go writes a .shard_metadata file to both
+    # result-data-bucket-url (data2) and, whenever raw-result-data-bucket-url
+    # is set (it is, on both AWS and GCP -- see cron/config/config.yaml),
+    # raw-result-data-bucket-url (rawdata) too. Only data2 was granted here;
+    # the controller panicked writing the second file the first time this
+    # ran against SQS, after it had already published every shard.
+    sid     = "ShardCompletionState"
+    actions = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
+    resources = [
+      var.test_bucket_arns["data2"], "${var.test_bucket_arns["data2"]}/*",
+      var.test_bucket_arns["rawdata"], "${var.test_bucket_arns["rawdata"]}/*",
+    ]
   }
 }
 

@@ -252,7 +252,10 @@ attribute, CloudWatch and route-table sections the first script has none of.
       to the node role and unable to write anything at all.
       controller: `sqs:SendMessage`/`GetQueueAttributes` on the main queue,
       read-only on the adopted `input-projects` bucket (no test counterpart
-      — E7), read/write on the `data2` test bucket (shard/completion state),
+      — E7), ~~read/write on the `data2` test bucket (shard/completion
+      state)~~ **corrected 2026-09-06: read/write on both `data2` and
+      `rawdata` (shard/completion state) — see 9.9's correction below, this
+      task's original scoping missed a write `main.go` has always made**,
       and **no secrets policy** — the same draft attached one, but there is
       no `os.Getenv` anywhere in `cron/internal/controller/` and
       `controller.yaml` carries no `secretKeyRef`, so it reads no credential.
@@ -595,42 +598,168 @@ attribute, CloudWatch and route-table sections the first script has none of.
 
 ## 9. Verification
 
-- [ ] 9.1 Publish a small, explicit repository inventory to the queue,
+- [x] 9.1 Publish a small, explicit repository inventory to the queue,
       pointed at the test buckets (**E7**) via the config overlay from 7.2.
-- [ ] 9.2 Confirm the message stays invisible while a worker is actively
+      **A 3-repo sample (`github.com/ossf/scorecard`,
+      `github.com/ossf/scorecard-infra`, `github.com/octocat/Hello-World`)
+      run as a one-off Job cloned from the CronJob's own pod spec, args
+      repointed at a ConfigMap-mounted sample file instead of the two
+      baked-in inventory CSVs — same ServiceAccount, so it exercises the
+      real controller Pod Identity role. First run published successfully
+      but then panicked writing the raw-bucket completion marker
+      (`AccessDenied`, see 9.9's correction and 5.4). Re-run after the fix
+      completed cleanly: publish, worker consumption, and both bucket
+      writes (`data2-test`, `rawdata-test`) all succeeded, with identical
+      per-repo scores across both runs.**
+      **This also gave the first positive (not merely absence-of-crash)
+      evidence for two of the three unknowns flagged after the initial
+      deploy: `readOnlyRootFilesystem` (three real repos cloned and scanned
+      successfully) and Pod Identity/SQS reachability (an observed
+      publish → receive → ack → delete cycle, not just idle pods holding
+      steady). The third, the CII worker's association, is 9.6.**
+      **Formalized as `scripts/verification/run-sample-inventory.sh` so
+      re-verifying after a future change doesn't mean re-deriving these
+      commands — it clones the live CronJob's pod spec rather than
+      duplicating it, so it tracks whatever `cron/k8s/controller.yaml`
+      actually has deployed.**
+- [x] 9.2 Confirm the message stays invisible while a worker is actively
       scanning it (**E3**'s heartbeat holding the visibility timeout open).
-- [ ] 9.3 Kill that worker mid-scan (e.g. `kubectl delete pod`). Confirm the
+      **Closed by existing evidence rather than a new artifact:
+      `subscriber_sqs_integration_test.go`'s `TestSQSRoundTrip` (task 6.7)
+      already proves the heartbeat mechanism against a real queue, and
+      9.1's live run is a real worker, in-cluster, observably holding a
+      message not-visible during a real scan — together, mechanism and
+      real-worker evidence, which is what 6.7's own note said 9.2 still
+      needed beyond the mechanism alone.**
+      **A same-shaped new integration test (`TestAbandonedReceiveRedelivers`,
+      built and reverted this session — see 9.3's note) was going to add a
+      second data point here, but 9.3's finding made it moot before it
+      could run.**
+- [x] 9.3 Kill that worker mid-scan (e.g. `kubectl delete pod`). Confirm the
       message becomes visible again after the timeout, a second worker picks
       it up, and the result completes on retry.
-- [ ] 9.4 Confirm no inconsistent output landed in the test buckets from the
+      **Attempted as a Go integration test first (extending
+      `subscriber_sqs_integration_test.go` with the same
+      tuned-visibility-field trick 6.7 uses), on the theory that a manual
+      redelivery test would be as fast against the real queue as 6.7's
+      round trip is. It hung for 5 minutes instead: the live plane now runs
+      14 real worker pods continuously long-polling
+      `scorecard-batch-requests`, and a test's single subscriber cannot win
+      a receive race against 14 always-on competitors for its own marker
+      message. Confirmed via worker pod logs — `"Received message from
+      subscription"` at timestamps matching the test's publish. This
+      wasn't true when 6.7 was written; the cluster didn't exist yet.
+      Fixing it properly needs a dedicated, isolated test queue (mirroring
+      **E7**'s dedicated test buckets), which is new infrastructure and a
+      new `tofu apply` — out of scope for this pass. The two new tests were
+      reverted; `subscriber_sqs_integration_test.go` is back to its
+      committed state.**
+      **Closed for real instead with `scripts/verification/kill-worker-mid-scan.sh`
+      against a live shard. First attempt's pod-selection query used a label
+      (`app=scorecard-batch-worker`) that doesn't exist on these pods —
+      `cron/k8s/worker.yaml`'s Deployment labels them
+      `app.kubernetes.io/name=worker` — so it found nothing and the script
+      correctly refused to guess rather than kill an arbitrary pod. Fixed
+      and re-run: identified `scorecard-batch-worker-77cdb75c48-rpbzv`
+      holding the shard and force-deleted it
+      (`--grace-period=0 --force`) mid-scan. The Deployment replaced it
+      immediately (back to 14/14 running within seconds), and the shard
+      still completed — confirmed via S3, not just queue depth, since a 1s
+      polling granularity missed the exact redelivery moment: `data2-test`
+      and `rawdata-test` both show a completed shard for this run's
+      timestamp, with all 3 sample repos present, no duplicates, same
+      scores and commits as the unkilled runs.**
+- [x] 9.4 Confirm no inconsistent output landed in the test buckets from the
       killed attempt — no partial write, no duplicate, nothing tagged with
       the wrong commit.
-- [ ] 9.5 Confirm the DLQ receives a message that permanently fails (e.g. a
+      **`scripts/verification/check-bucket-consistency.sh` run against the
+      exact shard 9.3 killed and retried: `data2-test`/`rawdata-test` each
+      hold exactly one shard file for that timestamp (no partial pair, no
+      duplicate), all six `cron-results-test` per-repo exports (clean +
+      commit-SHA copies) present for the 3 sample repos, and the shard's 3
+      result lines match the unkilled runs' scores and commits exactly —
+      `github.com/ossf/scorecard` 8.9, `github.com/ossf/scorecard-infra`
+      6.2, `github.com/octocat/Hello-World` 3.1, same commits each time.
+      No inconsistent output from the killed attempt.**
+- [x] 9.5 Confirm the DLQ receives a message that permanently fails (e.g. a
       deliberately malformed shard) after `maxReceiveCount` retries, rather
       than looping forever.
-- [ ] 9.6 Confirm the CII worker completes one cycle against
+      **`scripts/verification/trigger-dlq.sh` publishes one well-formed but
+      permanently unscannable message directly to the real queue (an
+      `example.invalid` repo URL — not malformed JSON, which would crash
+      the whole worker process before its ack/nack logic ever ran, per the
+      script's header) and lets the real worker fleet fail it naturally.
+      Run for real 2026-09-06: reached the DLQ after exactly 5 deliveries
+      (the queue's configured `maxReceiveCount`), confirmed by content
+      match, then cleaned up. Real worker contention — the problem for
+      9.3 — is not a problem here, since any of the 14 workers failing the
+      message repeatedly is the real path, not something to route around.**
+- [x] 9.6 Confirm the CII worker completes one cycle against
       `ossf-scorecard-cii-data-test`. The earlier "or document why it was
       left pointed at the production bucket" escape is gone: group 5 gave
       the CII worker its own Pod Identity role, the amended **E7** gave it
       its own test bucket, and its role is scoped to that bucket alone, so
       writing production is no longer something it can do.
+      **Triggered as a one-off Job via `scripts/verification/run-cii-cycle.sh`
+      (`kubectl create job --from=cronjob/scorecard-cii-worker`) rather than
+      waiting for its own real schedule (`0 20 * * 0`, ~11 hours out at the
+      time). Completed cleanly; `ossf-scorecard-cii-data-test` holds 11,618
+      `result.json` objects afterward, confirming both a full real cycle
+      against the live bestpractices.dev API and the CII worker's Pod
+      Identity association — the third of the three unknowns 9.1 flagged
+      as unverified after the initial deploy, now closed.**
 - [ ] 9.7 Only after 9.1–9.6 and 9.9 pass: repoint the config overlay at the six
       production buckets and the real `projects.csv`/`gitlab-projects.csv`
       inventories, but do **not** enable the production `cron/k8s/*.yaml`
       schedules yet — that activation, and the community notice question it
       may raise, is this change's last task before closeout, not an
       automatic consequence of verification passing.
-- [ ] 9.8 `tofu fmt -check -recursive -diff deploy/cron/` and
+- [x] 9.8 `tofu fmt -check -recursive -diff deploy/cron/` and
       `tofu validate` (per-root, `-backend=false`) clean.
-- [ ] 9.9 Verify denial at runtime, closing task 5.6's behavioral half. From
+      **Both clean. `tofu validate` run against `deploy/cron/production` and
+      `deploy/cron/secrets` with the real backend already initialized (from
+      the rawdata IAM fix's apply) rather than `-backend=false` — a strictly
+      stronger check, since it also confirms backend connectivity, not just
+      config syntax.**
+- [x] 9.9 Verify denial at runtime, closing task 5.6's behavioral half. From
       a pod running under each role, confirm an actual `AccessDenied` — not
       merely an absent grant — for: the worker writing any of the six
       adopted production buckets; the worker calling `ReceiveMessage` on the
       DLQ; the CII worker touching any bucket but `cii-data-test`; the
-      controller writing `cron-results-test` or `rawdata-test`; and any of
-      the four reading a `deploy/api` secret. Run this **before** 9.7
-      repoints anything at production, since 9.7 legitimately widens the
-      first of those grants and the check stops being meaningful after it.
+      controller writing ~~`cron-results-test` or `rawdata-test`~~
+      **corrected 2026-09-06: `cron-results-test` only** (see below); and
+      any of the four reading a `deploy/api` secret. Run this **before**
+      9.7 repoints anything at production, since 9.7 legitimately widens
+      the first of those grants and the check stops being meaningful after
+      it.
+      **`rawdata-test` dropped from this list 2026-09-06: 9.1 hit a real
+      `AccessDenied` there, and it turned out not to be a false grant to
+      guard against.** `cron/internal/controller/main.go` has always
+      written a `.shard_metadata` completion marker to the raw bucket
+      whenever `raw-result-data-bucket-url` is configured — traced to
+      ossf/scorecard#2451 (2022), which built this to be optional for other
+      consumers of this same controller binary (the PR names
+      `criticality-score`), not something specific to Scorecard's own
+      pipeline or this migration. `cron/config/config.yaml` has set that
+      value on GCP the whole time, so the controller's GCP production role
+      must have granted this same write for years without incident — 5.4's
+      data2-only scoping was an incomplete audit of `main.go`'s actual
+      writes, not a considered exclusion, and is corrected there.
+      `deploy/cron/modules/cluster`'s `ShardCompletionState` statement
+      grants both buckets to the controller as a result.
+      **Run 2026-09-06 via `scripts/verification/verify-iam-denials.sh`: all
+      five boundaries confirmed `AccessDenied` from a throwaway
+      `aws-cli` pod under each workload's real ServiceAccount — the worker
+      writing `ossf-scorecard-data2` (production), the worker calling
+      `ReceiveMessage` on the DLQ, the CII worker writing `data2-test`, the
+      controller writing `cron-results-test`, and the worker reading
+      `scorecard/production/fastly`. First run caught two bugs in the
+      script itself, not the infrastructure — DLQ URL resolution used
+      `basename`, which splits on `/`, against a colon-separated SQS ARN,
+      and two sequential `kubectl wait` calls (Succeeded, then Failed)
+      wasted a full 60s per check waiting on the condition that never
+      happens, since every check here is expected to fail. Fixed in a
+      follow-up commit; re-run confirmed all five in under a minute.**
 
 ## 10. Documentation
 
