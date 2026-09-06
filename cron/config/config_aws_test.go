@@ -45,10 +45,17 @@ func TestAWSOverlayParses(t *testing.T) {
 	}
 }
 
-// TestAWSOverlayBucketsAreAWSAndTest guards the invariant task 5.6 rests on:
-// no verification run can reach a production bucket, because none is named.
-// Task 9.7 is what relaxes this, and it should have to edit this test to do it.
-func TestAWSOverlayBucketsAreAWSAndTest(t *testing.T) {
+// TestAWSOverlayBucketsAreTheProductionCorpus replaces the -test suffix check
+// this test carried until task 9.7. That check existed so no verification run
+// could reach a production bucket; 9.7 is the task that deliberately repoints
+// the plane, so the invariant worth keeping is no longer "never production"
+// but "exactly these four, spelled correctly".
+//
+// Naming them explicitly rather than pattern-matching is the point. A typo
+// creates a bucket-shaped string that IAM will simply deny, and the failure
+// surfaces as a stalled run rather than a config error; a silent revert to a
+// -test bucket surfaces as a production corpus that quietly stops updating.
+func TestAWSOverlayBucketsAreTheProductionCorpus(t *testing.T) {
 	t.Parallel()
 
 	body := readAWSOverlay(t)
@@ -61,21 +68,22 @@ func TestAWSOverlayBucketsAreAWSAndTest(t *testing.T) {
 		t.Error("overlay still names a gs:// bucket; every bucket should be s3:// on EKS")
 	}
 
-	// input-projects is read-only from the controller, so E7 gave it no test
-	// counterpart. Every writable bucket must be a -test one.
 	scorecardParams := parsed.AdditionalParams["scorecard"]
-	writable := map[string]string{
+	want := map[string]string{
+		"result-data-bucket-url":     "s3://ossf-scorecard-data2",
+		"api-results-bucket-url":     "s3://ossf-scorecard-cron-results",
+		"cii-data-bucket-url":        "s3://ossf-scorecard-cii-data",
+		"raw-result-data-bucket-url": "s3://ossf-scorecard-rawdata",
+	}
+	got := map[string]string{
 		"result-data-bucket-url":     parsed.ResultDataBucketURL,
 		"api-results-bucket-url":     scorecardParams["api-results-bucket-url"],
 		"cii-data-bucket-url":        scorecardParams["cii-data-bucket-url"],
 		"raw-result-data-bucket-url": scorecardParams["raw-result-data-bucket-url"],
 	}
-	for name, url := range writable {
-		if !strings.HasPrefix(url, "s3://") {
-			t.Errorf("%s: got %q, want an s3:// URL", name, url)
-		}
-		if !strings.HasSuffix(url, "-test") {
-			t.Errorf("%s: got %q, want a -test bucket until task 9.7 repoints it", name, url)
+	for name, wantURL := range want {
+		if got[name] != wantURL {
+			t.Errorf("%s: got %q, want %q", name, got[name], wantURL)
 		}
 	}
 }

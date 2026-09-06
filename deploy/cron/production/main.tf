@@ -297,6 +297,17 @@ module "cluster" {
   input_projects_bucket_arn = data.aws_s3_bucket.input_projects.arn
   test_bucket_arns          = { for k, b in aws_s3_bucket.test : k => b.arn }
 
+  # Task 9.7. Constructed rather than read through data sources: an S3 bucket
+  # ARN is fully determined by its name, and four lookups would buy nothing
+  # over the local.adopted_buckets list these names already come from. Granted
+  # in addition to the -test ARNs above, not instead -- see the module.
+  production_bucket_arns = {
+    cii_data     = "arn:aws:s3:::ossf-scorecard-cii-data"
+    cron_results = "arn:aws:s3:::ossf-scorecard-cron-results"
+    data2        = "arn:aws:s3:::ossf-scorecard-data2"
+    rawdata      = "arn:aws:s3:::ossf-scorecard-rawdata"
+  }
+
   secrets_read_policy_json = data.terraform_remote_state.cron_secrets.outputs.read_policy_json
   github_secret_arn        = data.terraform_remote_state.cron_secrets.outputs.secret_arns["github"]
 

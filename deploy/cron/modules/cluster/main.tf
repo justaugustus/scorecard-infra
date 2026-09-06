@@ -50,6 +50,24 @@ locals {
   # ReadCIIData statement below, which is a separate, read-only grant rather
   # than a fourth key here.
   worker_bucket_keys = ["cron_results", "data2", "rawdata"]
+
+  # Task 9.7. Each key resolves to the test bucket and, once
+  # var.production_bucket_arns is supplied, the production one too. Granting
+  # both on purpose: the plane is switched between them by
+  # deploy/cron/config-aws.yaml, so a rollback is a ConfigMap re-apply rather
+  # than an IAM change applied while a run is in flight. It does mean 5.6's
+  # "no policy names a production bucket" no longer holds -- that invariant
+  # was always scoped to the period before this task, and 9.9 says so.
+  corpus_bucket_arns = {
+    for k, arn in var.test_bucket_arns :
+    k => concat(
+      [arn, "${arn}/*"],
+      lookup(var.production_bucket_arns, k, null) == null ? [] : [
+        var.production_bucket_arns[k],
+        "${var.production_bucket_arns[k]}/*",
+      ],
+    )
+  }
 }
 
 # --- Cluster ------------------------------------------------------------
@@ -316,10 +334,10 @@ data "aws_iam_policy_document" "controller" {
     # ran against SQS, after it had already published every shard.
     sid     = "ShardCompletionState"
     actions = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
-    resources = [
-      var.test_bucket_arns["data2"], "${var.test_bucket_arns["data2"]}/*",
-      var.test_bucket_arns["rawdata"], "${var.test_bucket_arns["rawdata"]}/*",
-    ]
+    resources = concat(
+      local.corpus_bucket_arns["data2"],
+      local.corpus_bucket_arns["rawdata"],
+    )
   }
 }
 
@@ -356,10 +374,7 @@ data "aws_iam_policy_document" "worker" {
     sid     = "WriteTestResults"
     actions = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
     resources = flatten([
-      for k in local.worker_bucket_keys : [
-        var.test_bucket_arns[k],
-        "${var.test_bucket_arns[k]}/*",
-      ]
+      for k in local.worker_bucket_keys : local.corpus_bucket_arns[k]
     ])
   }
 
@@ -382,12 +397,9 @@ data "aws_iam_policy_document" "worker" {
     # Read-only, and deliberately not folded into WriteTestResults: reusing
     # that statement would hand the worker PutObject and DeleteObject over the
     # CII corpus, which is the one thing worker_bucket_keys exists to prevent.
-    sid     = "ReadCIIData"
-    actions = ["s3:GetObject", "s3:ListBucket"]
-    resources = [
-      var.test_bucket_arns["cii_data"],
-      "${var.test_bucket_arns["cii_data"]}/*",
-    ]
+    sid       = "ReadCIIData"
+    actions   = ["s3:GetObject", "s3:ListBucket"]
+    resources = local.corpus_bucket_arns["cii_data"]
   }
 }
 
@@ -431,7 +443,7 @@ data "aws_iam_policy_document" "cii" {
   statement {
     sid       = "WriteCIIData"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
-    resources = [var.test_bucket_arns["cii_data"], "${var.test_bucket_arns["cii_data"]}/*"]
+    resources = local.corpus_bucket_arns["cii_data"]
   }
 }
 

@@ -57,7 +57,13 @@ webhook-url:
 # CloudWatch exporter is out of scope for this change.
 metric-exporter: printer
 
-result-data-bucket-url: s3://ossf-scorecard-data2-test
+# Task 9.7: the four writable buckets below are the production corpus, not the
+# -test counterparts E7 created. The IAM roles grant both, so switching back is
+# this file plus a ConfigMap re-apply -- no policy change mid-run.
+#
+# Shard and completion state. Keyed YYYY.MM.DD/HHMMSS/, so a run cannot
+# overwrite an earlier one; it only ever adds a prefix.
+result-data-bucket-url: s3://ossf-scorecard-data2
 
 # TODO temporarily leaving old variables until changes propagate to production
 #
@@ -80,8 +86,12 @@ additional-params:
   scorecard:
     # for sending PURGE requests to CDN
     api-base-url: https://api.scorecard.dev
-    # API results bucket
-    api-results-bucket-url: s3://ossf-scorecard-cron-results-test
+    # API results bucket. The one the live API reads as its fallback for any
+    # repository without a self-published result, and the only writable bucket
+    # here whose keys a run overwrites rather than adds to: <repo>/results.json
+    # and <repo>/raw.json are "latest" pointers. Versioning is on, keeping the
+    # last three runs.
+    api-results-bucket-url: s3://ossf-scorecard-cron-results
     # CI-Tests needs a lot of GitHub API tokens, Dependency-Update-Tool is
     # search heavy, and Vulnerabilities is slow on repos with lots of
     # dependencies.
@@ -94,6 +104,10 @@ additional-params:
     # -- and cannot be confirmed now that GCP is shut down, so this follows
     # what cron-served results actually contained.
     blacklisted-checks: CI-Tests,Contributors,Dependency-Update-Tool,Vulnerabilities,Webhooks
-    cii-data-bucket-url: s3://ossf-scorecard-cii-data-test
-    # Raw results.
-    raw-result-data-bucket-url: s3://ossf-scorecard-rawdata-test
+    # Read by every scan and written by the CII CronJob. The production copy
+    # has been frozen since 2026-08-30 -- GCP's last run -- because this
+    # pointed at the test bucket, so run scripts/verification/run-cii-cycle.sh
+    # against production once after this lands and before the next scan.
+    cii-data-bucket-url: s3://ossf-scorecard-cii-data
+    # Raw results. Keyed like data2, so also add-only.
+    raw-result-data-bucket-url: s3://ossf-scorecard-rawdata

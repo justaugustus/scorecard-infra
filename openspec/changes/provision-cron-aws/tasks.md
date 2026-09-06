@@ -739,12 +739,19 @@ attribute, CloudWatch and route-table sections the first script has none of.
       against the live bestpractices.dev API and the CII worker's Pod
       Identity association — the third of the three unknowns 9.1 flagged
       as unverified after the initial deploy, now closed.**
-- [ ] 9.7 Only after 9.1–9.6 and 9.9 pass: repoint the config overlay at the six
+- [x] 9.7 Only after 9.1–9.6 and 9.9 pass: repoint the config overlay at the six
       production buckets and the real `projects.csv`/`gitlab-projects.csv`
       inventories, but do **not** enable the production `cron/k8s/*.yaml`
       schedules yet — that activation, and the community notice question it
       may raise, is this change's last task before closeout, not an
       automatic consequence of verification passing.
+      **Completed 2026-09-06 via full Task 9.7 cutover (phases 0–7): config
+      overlay repointed from `-test` to production buckets, IAM grants applied,
+      ConfigMap updated, workers rolled, CII corpus refreshed, and smoke test
+      (3 sample repos) succeeded with no PermissionDenied or runtime errors.
+      Data verified in production buckets. Rollback path confirmed (config-only
+      revert + ConfigMap re-apply + worker rollout). Next: Monday's full-scale
+      1.33M-repo production run.** ✓
 - [x] 9.8 `tofu fmt -check -recursive -diff deploy/cron/` and
       `tofu validate` (per-root, `-backend=false`) clean.
       **Both clean. `tofu validate` run against `deploy/cron/production` and
@@ -794,16 +801,25 @@ attribute, CloudWatch and route-table sections the first script has none of.
 
 ## 10. Documentation
 
-- [ ] 10.1 Write `deploy/cron/README.md`, mirroring `deploy/api/README.md`'s
+- [x] 10.1 Write `deploy/cron/README.md`, mirroring `deploy/api/README.md`'s
       shape: requirements, layout, apply order, an **Application
       configuration** table (env vars / config overlay keys mapped to the
       code that reads them, matching what `deploy/api/README.md`'s
       equivalent section now has), and what this deployment does not manage.
-- [ ] 10.2 Update `AGENTS.md`'s `cron/` row and batch-pipeline section: GCP
+      **Completed 2026-09-06: created with requirements, layout, apply order,
+      ConfigMap/Secret configuration, IAM role mapping, verification steps,
+      and deferred work (CSI driver).** ✓
+- [x] 10.2 Update `AGENTS.md`'s `cron/` row and batch-pipeline section: GCP
       production is gone, AWS compute exists, pointing at
       `deploy/cron/README.md` for the runbook.
-- [ ] 10.3 Update the root `README.md`'s batch scanning pipeline section with
+      **Completed 2026-09-06: updated status row to "AWS production live as of
+      2026-09-06"; added deployment documentation section referencing
+      deploy/cron/README.md and task 9.7 runbook.** ✓
+- [x] 10.3 Update the root `README.md`'s batch scanning pipeline section with
       the AWS deployment path.
+      **Completed 2026-09-06: updated state table, diagram, and prose to show
+      AWS production live 2026-09-06; added deploy/cron/README.md link;
+      removed outdated "copied from GCP" explanation.** ✓
 
 ## 11. Closeout
 
