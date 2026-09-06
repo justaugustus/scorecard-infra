@@ -228,6 +228,18 @@ variable "input_projects_bucket_arn" {
   type        = string
 }
 
+variable "production_bucket_arns" {
+  description = <<-EOT
+    Task 9.7. Same keys as var.test_bucket_arns, naming the adopted production
+    corpus buckets. Every key present here is granted alongside its -test
+    counterpart rather than instead of it, so the plane is switched between
+    them by deploy/cron/config-aws.yaml alone and a rollback needs no IAM
+    change. Empty leaves the policies exactly as they were before 9.7.
+  EOT
+  type        = map(string)
+  default     = {}
+}
+
 variable "test_bucket_arns" {
   description = <<-EOT
     Keyed cron_results/data2/rawdata/cii_data, matching deploy/cron/production's
