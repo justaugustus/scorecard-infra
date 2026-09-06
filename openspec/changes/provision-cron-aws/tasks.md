@@ -801,16 +801,25 @@ attribute, CloudWatch and route-table sections the first script has none of.
 
 ## 10. Documentation
 
-- [ ] 10.1 Write `deploy/cron/README.md`, mirroring `deploy/api/README.md`'s
+- [x] 10.1 Write `deploy/cron/README.md`, mirroring `deploy/api/README.md`'s
       shape: requirements, layout, apply order, an **Application
       configuration** table (env vars / config overlay keys mapped to the
       code that reads them, matching what `deploy/api/README.md`'s
       equivalent section now has), and what this deployment does not manage.
-- [ ] 10.2 Update `AGENTS.md`'s `cron/` row and batch-pipeline section: GCP
+      **Completed 2026-09-06: created with requirements, layout, apply order,
+      ConfigMap/Secret configuration, IAM role mapping, verification steps,
+      and deferred work (CSI driver).** ✓
+- [x] 10.2 Update `AGENTS.md`'s `cron/` row and batch-pipeline section: GCP
       production is gone, AWS compute exists, pointing at
       `deploy/cron/README.md` for the runbook.
-- [ ] 10.3 Update the root `README.md`'s batch scanning pipeline section with
+      **Completed 2026-09-06: updated status row to "AWS production live as of
+      2026-09-06"; added deployment documentation section referencing
+      deploy/cron/README.md and task 9.7 runbook.** ✓
+- [x] 10.3 Update the root `README.md`'s batch scanning pipeline section with
       the AWS deployment path.
+      **Completed 2026-09-06: updated state table, diagram, and prose to show
+      AWS production live 2026-09-06; added deploy/cron/README.md link;
+      removed outdated "copied from GCP" explanation.** ✓
 
 ## 11. Closeout
 

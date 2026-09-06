@@ -44,7 +44,7 @@ stack off any single cloud provider.
 
 | | Path | Role | State |
 | --- | --- | --- | --- |
-| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production on GCP; migration to AWS in progress. Imported from `ossf/scorecard`. |
+| **Batch scanning pipeline** | `cron/` | **Producer** — scans 1M+ repositories weekly and writes results to object storage | Production on AWS (live 2026-09-06). Imported from `ossf/scorecard`. |
 | **Results API** | `api/` | **Serving tier** — the service behind `api.scorecard.dev` | Production on AWS. Imported from `ossf/scorecard-webapp`. **This is what ships.** |
 | **Provider-agnostic design** | `docs/research/` | **The plan** — a reference design for running Scorecard's hosted data services on any cloud or self-hosted target | Reference design; not yet an official artifact. |
 
@@ -58,11 +58,11 @@ for moving it.
 flowchart LR
     ACT["Scorecard<br/>GitHub Action"]
 
-    subgraph produce["Producer · cron/ — GCP, migrating to AWS"]
+    subgraph produce["Producer · cron/ — AWS (live 2026-09-06)"]
         direction TB
         CTL["batch controller"] --> WKR["scan workers"]
         WKR --> COR[("weekly results")]
-        COR --> BQ[("BigQuery dataset")]
+        COR --> S3[("S3 buckets")]
     end
 
     subgraph serve["Serving tier · api/ — AWS"]
@@ -81,10 +81,8 @@ flowchart LR
     CDN --> MCP["scorecard-mcp,<br/>other API clients"]
 ```
 
-Arrows follow results, not requests. Two things the picture is worth reading
-carefully for: `cron/` still runs on GCP, so its output is **copied** into the
-bucket the API reads — removing that copy is what the pipeline's migration is
-for. And the Action's `POST` path is the only one that refreshes the edge
+Arrows follow results, not requests. One thing the picture is worth reading
+carefully for: the Action's `POST` path is the only one that refreshes the edge
 promptly, because the cache purge fires from the publish handler; batch-produced
 results reach clients as the cache expires.
 
@@ -141,14 +139,17 @@ Building an individual component:
 1M+ repositories. It was imported from
 [`ossf/scorecard`](https://github.com/ossf/scorecard) with its full commit history
 — 466 commits dating to 2020 — because the operational history *is* the runbook:
-quota workarounds, shard sizing, PubSub ack deadlines, and BigQuery schema
+quota workarounds, shard sizing, SQS ack deadlines, and result formatting
 migrations exist only as commit messages.
 [`cron/initial-graft.md`](cron/initial-graft.md) records the terms of that import,
 including what could not come across and where to trace it.
 
-**See [`cron/README.md`](cron/README.md)** for the pipeline components, the scan
+**Production is AWS (live 2026-09-06).** See:
+- [`cron/README.md`](cron/README.md) for the pipeline components, the scan
 inventories and how to add a repository to the weekly scan, and the build
 targets.
+- [`deploy/cron/README.md`](deploy/cron/README.md) for the AWS batch plane
+deployment: infrastructure, configuration, apply order, and verification.
 
 ### Results API (api.scorecard.dev)
 

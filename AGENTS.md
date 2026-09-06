@@ -10,7 +10,7 @@ edges in any direction:
 
 | Part | What it is |
 | --- | --- |
-| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. **GCP production was shut down 2026-08-30, ahead of the `openssf` project's 2026-08-31 turndown; AWS cutover has not happened yet.** |
+| `cron/` | **Batch scanning pipeline.** Imported from `ossf/scorecard` with history. **GCP production shut down 2026-08-30; AWS production live as of 2026-09-06.** Scans 1M+ repositories weekly to production buckets. |
 | `api/` | **The results API** serving `api.scorecard.dev`. Imported from `ossf/scorecard-webapp` with history. **Production on AWS; cutover complete.** This is the server that ships. |
 | `internal/`, `cmd/` | **A provider-agnostic hybrid API server**, built here. Implements the same contract as `api/`. Currently **off the deployment path** — see below. |
 | `docs/research/` | The provider-agnostic design. Proposal-flavored. |
@@ -99,6 +99,11 @@ this is the map:
 
 Imported from `ossf/scorecard` with full history. Read
 [`cron/initial-graft.md`](cron/initial-graft.md) before working in this tree.
+
+**Production deployment:** [`deploy/cron/README.md`](deploy/cron/README.md) covers
+the AWS infrastructure, configuration, apply order, and verification procedures.
+The runbook for cutting over production buckets (task 9.7) is in
+`openspec/changes/provision-cron-aws/tasks.md#9`.
 
 One rule applies here and nowhere else: `cron/internal/format` serializes a
 data model that lives upstream, so a schema edit here without the
