@@ -376,6 +376,34 @@ func TestSQSSubscriberReceive(t *testing.T) {
 	}
 }
 
+// TestSQSSubscriberSkipsUnparseableMessage covers the poison-message case: a
+// body that is not a ScorecardBatchRequest must cost one nack, not the worker
+// process. Every error out of SynchronousPull is fatal to cron/worker, so
+// returning one here would panic the pod and leave the same body to crash the
+// next worker that received it.
+func TestSQSSubscriberSkipsUnparseableMessage(t *testing.T) {
+	t.Parallel()
+
+	body, want := testRequestBody(t)
+	recv := &scriptedReceiver{results: []receiveResult{
+		{msg: newAckableMessage(t, []byte("{not a ScorecardBatchRequest"))},
+		{msg: newAckableMessage(t, body)},
+	}}
+	subscriber := newTestSubscriber(t.Context(), recv, &countingVisibilityChanger{}, "handle-1")
+
+	got, err := subscriber.SynchronousPull()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !proto.Equal(got, want) {
+		t.Errorf("request: got %v, want %v", got, want)
+	}
+	if calls := recv.receiveCalls(); calls != 2 {
+		t.Errorf("Receive calls: got %d, want 2 (bad message skipped, good one returned)", calls)
+	}
+	subscriber.Ack()
+}
+
 // TestSQSSubscriberMissingReceiptHandle covers a driver that stops handing
 // back SQS messages. Running on without a heartbeat would look healthy and
 // produce duplicate scans much later, so this fails loudly instead.

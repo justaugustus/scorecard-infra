@@ -175,27 +175,47 @@ func createSQSSubscriber(ctx context.Context, subscriptionURL string) (Subscribe
 	}, nil
 }
 
-// SynchronousPull blocks until a message arrives, then starts renewing its
-// visibility timeout for as long as the caller holds it.
+// SynchronousPull blocks until a parseable message arrives, then starts
+// renewing its visibility timeout for as long as the caller holds it.
 func (subscriber *sqsSubscriber) SynchronousPull() (*data.ScorecardBatchRequest, error) {
-	msg, err := subscriber.receive()
-	if err != nil || msg == nil {
-		return nil, err
+	for {
+		msg, err := subscriber.receive()
+		if err != nil || msg == nil {
+			return nil, err
+		}
+
+		handle, ok := subscriber.receiptHandle(msg)
+		if !ok {
+			msg.Nack()
+			return nil, errNoSQSMessage
+		}
+
+		subscriber.msg = msg
+		subscriber.stop = make(chan struct{})
+		subscriber.stopOnce = &sync.Once{}
+		subscriber.wg.Add(1)
+		go subscriber.extendVisibility(handle, subscriber.stop)
+
+		req, err := parseJSONToRequest(msg.Body)
+		if err == nil {
+			return req, nil
+		}
+
+		// A body this subscriber cannot parse is one message's problem, not
+		// the subscription's -- unlike the missing receipt handle above, which
+		// says the driver stopped handing back SQS messages at all. Every
+		// error out of SynchronousPull is fatal to the caller:
+		// cron/worker.WorkLoop.Run returns it and cron/internal/worker's main
+		// panics. So returning this would kill the pod with the message
+		// neither acked nor nacked, and SQS would hand the same body to the
+		// next worker once its visibility lapsed -- a crash loop walking the
+		// fleet, one pod per redelivery, until the redrive policy's
+		// maxReceiveCount finally moved it to the DLQ. Nacking hands it back
+		// immediately instead: it still reaches the DLQ on exactly the same
+		// receive budget, without taking a worker down on the way.
+		log.Printf("nacking unparseable message: %v", err)
+		subscriber.Nack()
 	}
-
-	handle, ok := subscriber.receiptHandle(msg)
-	if !ok {
-		msg.Nack()
-		return nil, errNoSQSMessage
-	}
-
-	subscriber.msg = msg
-	subscriber.stop = make(chan struct{})
-	subscriber.stopOnce = &sync.Once{}
-	subscriber.wg.Add(1)
-	go subscriber.extendVisibility(handle, subscriber.stop)
-
-	return parseJSONToRequest(msg.Body)
 }
 
 // receive retries transient failures instead of surfacing them. Returning
