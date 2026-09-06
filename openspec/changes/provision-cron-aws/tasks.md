@@ -252,7 +252,10 @@ attribute, CloudWatch and route-table sections the first script has none of.
       to the node role and unable to write anything at all.
       controller: `sqs:SendMessage`/`GetQueueAttributes` on the main queue,
       read-only on the adopted `input-projects` bucket (no test counterpart
-      — E7), read/write on the `data2` test bucket (shard/completion state),
+      — E7), ~~read/write on the `data2` test bucket (shard/completion
+      state)~~ **corrected 2026-09-06: read/write on both `data2` and
+      `rawdata` (shard/completion state) — see 9.9's correction below, this
+      task's original scoping missed a write `main.go` has always made**,
       and **no secrets policy** — the same draft attached one, but there is
       no `os.Getenv` anywhere in `cron/internal/controller/` and
       `controller.yaml` carries no `secretKeyRef`, so it reads no credential.
@@ -595,8 +598,25 @@ attribute, CloudWatch and route-table sections the first script has none of.
 
 ## 9. Verification
 
-- [ ] 9.1 Publish a small, explicit repository inventory to the queue,
+- [x] 9.1 Publish a small, explicit repository inventory to the queue,
       pointed at the test buckets (**E7**) via the config overlay from 7.2.
+      **A 3-repo sample (`github.com/ossf/scorecard`,
+      `github.com/ossf/scorecard-infra`, `github.com/octocat/Hello-World`)
+      run as a one-off Job cloned from the CronJob's own pod spec, args
+      repointed at a ConfigMap-mounted sample file instead of the two
+      baked-in inventory CSVs — same ServiceAccount, so it exercises the
+      real controller Pod Identity role. First run published successfully
+      but then panicked writing the raw-bucket completion marker
+      (`AccessDenied`, see 9.9's correction and 5.4). Re-run after the fix
+      completed cleanly: publish, worker consumption, and both bucket
+      writes (`data2-test`, `rawdata-test`) all succeeded, with identical
+      per-repo scores across both runs.**
+      **This also gave the first positive (not merely absence-of-crash)
+      evidence for two of the three unknowns flagged after the initial
+      deploy: `readOnlyRootFilesystem` (three real repos cloned and scanned
+      successfully) and Pod Identity/SQS reachability (an observed
+      publish → receive → ack → delete cycle, not just idle pods holding
+      steady). The third, the CII worker's association, is 9.6.**
 - [ ] 9.2 Confirm the message stays invisible while a worker is actively
       scanning it (**E3**'s heartbeat holding the visibility timeout open).
 - [ ] 9.3 Kill that worker mid-scan (e.g. `kubectl delete pod`). Confirm the
@@ -627,10 +647,27 @@ attribute, CloudWatch and route-table sections the first script has none of.
       merely an absent grant — for: the worker writing any of the six
       adopted production buckets; the worker calling `ReceiveMessage` on the
       DLQ; the CII worker touching any bucket but `cii-data-test`; the
-      controller writing `cron-results-test` or `rawdata-test`; and any of
-      the four reading a `deploy/api` secret. Run this **before** 9.7
-      repoints anything at production, since 9.7 legitimately widens the
-      first of those grants and the check stops being meaningful after it.
+      controller writing ~~`cron-results-test` or `rawdata-test`~~
+      **corrected 2026-09-06: `cron-results-test` only** (see below); and
+      any of the four reading a `deploy/api` secret. Run this **before**
+      9.7 repoints anything at production, since 9.7 legitimately widens
+      the first of those grants and the check stops being meaningful after
+      it.
+      **`rawdata-test` dropped from this list 2026-09-06: 9.1 hit a real
+      `AccessDenied` there, and it turned out not to be a false grant to
+      guard against.** `cron/internal/controller/main.go` has always
+      written a `.shard_metadata` completion marker to the raw bucket
+      whenever `raw-result-data-bucket-url` is configured — traced to
+      ossf/scorecard#2451 (2022), which built this to be optional for other
+      consumers of this same controller binary (the PR names
+      `criticality-score`), not something specific to Scorecard's own
+      pipeline or this migration. `cron/config/config.yaml` has set that
+      value on GCP the whole time, so the controller's GCP production role
+      must have granted this same write for years without incident — 5.4's
+      data2-only scoping was an incomplete audit of `main.go`'s actual
+      writes, not a considered exclusion, and is corrected there.
+      `deploy/cron/modules/cluster`'s `ShardCompletionState` statement
+      grants both buckets to the controller as a result.
 
 ## 10. Documentation
 
