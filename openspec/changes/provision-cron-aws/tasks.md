@@ -739,12 +739,19 @@ attribute, CloudWatch and route-table sections the first script has none of.
       against the live bestpractices.dev API and the CII worker's Pod
       Identity association — the third of the three unknowns 9.1 flagged
       as unverified after the initial deploy, now closed.**
-- [ ] 9.7 Only after 9.1–9.6 and 9.9 pass: repoint the config overlay at the six
+- [x] 9.7 Only after 9.1–9.6 and 9.9 pass: repoint the config overlay at the six
       production buckets and the real `projects.csv`/`gitlab-projects.csv`
       inventories, but do **not** enable the production `cron/k8s/*.yaml`
       schedules yet — that activation, and the community notice question it
       may raise, is this change's last task before closeout, not an
       automatic consequence of verification passing.
+      **Completed 2026-09-06 via full Task 9.7 cutover (phases 0–7): config
+      overlay repointed from `-test` to production buckets, IAM grants applied,
+      ConfigMap updated, workers rolled, CII corpus refreshed, and smoke test
+      (3 sample repos) succeeded with no PermissionDenied or runtime errors.
+      Data verified in production buckets. Rollback path confirmed (config-only
+      revert + ConfigMap re-apply + worker rollout). Next: Monday's full-scale
+      1.33M-repo production run.** ✓
 - [x] 9.8 `tofu fmt -check -recursive -diff deploy/cron/` and
       `tofu validate` (per-root, `-backend=false`) clean.
       **Both clean. `tofu validate` run against `deploy/cron/production` and
