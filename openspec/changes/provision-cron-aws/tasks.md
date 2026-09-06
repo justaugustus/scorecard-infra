@@ -285,7 +285,16 @@ attribute, CloudWatch and route-table sections the first script has none of.
       was right, dropping this read was not. Granted as its own read-only
       statement (`ReadCIIData`) rather than a fourth `worker_bucket_keys`
       entry, which would have added `PutObject`/`DeleteObject` over the CII
-      corpus**, plus the combined secrets read policy. CII worker: the
+      corpus. Applied and verified 2026-09-06: the same three repos, same
+      script, zero CII runtime errors afterwards, with no worker restart —
+      Pod Identity evaluates the role's policy per request, so the running
+      fleet picked the grant up immediately. The published records show what
+      was actually at stake: CII went from `-1` on all three to `5`/`0`/`0`,
+      and because a `-1` check is excluded from the aggregate, every
+      aggregate score moved too (8.9→8.8, 6.2→6.0, 3.1→3.0). This was not a
+      blank field in the output; it was every repository's score computed
+      from 15 checks instead of 16**, plus the combined secrets read policy.
+      CII worker: the
       narrowest of the four — read/write on `cii-data-test` and nothing
       else, since `cron/internal/cii/main.go` fetches the OpenSSF Best
       Practices pages over plain HTTP and writes one bucket, with no queue
