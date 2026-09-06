@@ -69,7 +69,7 @@ for _ in $(seq 1 20); do
     # Whichever pod logged a receipt most recently is almost certainly the
     # one holding it -- there is no exact "which pod has this message" API,
     # so this is a best-effort identification, not a guarantee.
-    POD="$(kubectl get pods -l app=scorecard-batch-worker -o name 2>/dev/null | while read -r p; do
+    POD="$(kubectl get pods -l app.kubernetes.io/name=worker -o name 2>/dev/null | while read -r p; do
       if kubectl logs "${p#pod/}" --since=15s 2>/dev/null | grep -q "Received message"; then
         echo "${p#pod/}"
       fi
