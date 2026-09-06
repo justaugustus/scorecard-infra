@@ -72,8 +72,18 @@ spec:
       args: ["${cmd}"]
 EOF
 
-  kubectl wait --for=jsonpath='{.status.phase}'=Succeeded "pod/${pod}" --timeout=60s >/dev/null 2>&1
-  kubectl wait --for=jsonpath='{.status.phase}'=Failed "pod/${pod}" --timeout=60s >/dev/null 2>&1
+  # Every check here is expected to fail (that's the point), so waiting on
+  # Succeeded first before falling back to Failed would waste a full 60s
+  # timeout on the condition that never happens, for every single check.
+  # Poll for either terminal phase instead.
+  local phase=""
+  for _ in $(seq 1 60); do
+    phase="$(kubectl get pod "${pod}" -o jsonpath='{.status.phase}' 2>/dev/null)"
+    case "${phase}" in
+      Succeeded|Failed) break ;;
+    esac
+    sleep 1
+  done
 
   local out
   out="$(kubectl logs "${pod}" 2>&1)"
@@ -94,12 +104,16 @@ run_check "worker-writes-prod-bucket" "scorecard-batch-worker" \
   "echo denial-check | aws s3 cp - s3://ossf-scorecard-data2/verify-9-9-denial-check.txt"
 
 echo "== 2/5: worker calling ReceiveMessage on the DLQ =="
-DLQ_URL="$(aws sqs get-queue-attributes \
-  --queue-url "$(kubectl get configmap scorecard-queue -o jsonpath='{.data.request-topic-url}' | \
-    sed -E 's#^awssqs://sqs\.([a-z0-9-]+)\.amazonaws\.com#https://sqs.\1.amazonaws.com#; s/\?region=.*$//')" \
+QUEUE_URL="$(kubectl get configmap scorecard-queue -o jsonpath='{.data.request-topic-url}' | \
+  sed -E 's#^awssqs://sqs\.([a-z0-9-]+)\.amazonaws\.com#https://sqs.\1.amazonaws.com#; s/\?region=.*$//')"
+DLQ_ARN="$(aws sqs get-queue-attributes --queue-url "${QUEUE_URL}" \
   --attribute-names RedrivePolicy --query 'Attributes.RedrivePolicy' --output text | \
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["deadLetterTargetArn"])' | \
-  xargs -I{} aws sqs get-queue-url --queue-name "$(basename {})" --query QueueUrl --output text)"
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["deadLetterTargetArn"])')"
+# An SQS ARN is colon-separated (arn:aws:sqs:region:account:name); the queue
+# name is everything after the LAST colon, not basename's slash-separated
+# notion of a path -- an ARN has no slashes to split on.
+DLQ_NAME="${DLQ_ARN##*:}"
+DLQ_URL="$(aws sqs get-queue-url --queue-name "${DLQ_NAME}" --query QueueUrl --output text)"
 run_check "worker-reads-dlq" "scorecard-batch-worker" \
   "aws sqs receive-message --queue-url ${DLQ_URL}"
 
