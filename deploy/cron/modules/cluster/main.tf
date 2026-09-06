@@ -44,9 +44,11 @@ locals {
   pool_key = "scorecard.dev/pool"
 
   # The worker writes scan output to these three (E7). Deliberately NOT the
-  # whole of var.test_bucket_arns: cii_data belongs to the CII worker alone,
-  # and a worker that can write it would erase the point of giving the CII
-  # job its own role.
+  # whole of var.test_bucket_arns: cii_data is the CII worker's to write, and
+  # a worker that could write it would erase the point of giving the CII job
+  # its own role. The worker does need to *read* cii_data -- see the
+  # ReadCIIData statement below, which is a separate, read-only grant rather
+  # than a fourth key here.
   worker_bucket_keys = ["cron_results", "data2", "rawdata"]
 }
 
@@ -359,6 +361,33 @@ data "aws_iam_policy_document" "worker" {
         "${var.test_bucket_arns[k]}/*",
       ]
     ])
+  }
+
+  statement {
+    # The CII-Best-Practices check reads, it does not write. Every scan calls
+    # clients.BlobCIIBestPracticesClient (built in cron/internal/worker/main.go
+    # from config.GetCIIDataBucketURL) which does bucket.Exists followed by
+    # bucket.ReadAll on "<repo>/result.json" in cii-data -- the bucket the CII
+    # worker populates. Without this the check 403s on HeadObject for every
+    # repository scanned, on every run: not a crash, because the worker
+    # degrades on a per-check runtime error and moves on, but every scored
+    # repository silently loses its CII-Best-Practices score.
+    #
+    # This was missed because GCP never made the distinction. All four cron
+    # workloads ran under the namespace's "default" ServiceAccount there -- no
+    # cron/k8s manifest set serviceAccountName until 7.1 -- so the worker held
+    # whatever the CII job held, read and write, without anyone choosing that.
+    # Splitting into four roles here was right; dropping this read was not.
+    #
+    # Read-only, and deliberately not folded into WriteTestResults: reusing
+    # that statement would hand the worker PutObject and DeleteObject over the
+    # CII corpus, which is the one thing worker_bucket_keys exists to prevent.
+    sid     = "ReadCIIData"
+    actions = ["s3:GetObject", "s3:ListBucket"]
+    resources = [
+      var.test_bucket_arns["cii_data"],
+      "${var.test_bucket_arns["cii_data"]}/*",
+    ]
   }
 }
 
