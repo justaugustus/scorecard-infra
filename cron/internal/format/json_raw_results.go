@@ -220,6 +220,20 @@ func addBranchProtectionRawResults(r *jsonScorecardRawResult, bp *checker.Branch
 				StatusCheckContexts:                 v.BranchProtectionRule.CheckRules.Contexts,
 			}
 		}
+		// checker.BranchRef.Name is a *string that the GitHub client leaves nil
+		// when a ref carries no name, so dereferencing it unguarded is a panic
+		// -- and this runs inside the worker's per-repository loop, where a
+		// panic takes the pod down mid-shard rather than failing one scan.
+		// Unreachable through today's only caller: checks/raw's branchSet.add
+		// drops any branch whose Name is nil or empty before it can reach
+		// BranchProtectionsData. That invariant lives in another repository,
+		// though, and an entry with no name cannot be attributed to a branch
+		// by anything downstream anyway, so skip it rather than emit "" or
+		// trust the guard to stay put. The identical dereference is still in
+		// ossf/scorecard's own copy of this formatter.
+		if v.Name == nil {
+			continue
+		}
 		r.Results.BranchProtections = append(r.Results.BranchProtections, jsonBranchProtection{
 			Name:       *v.Name,
 			Protection: bp,

@@ -77,3 +77,34 @@ func TestAddCodeReviewRawResults(t *testing.T) {
 		t.Errorf("Expected %v, got %v", want, r.Results.DefaultBranchChangesets)
 	}
 }
+
+// TestAddBranchProtectionRawResultsSkipsNamelessBranch locks in the nil guard
+// on checker.BranchRef.Name. Nothing produces a nameless branch today --
+// checks/raw's branchSet.add filters them -- but that invariant lives in
+// another repository, and this formatter runs inside the worker's
+// per-repository loop where a panic costs the pod, not one scan.
+func TestAddBranchProtectionRawResultsSkipsNamelessBranch(t *testing.T) {
+	t.Parallel()
+
+	named := "main"
+	protected := true
+	r := jsonScorecardRawResult{}
+	bp := checker.BranchProtectionsData{
+		Branches: []clients.BranchRef{
+			{Name: nil, Protected: &protected},
+			{Name: &named, Protected: &protected},
+		},
+	}
+
+	if err := addBranchProtectionRawResults(&r, &bp); err != nil {
+		t.Fatalf("addBranchProtectionRawResults: %v", err)
+	}
+
+	want := []jsonBranchProtection{{
+		Name:       named,
+		Protection: &jsonBranchProtectionSettings{},
+	}}
+	if !reflect.DeepEqual(r.Results.BranchProtections, want) {
+		t.Errorf("branchProtections: got %v, want %v", r.Results.BranchProtections, want)
+	}
+}
