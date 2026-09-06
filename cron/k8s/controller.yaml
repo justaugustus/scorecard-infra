@@ -102,6 +102,11 @@ spec:
                 limits:
                   memory: 1Gi
                 requests:
+                  # Memory was already bounded; the CPU request was not, which
+                  # left the scheduler guessing for a pod that wants a whole
+                  # gigabyte. Sharding a project list is I/O-bound, so this is
+                  # a floor for scheduling rather than a throughput target.
+                  cpu: 200m
                   memory: 1Gi
               volumeMounts:
                 - name: config-volume
