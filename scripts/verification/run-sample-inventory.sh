@@ -17,8 +17,18 @@
 # provision-cron-aws task 9.1 (verification), formalized. Runs the real
 # scorecard-batch-controller against a small, explicit repository list
 # instead of the two inventory files baked into its image, so a shard
-# publishes, a real worker picks it up, and results land in the four test
-# buckets (E7) -- without ever touching the ~1.3M-repo production inventory.
+# publishes and a real worker picks it up -- without ever touching the
+# ~1.3M-repo production inventory.
+#
+# Since task 9.7 the results land in the PRODUCTION corpus, not the -test
+# buckets this script was written against: it writes wherever the deployed
+# scorecard-config ConfigMap points, and that is now the real thing. For
+# data2 and rawdata that is harmless, since both are keyed by run and only
+# ever add a prefix. In cron-results it overwrites <repo>/results.json and
+# <repo>/raw.json, the latest-result pointers the live API serves, so every
+# repository in the CSV becomes visible to users at whatever this run
+# scores it. Versioning is on with a three-run retention window, and the
+# CDN is purged per repository, so pick the list deliberately.
 #
 #   ./run-sample-inventory.sh [path/to/projects.csv]
 #
@@ -55,6 +65,16 @@ case "${CTX}" in
     exit 1
     ;;
 esac
+
+# Read back from the deployed ConfigMap rather than hardcoded, so the hint
+# printed at the end names whichever corpus this run actually wrote. The
+# previous hardcoded -test name survived task 9.7 and was wrong for a day.
+RESULT_BUCKET="$(kubectl get cm scorecard-config -o jsonpath='{.data.config\.yaml}' 2>/dev/null \
+  | python3 -c "
+import sys, yaml
+print((yaml.safe_load(sys.stdin).get('result-data-bucket-url') or '').removeprefix('s3://') or '<result-data-bucket>')
+" 2>/dev/null)"
+: "${RESULT_BUCKET:=<result-data-bucket>}"
 
 echo "== creating ConfigMap ${CONFIGMAP_NAME} from ${CSV} ==" >&2
 kubectl create configmap "${CONFIGMAP_NAME}" \
@@ -126,5 +146,5 @@ kubectl logs "job/${JOB_NAME}" 2>&1 || true
 echo
 echo "Job: ${JOB_NAME}"
 echo "Inspect results with, e.g.:"
-echo "  aws s3 ls s3://ossf-scorecard-data2-test/\$(date -u +%Y.%m.%d)/"
+echo "  aws s3 ls s3://${RESULT_BUCKET}/\$(date -u +%Y.%m.%d)/"
 echo "  ./check-bucket-consistency.sh <the printed HHMMSS prefix>"
