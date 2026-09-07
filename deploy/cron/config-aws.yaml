@@ -16,11 +16,16 @@
 # EKS. Becomes the `scorecard-config` ConfigMap every workload mounts at
 # /etc/scorecard/config.yaml; see cron/k8s/README.md for the command.
 #
-# Buckets point at the four TEST buckets (E7), not the six adopted production
-# ones. Task 9.7 repoints them, and only after 9.1-9.6 and 9.9 pass. Until
-# then no verification run can write the corpus, which is the invariant the
-# IAM policies in deploy/cron/modules/cluster are built to enforce -- none of
-# them names a production bucket.
+# Task 9.7 repointed the four writable buckets from their -test counterparts
+# (E7) to the adopted production corpus. The IAM policies in
+# deploy/cron/modules/cluster grant both, so this file is the switch between
+# them: rolling back is an edit here plus a ConfigMap re-apply and a restart,
+# with no policy change applied while a run is in flight.
+#
+# That makes this file, and not any env var in cron/k8s, the single place the
+# plane's target is described -- api-base-url included, so the corpus a run
+# writes and the CDN it purges cannot drift apart. cron/config's
+# TestAWSOverlayBucketsAreTheProductionCorpus holds the pair together.
 
 # Read only by the Stackdriver exporter and the BigQuery transfer job, neither
 # of which runs here. Kept rather than dropped because an absent value returns

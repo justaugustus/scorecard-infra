@@ -55,6 +55,16 @@ func TestAWSOverlayParses(t *testing.T) {
 // creates a bucket-shaped string that IAM will simply deny, and the failure
 // surfaces as a stalled run rather than a config error; a silent revert to a
 // -test bucket surfaces as a production corpus that quietly stops updating.
+//
+// api-base-url is asserted here rather than in a test of its own because it is
+// the same invariant seen from the other side: writing the production corpus
+// and purging the CDN that serves it have to be turned on together. They were
+// decoupled once already -- the overlay named -test buckets while still
+// carrying the production api-base-url, which is why the worker manifest
+// needed an empty SCORECARD_API_BASE_URL to suppress purging -- and that
+// override is exactly the kind of second switch this test exists to make
+// unnecessary. Rolling the buckets back to -test has to fail here, so that
+// whoever does it also decides what happens to purging.
 func TestAWSOverlayBucketsAreTheProductionCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -85,6 +95,15 @@ func TestAWSOverlayBucketsAreTheProductionCorpus(t *testing.T) {
 		if got[name] != wantURL {
 			t.Errorf("%s: got %q, want %q", name, got[name], wantURL)
 		}
+	}
+
+	// getPurger falls back to a no-op client on an empty base URL, so a blank
+	// here is not "purging misconfigured" but "purging silently off", with
+	// every write still succeeding.
+	if base := scorecardParams["api-base-url"]; base != prodAPIBaseURL {
+		t.Errorf("api-base-url: got %q, want %q; the overlay names the "+
+			"production corpus, so results served from it have to be purged "+
+			"from the CDN that fronts it", base, prodAPIBaseURL)
 	}
 }
 
