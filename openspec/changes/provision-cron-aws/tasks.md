@@ -752,6 +752,19 @@ attribute, CloudWatch and route-table sections the first script has none of.
       Data verified in production buckets. Rollback path confirmed (config-only
       revert + ConfigMap re-apply + worker rollout). Next: Monday's full-scale
       1.33M-repo production run.** ✓
+      **Correction (2026-09-07): the cutover missed its counterpart in
+      `cron/k8s/worker.yaml`. The empty `SCORECARD_API_BASE_URL` added while
+      this plane wrote `-test` buckets — scoped by its own commit to "until
+      task 9.7" — survived the repoint, and `getPurger` returns a no-op
+      client on an empty base URL before it reads the token. Results were
+      therefore written correctly and never invalidated on the CDN: a record
+      written to `ossf-scorecard-cron-results` at 23:13 UTC was still being
+      served as its 2026-08-24 predecessor, while the same request behind a
+      cache-busting query string returned the new one. The override is
+      removed, the base URL now comes from the overlay alone, and
+      `TestAWSOverlayBucketsAreTheProductionCorpus` asserts it beside the four
+      bucket names so the corpus and the purge target cannot drift apart.
+      `scripts/verification/verify-cdn-purge.sh` checks it end to end.**
 - [x] 9.8 `tofu fmt -check -recursive -diff deploy/cron/` and
       `tofu validate` (per-root, `-backend=false`) clean.
       **Both clean. `tofu validate` run against `deploy/cron/production` and
