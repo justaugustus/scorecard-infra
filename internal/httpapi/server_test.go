@@ -63,7 +63,7 @@ func liveOutcome(score float64) *orchestrator.Outcome {
 func do(t *testing.T, srv *Server, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(method, target, nil))
+	srv.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), method, target, nil))
 	return rec
 }
 

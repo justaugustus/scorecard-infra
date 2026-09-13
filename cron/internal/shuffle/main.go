@@ -55,7 +55,7 @@ func main() {
 		repoURLs = append(repoURLs, repo)
 	}
 
-	rand.Shuffle(len(repoURLs), func(i, j int) {
+	rand.Shuffle(len(repoURLs), func(i, j int) { //nolint:gosec // randomizes scan order, not security-sensitive
 		repoURLs[i], repoURLs[j] = repoURLs[j], repoURLs[i]
 	})
 	if err := data.WriteTo(outFile, repoURLs[:n]); err != nil {
