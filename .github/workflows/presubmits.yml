@@ -27,7 +27,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     - name: Build
@@ -48,7 +48,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     # The imported results API's end-to-end specs call api.github.com. Without a
@@ -87,13 +87,13 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
       with:
-        version: v2.8.0
+        version: v2.13.2
 
   # License headers on the imported results API, matching the check
   # ossf/scorecard-webapp ran before the migration. Scoped to api/ rather than
@@ -118,7 +118,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     # -check reports rather than rewrites, so a miss fails the job instead of
@@ -198,7 +198,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     # The version lives in the Makefile so a developer running `make
@@ -250,7 +250,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     # Retried: these targets compile Go binaries and so hit the module proxy,
@@ -289,7 +289,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
         check-latest: true
 
     # Retried for the same reason as add-projects above.
