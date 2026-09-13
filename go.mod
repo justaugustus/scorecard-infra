@@ -1,6 +1,6 @@
 module github.com/ossf/scorecard-infra
 
-go 1.25.6
+go 1.26.0
 
 require (
 	cloud.google.com/go/bigquery v1.82.0
@@ -17,7 +17,7 @@ require (
 	github.com/jszwec/csvutil v1.10.0
 	github.com/mcuadros/go-jsonschema-generator v0.0.0-20200330054847-ba7a369d4303
 	github.com/open-feature/go-sdk v1.18.0
-	github.com/ossf/scorecard/v5 v5.5.0
+	github.com/ossf/scorecard/v5 v5.5.1-0.20260908181711-f92023a3f778
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
 	go.yaml.in/yaml/v2 v2.4.4
@@ -294,7 +294,7 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.40.0
 	golang.org/x/net v0.58.0
