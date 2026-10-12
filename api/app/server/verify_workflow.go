@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/rhysd/actionlint"
+	"actionlint.kjanat.dev"
 )
 
 const (
