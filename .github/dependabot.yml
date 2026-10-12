@@ -31,13 +31,14 @@ updates:
     github-actions:
       patterns:
         - "*"
+      # docker/setup-buildx-action and opentofu/setup-opentofu each pin a
+      # build-critical toolchain (Docker Buildx, OpenTofu); isolated so a
+      # regression there doesn't block unrelated action bumps.
       exclude-patterns:
         - "actions/*"
+        - "docker/setup-buildx-action"
         - "github/*"
         - "golangci/*"
-        # Each pins a build-critical toolchain (Docker Buildx, OpenTofu);
-        # isolated so a regression there doesn't block unrelated action bumps.
-        - "docker/setup-buildx-action"
         - "opentofu/setup-opentofu"
     github-owned:
       patterns:
