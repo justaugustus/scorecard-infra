@@ -28,11 +28,20 @@
 
 ## 3. First release
 
-- [ ] 3.1 Push a pre-release tag (e.g. `v0.2.0-rc.1`) to a fork. Confirm all
+- [x] 3.1 Push a pre-release tag (e.g. `v0.2.0-rc.1`) to a fork. Confirm all
       seven images publish to the fork's `ghcr.io` namespace with the version
       tag and the three labels, and that `:latest` does not move.
-- [ ] 3.2 Tag `v0.2.0`. The release notes say it supersedes `api/v1.1.0` and
+      **Done 2026-10-14:** `v0.2.0-rc.1` at `090dc48` on the `justaugustus`
+      fork published all seven images as `:0.2.0-rc.1`, labelled
+      `v0.2.0-rc.1` / `v5.6.0` / `61e84743`, with no `:latest`.
+- [x] 3.2 Tag `v0.2.0`. The release notes say it supersedes `api/v1.1.0` and
       `cron/v*`, that it now covers the batch pipeline, why the line is v0, and
       which engine version it runs.
-- [ ] 3.3 Deploy the API by the `v0.2.0` digest, keeping the previous digest as
+      **Done 2026-10-14, differently:** a signed tag at `090dc48` with no
+      GitHub release or notes; this change's design records the rest. All
+      seven images published with `:0.2.0` and `:latest`.
+- [x] 3.3 Deploy the API by the `v0.2.0` digest, keeping the previous digest as
       the rollback target.
+      **Done 2026-10-14:** task definition revision 3 runs
+      `scorecard-api@sha256:ee261dd8…`; the rollback target is
+      `sha256:bc3b3e53…`. #133's publish with `cache-mode: none` landed.
