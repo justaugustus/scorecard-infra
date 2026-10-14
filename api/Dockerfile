@@ -22,9 +22,13 @@ RUN go mod download
 
 ARG TARGETOS
 ARG TARGETARCH
+# Build identity for /version, passed by publish-images.yml. .dockerignore
+# excludes .git, so these can't be derived inside the build.
+ARG GIT_VERSION
+ARG GIT_HASH
 # The build context is the repository root, because go.mod lives there. The
 # API's own Makefile is one level down and its recipes are relative to it.
-RUN CGO_ENABLED=0 make -C api scorecard-webapp
+RUN CGO_ENABLED=0 make -C api scorecard-webapp GIT_VERSION="$GIT_VERSION" GIT_HASH="$GIT_HASH"
 
 # Multi-Stage production build
 FROM golang:1.26.6@sha256:0d1d3a794be25f809dd2cb3160d8c73276c4056a9f8242a138e908ddeee7b6b6 as deploy

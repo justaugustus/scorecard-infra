@@ -18,7 +18,7 @@ that save you an hour.
 
 | Path | Contents |
 | --- | --- |
-| `api/openapi.yaml` | The published contract. Also the API gateway's deployment configuration, so editing it changes a deployed service. |
+| `api/openapi.yaml` | The published contract. Run `make api-swagger` after editing it; `swagger-verify` fails on stale generated code. |
 | `api/app/server/` | Hand-written handlers: results retrieval, badge redirect, the signed-upload publish path, workflow verification, CDN purge. |
 | `api/app/generated/` | go-swagger output derived from the contract. `configure_scorecard.go` is hand-owned despite living here. |
 | `api/main.go` | Entry point. Builds as `scorecard-webapp` — see the note below. |
@@ -36,6 +36,11 @@ make api-docker    # build the container image
 
 The image is published to `ghcr.io` by `publish-images.yml` on a `v*` release
 tag, alongside the batch pipeline's. Deploy the digest it reports, not a tag.
+
+`GET /version` reports the release and commit the server was built from, and
+the workflow parser that verifies uploads. The release and commit are linked in
+from the `GIT_VERSION` and `GIT_HASH` build args, and read `unknown` in a local
+build without them.
 
 For the deployment itself — the AWS serving environment, its OpenTofu, and the
 runbook — see [`deploy/api/README.md`](../deploy/api/README.md).

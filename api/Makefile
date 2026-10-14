@@ -1,6 +1,10 @@
 include Makefile.swagger
 
-LDFLAGS=-w -extldflags
+# The -X flags come first: -extldflags takes the next word as its value.
+# GIT_VERSION and GIT_HASH arrive as Docker build args (see api/Dockerfile);
+# unset, /version reports "unknown".
+VERSION_PKG=github.com/ossf/scorecard-infra/api/app/server
+LDFLAGS=-X $(VERSION_PKG).gitVersion=$(GIT_VERSION) -X $(VERSION_PKG).gitCommit=$(GIT_HASH) -w -extldflags
 
 scorecard-webapp: main.go app/server/*.go ## Runs go build on repo
 	# Run go build and generate scorecard-webapp executable

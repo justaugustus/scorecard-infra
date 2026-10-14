@@ -25,6 +25,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/ossf/scorecard-infra/api/app/generated/client/badge"
 	"github.com/ossf/scorecard-infra/api/app/generated/client/results"
+	"github.com/ossf/scorecard-infra/api/app/generated/client/version"
 )
 
 // Default open SSF scorecard API HTTP client.
@@ -72,6 +73,7 @@ func New(transport runtime.ContextualTransport, formats strfmt.Registry) *OpenSS
 	cli.Transport = transport
 	cli.Badge = badge.New(transport, formats)
 	cli.Results = results.New(transport, formats)
+	cli.Version = version.New(transport, formats)
 
 	return cli
 }
@@ -135,6 +137,8 @@ type OpenSSFScorecardAPI struct {
 
 	Results results.ClientService
 
+	Version version.ClientService
+
 	Transport runtime.ContextualTransport
 }
 
@@ -143,4 +147,5 @@ func (c *OpenSSFScorecardAPI) SetTransport(transport runtime.ContextualTransport
 	c.Transport = transport
 	c.Badge.SetTransport(transport)
 	c.Results.SetTransport(transport)
+	c.Version.SetTransport(transport)
 }

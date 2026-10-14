@@ -32,6 +32,7 @@ import (
 	"github.com/go-openapi/swag/cmdutils"
 	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/badge"
 	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/results"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/version"
 )
 
 // NewScorecardAPI creates a new Scorecard instance
@@ -67,6 +68,12 @@ func NewScorecardAPI(spec *loads.Document) *ScorecardAPI {
 			_ = params
 
 			return middleware.NotImplemented("operation results.GetResult has not yet been implemented")
+		}),
+
+		VersionGetVersionHandler: version.GetVersionHandlerFunc(func(params version.GetVersionParams) middleware.Responder {
+			_ = params
+
+			return middleware.NotImplemented("operation version.GetVersion has not yet been implemented")
 		}),
 
 		ResultsPostResultHandler: results.PostResultHandlerFunc(func(params results.PostResultParams) middleware.Responder {
@@ -117,6 +124,8 @@ type ScorecardAPI struct {
 	BadgeGetBadgeHandler badge.GetBadgeHandler
 	// ResultsGetResultHandler sets the operation handler for the get result operation
 	ResultsGetResultHandler results.GetResultHandler
+	// VersionGetVersionHandler sets the operation handler for the get version operation
+	VersionGetVersionHandler version.GetVersionHandler
 	// ResultsPostResultHandler sets the operation handler for the post result operation
 	ResultsPostResultHandler results.PostResultHandler
 
@@ -204,6 +213,9 @@ func (o *ScorecardAPI) Validate() error {
 	}
 	if o.ResultsGetResultHandler == nil {
 		unregistered = append(unregistered, "results.GetResultHandler")
+	}
+	if o.VersionGetVersionHandler == nil {
+		unregistered = append(unregistered, "version.GetVersionHandler")
 	}
 	if o.ResultsPostResultHandler == nil {
 		unregistered = append(unregistered, "results.PostResultHandler")
@@ -309,6 +321,10 @@ func (o *ScorecardAPI) initHandlerCache() {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
 	o.handlers["GET"]["/projects/{platform}/{org}/{repo}"] = results.NewGetResult(o.context, o.ResultsGetResultHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/version"] = version.NewGetVersion(o.context, o.VersionGetVersionHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}

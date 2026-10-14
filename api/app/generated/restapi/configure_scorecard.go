@@ -32,6 +32,7 @@ import (
 	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations"
 	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/badge"
 	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/results"
+	"github.com/ossf/scorecard-infra/api/app/generated/restapi/operations/version"
 	"github.com/ossf/scorecard-infra/api/app/server"
 )
 
@@ -72,6 +73,7 @@ func configureAPI(api *operations.ScorecardAPI) http.Handler {
 	api.ResultsGetResultHandler = results.GetResultHandlerFunc(server.GetResultHandler)
 	api.ResultsPostResultHandler = results.PostResultHandlerFunc(server.PostResultsHandler)
 	api.BadgeGetBadgeHandler = badge.GetBadgeHandlerFunc(server.GetBadgeHandler)
+	api.VersionGetVersionHandler = version.GetVersionHandlerFunc(server.GetVersionHandler)
 
 	api.PreServerShutdown = func() {}
 

@@ -102,6 +102,14 @@ tofu apply
 
 `image` and `origin_hostname` have no defaults and must be supplied.
 
+After an apply, confirm the build that is serving. The origin answers directly;
+`api.scorecard.dev/version` can lag by up to five minutes because Fastly caches
+it under the `scorecard-version` surrogate key.
+
+```sh
+curl -s https://origin.scorecard.dev/version
+```
+
 ## Staging reads production's data and cannot write to it
 
 Both environments point at the same corpus buckets, because conformance against
