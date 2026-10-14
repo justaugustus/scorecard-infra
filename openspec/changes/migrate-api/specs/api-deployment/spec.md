@@ -19,18 +19,18 @@ at deploy time.
 - **THEN** an image build SHALL be run to catch path references that no compiler
   checks
 
-### Requirement: Releases are identified per component and by immutable artifact
+### Requirement: Releases are explicit and identified by immutable artifact
 
-Because this repository hosts more than one independently deployable system, a
-release SHALL identify which component it releases rather than claiming the
-repository as a whole. Deployments SHALL be able to name the exact artifact they
+A production release of the API SHALL be an explicit, named act rather than a
+consequence of merging. Deployments SHALL be able to name the exact artifact they
 run, so that a rollback targets a known build rather than a moving reference.
+How releases are named is governed by `release-versioning`, which superseded
+this change's original component-scoped tags.
 
-#### Scenario: Release identifies its component
+#### Scenario: A release is explicit
 
-- **WHEN** a release of the API is tagged
-- **THEN** the tag SHALL identify the API specifically, and SHALL NOT be
-  ambiguous with a repository-wide or another component's release
+- **WHEN** a change merges to the default branch
+- **THEN** it SHALL NOT reach production until a release is tagged
 
 #### Scenario: A deployed artifact can be named exactly
 

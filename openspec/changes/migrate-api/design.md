@@ -485,6 +485,11 @@ usable if `api/` ever becomes its own module. This is the one piece worth
 deciding *before* the first tag, because renaming a release namespace afterwards
 is worse than choosing it awkwardly now.
 
+> **Superseded by `unify-release-versioning` (V1).** Both systems build from one
+> Go module and only `api/v*` was ever used, so releases are now one
+> repository-wide `vX.Y.Z` line. That change answers each reason above. Steps 1,
+> 3, and 4 stand.
+
 **3. After the hold period, split building from deploying.** Move image *build
 and publish* into GitHub Actions, producing a digest-addressed image in a
 registry; leave the provider-specific step as "deploy this digest." That is the

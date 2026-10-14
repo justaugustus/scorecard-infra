@@ -117,7 +117,9 @@ commits, spanning 2021-12-29 to 2026-08-07, across 12 authors.
   moves unchanged at cutover, because changing how a release fires in the same
   step that changes where the source lives gives a failure two candidate causes.
   Two things do change: releases are tagged `api/vX.Y.Z`, since this repository
-  now holds more than one deployable and upstream's `v1.0.x` must keep resolving;
+  now holds more than one deployable and upstream's `v1.0.x` must keep resolving
+  (since superseded by one repository-wide `vX.Y.Z` line; see
+  `unify-release-versioning`);
   and after the hold, image build and publish move to GitHub Actions producing a
   digest-addressed artifact, shrinking the provider-specific surface to a single
   deploy step. That split is the seam the eventual GCP exit needs.
