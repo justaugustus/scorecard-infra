@@ -34,8 +34,8 @@ make api-swagger   # regenerate server and client from api/openapi.yaml
 make api-docker    # build the container image
 ```
 
-The image is published to `ghcr.io` by `publish-api-image.yml` on an `api/v*`
-tag. Deploy the digest it reports, not a tag.
+The image is published to `ghcr.io` by `publish-images.yml` on a `v*` release
+tag, alongside the batch pipeline's. Deploy the digest it reports, not a tag.
 
 For the deployment itself — the AWS serving environment, its OpenTofu, and the
 runbook — see [`deploy/api/README.md`](../deploy/api/README.md).

@@ -10,7 +10,7 @@ variable "image" {
 
     Not a tag. A tag is a mutable pointer, so a rollback to a tag is a rollback
     to whatever that tag means today rather than to a known build. Staging
-    tracks `main`, production tracks `api/v*`, and both resolve to a digest
+    tracks `main`, production tracks `v*` releases, and both resolve to a digest
     before they reach here.
   EOT
   type        = string

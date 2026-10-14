@@ -11,20 +11,20 @@
 
 ## 2. Publishing
 
-- [ ] 2.1 `git mv publish-cron-images.yml publish-images.yml`, and add the API
+- [x] 2.1 `git mv publish-cron-images.yml publish-images.yml`, and add the API
       image to its matrix (**V3**).
-- [ ] 2.2 Trigger on `v*` tags; derive the image version by stripping the `v`.
-- [ ] 2.3 Skip `:latest` for pre-release tags (**V4**).
-- [ ] 2.4 Label every image with `org.opencontainers.image.version`,
+- [x] 2.2 Trigger on `v*` tags; derive the image version by stripping the `v`.
+- [x] 2.3 Skip `:latest` for pre-release tags (**V4**).
+- [x] 2.4 Label every image with `org.opencontainers.image.version`,
       `dev.scorecard.engine.version`, and `dev.scorecard.engine.commit`
       (**V5**).
-- [ ] 2.5 Remove `publish-api-image.yml`.
-- [ ] 2.6 Update the docs that name `api/v*`, `cron/v*`, or the old workflows:
+- [x] 2.5 Remove `publish-api-image.yml`.
+- [x] 2.6 Update the docs that name `api/v*`, `cron/v*`, or the old workflows:
       `api/README.md`, `cron/k8s/README.md`,
       `deploy/api/environments/production/variables.tf`,
       `deploy/api/modules/service/variables.tf`, and `build-images.yml`'s
       header.
-- [ ] 2.7 `actionlint` and `zizmor` clean.
+- [x] 2.7 `actionlint` and `zizmor` clean.
 
 ## 3. First release
 

@@ -114,10 +114,10 @@ doing it.
 ## Images
 
 Manifests reference `ghcr.io/ossf/scorecard-*:main`, published by
-`.github/workflows/publish-cron-images.yml` on every merge to `main`.
+`.github/workflows/publish-images.yml` on every merge to `main`.
 
 `:main` is mutable. It is used here because it is the only tag that currently
 resolves — `:stable`, which these manifests named on GKE, has never been
-published from this repository, and `:latest` appears only once a `cron/v*`
-release tag is cut. Task 8.2 has CI deploy by digest instead; what promotes an
+published from this repository, and `:latest` appears only once a `v*` release
+tag is cut. Task 8.2 has CI deploy by digest instead; what promotes an
 image to a stable tag is still open as `migrate-batch-pipeline` task 4.4.

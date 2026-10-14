@@ -609,7 +609,7 @@ attribute, CloudWatch and route-table sections the first script has none of.
       `aws eks update-kubeconfig`, `kubectl apply -f` the manifests from
       group 7.
 - [ ] 8.2 Deploy by digest where the workflow can (image references already
-      come from `publish-cron-images.yml`'s digest output); document where it
+      come from `publish-images.yml`'s digest output); document where it
       still can't (e.g. `:stable`, per the open `migrate-batch-pipeline` 4.4
       question) rather than silently accepting a mutable tag.
 - [ ] 8.3 `actionlint` and `zizmor` clean on the new workflow.

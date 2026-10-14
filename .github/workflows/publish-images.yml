@@ -12,26 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Publishes the batch pipeline's images to ghcr.io.
+# Publishes every container image this repository builds to ghcr.io: the results
+# API and the batch pipeline's six.
 #
-# The pipeline is being re-hosted away from the GCP project that builds it today,
-# where the images land in `gcr.io/openssf/` via Cloud Build. Nothing in this
-# repository published them, so an operator without access to that project had no
-# way to obtain them -- which makes this the pipeline's half of the same handoff
-# the API image already covers.
+# Releases are one repository-wide SemVer line, tagged `vX.Y.Z`
+# (openspec/changes/unify-release-versioning). One tag publishes every image from
+# that commit; each system still deploys separately, by digest. This file was
+# publish-cron-images.yml, and the API's publish-api-image.yml folded into it, so
+# that tag handling and labels exist once.
 #
-# Names are unchanged from what Cloud Build produces; only the registry and owner
-# move. `gcr.io/openssf/scorecard-batch-worker` becomes
-# `ghcr.io/ossf/scorecard-batch-worker`. That keeps the k8s manifests under
-# `cron/k8s/` a prefix edit rather than a rename, which matters while the tree is
-# behavior-frozen.
+# The pipeline's names are unchanged from what Cloud Build produced; only the
+# registry and owner moved. `gcr.io/openssf/scorecard-batch-worker` became
+# `ghcr.io/ossf/scorecard-batch-worker`, which kept the k8s manifests under
+# `cron/k8s/` a prefix edit rather than a rename.
 #
-# Releases are tagged `cron/vX.Y.Z`, matching the API's `api/v*`. A bare `vX.Y.Z`
-# would be ambiguous in a repository holding several independently deployable
-# systems.
+# Merges publish a MUTABLE `main` tag, which is what staging tracks. Releases
+# publish IMMUTABLE semver tags and move `latest`, except pre-releases
+# (`v0.2.0-rc.1`), which never move `latest`. Production pins a digest, not any
+# tag. A manual dispatch's extra tag applies to every image.
 #
-# Merges publish a MUTABLE `main` tag; releases publish IMMUTABLE semver and
-# `latest`. Deploy the digest.
+# Every image is labelled with the release (`org.opencontainers.image.version`)
+# and the Scorecard engine it was built against (`dev.scorecard.engine.version`,
+# `dev.scorecard.engine.commit`). For the API the labels are the only record of
+# the engine: its Dockerfile ignores the provenance build args below.
 #
 # The owner is parameterized so a fork can exercise this end to end against its
 # own namespace. GHCR namespaces must be lowercase and `repository_owner`
@@ -46,14 +49,14 @@
 # `openspec/changes/migrate-batch-pipeline/tasks.md` instead of being papered
 # over by minting an image to match it.
 
-name: publish-cron-images
+name: publish-images
 
 on:
   push:
     branches:
       - main
     tags:
-      - 'cron/v*'
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -78,6 +81,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - image: scorecard-api
+            dockerfile: api/Dockerfile
           - image: scorecard-batch-controller
             dockerfile: cron/internal/controller/Dockerfile
           - image: scorecard-batch-worker
@@ -115,9 +120,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # `cron/v1.2.3` -> `1.2.3`. The commit SHA is always published alongside,
-      # so a merge or a dispatch with no tag input still yields something
-      # immutable to pin.
+      # `v1.2.3` -> `1.2.3`. The commit SHA is always published alongside, so a
+      # merge or a dispatch with no tag input still yields something immutable
+      # to pin. The trigger's `v*` also matches tags that are not versions, so
+      # the tag is checked here rather than published under a malformed name.
       - name: Derive tags
         id: tags
         env:
@@ -132,8 +138,17 @@ jobs:
           image="${REGISTRY}/${owner}/${NAME}"
           tags="${image}:sha-${GITHUB_SHA}"
           if [ "$REF_TYPE" = "tag" ]; then
-            version="${REF_NAME#cron/v}"
-            tags="${tags},${image}:${version},${image}:latest"
+            if ! printf '%s' "$REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "tag '${REF_NAME}' is not a vX.Y.Z[-prerelease] version" >&2
+              exit 1
+            fi
+            version="${REF_NAME#v}"
+            tags="${tags},${image}:${version}"
+            # A pre-release never becomes what `latest` resolves to.
+            case "$version" in
+              *-*) ;;
+              *) tags="${tags},${image}:latest" ;;
+            esac
           else
             # Branch build. Only `main` reaches here, per the trigger.
             tags="${tags},${image}:${REF_NAME}"
@@ -150,7 +165,7 @@ jobs:
       # .dockerignore excludes .git, so the Makefile's `git` calls all return
       # empty inside the build and the link flags baked "" into every binary.
       # Resolved out here, where the checkout and the network exist, and passed
-      # in as build args.
+      # in as build args and labels.
       - name: Resolve provenance
         id: provenance
         env:
@@ -206,6 +221,10 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           provenance: true
           sbom: true
+          labels: |
+            org.opencontainers.image.version=${{ steps.provenance.outputs.git_version }}
+            dev.scorecard.engine.version=${{ steps.provenance.outputs.engine_version }}
+            dev.scorecard.engine.commit=${{ steps.provenance.outputs.engine_commit }}
           build-args: |
             GIT_HASH=${{ steps.provenance.outputs.git_hash }}
             GIT_VERSION=${{ steps.provenance.outputs.git_version }}

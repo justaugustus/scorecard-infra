@@ -21,7 +21,7 @@ variable "availability_zones" {
 
 variable "image" {
   description = <<-EOT
-    Container image pinned by digest, from an `api/v*` release tag resolved to a
+    Container image pinned by digest, from a `v*` release tag resolved to a
     digest. Never the tag itself: a rollback has to name a known build rather
     than whatever the tag means at the moment it is re-read.
   EOT

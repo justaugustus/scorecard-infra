@@ -117,7 +117,7 @@ batch-specific extension needed there.
   `deploy/cron/modules/{cluster,queue}/`; `cron/internal/pubsub/` gains an SQS
   subscriber and a URL-scheme-based selector; `cron/data/blob.go` links
   `gocloud.dev/blob/s3blob`; a new GitHub Actions workflow builds on the
-  existing `publish-cron-images.yml` to deploy by digest. No change to
+  existing `publish-images.yml` to deploy by digest. No change to
   `api/`, `internal/`, or `cmd/`.
 - **Affected specs:** adds `aws-batch`.
 - **Reversible by construction.** No production schedule points at this

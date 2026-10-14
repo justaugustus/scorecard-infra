@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Builds this repository's container images. These builds do not push: the
-# pipeline's images are published by Cloud Build (cron/cloudbuild/*.yaml) and the
-# results API's by publish-api-image.yml. This workflow only proves the images
+# Builds this repository's container images. These builds do not push: every
+# image is published by publish-images.yml. This workflow only proves the images
 # still build from this repository.
 
 name: build-images
