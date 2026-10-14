@@ -39,6 +39,11 @@ var allowCommitVerifier = &allowListVerifier{
 		"c8416b0b2bf627c349ca92fc8e3de51a64b005cf": true,
 		"82c141cc518b40d92cc801eee768e7aafc9c2fa2": true,
 		"5f532563584d71fdef14ee64d17bafb34f751ce5": true,
+		// testdata/workflow-valid-cache-mode-issue-5322.yml
+		"3d3c42e5aac5ba805825da76410c181273ba90b1": true,
+		"fa7117db83c52d787ae5a89f350999701505d78e": true,
+		"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": true,
+		"2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2": true,
 	},
 }
 
@@ -50,6 +55,9 @@ func TestVerifyValidWorkflows(t *testing.T) {
 		"testdata/workflow-valid-e2e.yml",
 		"testdata/workflow-valid-e2e-ghcr.yml",
 		"testdata/workflow-valid-tagged-action.yml",
+		"testdata/workflow-valid-cache-mode.yml",
+		"testdata/workflow-valid-cache-mode-job.yml",
+		"testdata/workflow-valid-cache-mode-issue-5322.yml",
 	}
 
 	for _, workflowFile := range workflowFiles {
@@ -83,6 +91,7 @@ func TestVerifyInvalidWorkflows(t *testing.T) {
 		"testdata/workflow-invalid-nil-steps.yml",
 		"testdata/workflow-invalid-execaction.yml",
 		"testdata/workflow-invalid-imposter-commit.yml",
+		"testdata/workflow-invalid-unknown-key.yml",
 	}
 
 	for _, workflowFile := range workflowFiles {

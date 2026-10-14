@@ -1,0 +1,53 @@
+# Reproduces https://github.com/ossf/scorecard/issues/5322: a current Scorecard
+# workflow, with actions pinned by SHA, empty default permissions, and
+# `cache-mode: none` at workflow scope, was rejected with HTTP 400 by the
+# results API.
+name: 'OpenSSF Scorecard'
+
+'on':
+  branch_protection_rule:
+  schedule:
+    - cron: '20 4 * * 1'
+  push:
+    branches: ['main']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
+permissions: {}
+cache-mode: none
+
+jobs:
+  analysis:
+    name: 'Scorecard analysis'
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.default_branch == github.ref_name }}
+    permissions:
+      security-events: write
+      id-token: write
+
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 'Run analysis'
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: 'Upload to code-scanning'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: results.sarif
