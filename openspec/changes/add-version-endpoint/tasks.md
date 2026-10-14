@@ -31,7 +31,10 @@
       v1.17.0`, and the three cache headers. Rebuilt without the values:
       both read `unknown`. `go version -m` on binaries built with Go 1.26.5
       (CI's toolchain) and 1.27.1 both list the parser.
-- [ ] 4.3 After merge, confirm `main`'s published `scorecard-api` image
+- [x] 4.3 After merge, confirm `main`'s published `scorecard-api` image
       carries the commit (a local Docker build couldn't reach Docker Hub).
+      **Done 2026-10-14:** the binary in `scorecard-api:sha-5c445f8…`
+      contains the full commit and `5c445f8` as its version, and links
+      `actionlint.kjanat.dev v1.17.0`.
 - [ ] 4.4 After the next release is deployed, `api.scorecard.dev/version`
       reports it.
