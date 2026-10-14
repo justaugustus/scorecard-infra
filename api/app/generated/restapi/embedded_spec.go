@@ -404,11 +404,6 @@ func init() {
         }
       }
     }
-  },
-  "x-google-allow": "all",
-  "x-google-backend": {
-    "address": "https://scorecard-api-prod-x3pmld2cbq-uc.a.run.app",
-    "protocol": "h2"
   }
 }`))
 	FlatSwaggerJSON = json.RawMessage([]byte(`{
@@ -800,11 +795,6 @@ func init() {
         }
       }
     }
-  },
-  "x-google-allow": "all",
-  "x-google-backend": {
-    "address": "https://scorecard-api-prod-x3pmld2cbq-uc.a.run.app",
-    "protocol": "h2"
   }
 }`))
 }

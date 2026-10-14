@@ -26,7 +26,7 @@
 
 ## 4. `x-google-backend`
 
-- [ ] 4.1 Remove the block from `api/openapi.yaml` and regenerate with the
+- [x] 4.1 Remove the block from `api/openapi.yaml` and regenerate with the
       pinned go-swagger, in its own commit (**L4**).
 
 ## 5. Verification

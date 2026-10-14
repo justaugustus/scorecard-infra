@@ -26,11 +26,6 @@ consumes:
 produces:
   - application/json
 
-x-google-backend:
-  address: https://scorecard-api-prod-x3pmld2cbq-uc.a.run.app
-  protocol: h2
-x-google-allow: all
-
 paths:
   /projects/{platform}/{org}/{repo}/badge:
     get:
