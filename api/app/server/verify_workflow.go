@@ -88,8 +88,10 @@ func (i imposterCommitError) Error() string {
 }
 
 func verifyScorecardWorkflow(workflowContent string, verifier commitVerifier) error {
-	// Verify workflow contents using actionlint.
+	// Verify workflow contents using actionlint. Diagnostics on reviewed,
+	// capability-removing keys are let through; everything else still fails.
 	workflow, lintErrs := actionlint.Parse([]byte(workflowContent))
+	lintErrs = unreviewedDiagnostics(workflowContent, lintErrs)
 	if lintErrs != nil || workflow == nil {
 		return fmt.Errorf("%w: %v", errWorkflowParse, lintErrs)
 	}
