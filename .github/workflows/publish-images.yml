@@ -16,7 +16,7 @@
 # API and the batch pipeline's six.
 #
 # Releases are one repository-wide SemVer line, tagged `vX.Y.Z`
-# (openspec/changes/unify-release-versioning). One tag publishes every image from
+# (openspec/specs/release-versioning). One tag publishes every image from
 # that commit; each system still deploys separately, by digest. This file was
 # publish-cron-images.yml, and the API's publish-api-image.yml folded into it, so
 # that tag handling and labels exist once.
