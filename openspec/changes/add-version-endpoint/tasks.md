@@ -17,19 +17,21 @@
 
 - [x] 3.1 `api/README.md`: the route, and drop the stale gateway wording
       about `openapi.yaml`.
-- [x] 3.2 `deploy/api/README.md`: check `origin.scorecard.dev/version` after
-      an apply.
+- [x] 3.2 `deploy/api/README.md`: check `api.scorecard.dev/version` after an
+      apply, purging the surrogate key first.
 
 ## 4. Verification
 
 - [x] 4.1 Unit tests: release build, nothing injected, replaced parser,
-      parser not linked, no build info; the handler's headers and real
-      parser.
+      parser not linked, no build info; the handler's headers and payload.
+      Under Go 1.26.5, CI's toolchain, a test binary's build info lists no
+      dependencies, so the handler test can't assert a real parser version.
 - [x] 4.2 Built with `api/Makefile` and injected values, ran it, and queried
       `/version`: injected release and commit, `actionlint.kjanat.dev
       v1.17.0`, and the three cache headers. Rebuilt without the values:
-      both read `unknown`.
+      both read `unknown`. `go version -m` on binaries built with Go 1.26.5
+      (CI's toolchain) and 1.27.1 both list the parser.
 - [ ] 4.3 After merge, confirm `main`'s published `scorecard-api` image
       carries the commit (a local Docker build couldn't reach Docker Hub).
-- [ ] 4.4 After the next release is deployed, `origin.scorecard.dev/version`
+- [ ] 4.4 After the next release is deployed, `api.scorecard.dev/version`
       reports it.

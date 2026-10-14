@@ -40,7 +40,7 @@ const (
 	parserModule = "actionlint.kjanat.dev"
 
 	// The response only changes on deploy, so the CDN absorbs repeat traffic.
-	// Check origin.scorecard.dev/version, or purge the key, for the live build.
+	// After a deploy, purge the key or wait out the TTL to see the new build.
 	versionFastlyTTL    = "max-age=300"
 	versionBrowserTTL   = "max-age=60"
 	versionSurrogateKey = "scorecard-version"

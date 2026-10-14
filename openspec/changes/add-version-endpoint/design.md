@@ -30,8 +30,11 @@ the existing routes' cache pattern:
   minutes matters.
 
 An abusive flood costs less here than against `/projects/…`, whose cache
-misses read S3. This route does no I/O at all. `origin.scorecard.dev/version`
-bypasses the CDN for post-deploy checks.
+misses read S3. This route does no I/O at all.
+
+Post-deploy checks go through the CDN like everything else: purge the
+surrogate key, or wait out the five minutes. Documenting a way around the CDN
+would advertise the origin, whose direct use is discouraged.
 
 ### I3 — Link-time identity, run-time parser version
 

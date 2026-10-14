@@ -35,5 +35,5 @@ surrogate key, and SHALL be served without I/O.
 #### Scenario: Checking a deploy
 
 - **WHEN** an operator needs the build serving right now
-- **THEN** the origin SHALL answer `/version` directly, and the surrogate key
-  SHALL allow the cached copy to be purged
+- **THEN** the surrogate key SHALL allow the cached copy to be purged, so the
+  CDN serves the new build without bypassing it

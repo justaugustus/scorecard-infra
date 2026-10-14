@@ -264,7 +264,7 @@ func init() {
     },
     "/version": {
       "get": {
-        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached briefly by the CDN; the origin reports the live build.",
+        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes.",
         "tags": [
           "version"
         ],
@@ -693,7 +693,7 @@ func init() {
     },
     "/version": {
       "get": {
-        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached briefly by the CDN; the origin reports the live build.",
+        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes.",
         "tags": [
           "version"
         ],

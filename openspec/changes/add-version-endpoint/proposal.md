@@ -49,5 +49,5 @@ The API image changes only in the metadata it carries and the new route.
   `dev.scorecard.engine.*` labels record the module-wide version.
 - **A response header on every request.** Cached responses would report the
   build that produced them, not the one serving.
-- **Purging the key on deploy automatically.** Checking the origin, or
-  waiting five minutes, is enough for something that changes once a release.
+- **Purging the key on deploy automatically.** A manual purge, or waiting
+  five minutes, is enough for something that changes once a release.

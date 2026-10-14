@@ -183,8 +183,8 @@ paths:
       summary: Get the build this server is running
       description: >-
         Reports the scorecard-infra release and commit this server was built
-        from, and the workflow parser that verifies uploads. Cached briefly by
-        the CDN; the origin reports the live build.
+        from, and the workflow parser that verifies uploads. Cached by the CDN
+        for up to five minutes.
       operationId: getVersion
       tags:
         - version

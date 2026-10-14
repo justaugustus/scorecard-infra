@@ -15,6 +15,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"runtime/debug"
@@ -94,8 +95,11 @@ func TestNewVersionInfo(t *testing.T) {
 	}
 }
 
-// The test binary links the server package, so it links the real parser: the
-// handler must report it rather than "unknown".
+// The body is checked against buildVersion() rather than a literal parser
+// version: under Go 1.26.5 (CI's toolchain), a `go test` binary's build info
+// lists no module dependencies, so the parser reads "unknown" here even though
+// a real `go build` of the server records it. TestNewVersionInfo covers
+// extraction.
 func TestGetVersionHandler(t *testing.T) {
 	t.Parallel()
 	rec := httptest.NewRecorder()
@@ -105,5 +109,7 @@ func TestGetVersionHandler(t *testing.T) {
 	assert.Equal(t, "max-age=300", rec.Header().Get("Surrogate-Control"))
 	assert.Equal(t, "max-age=60", rec.Header().Get("Cache-Control"))
 	assert.Equal(t, "scorecard-version", rec.Header().Get("Surrogate-Key"))
-	assert.Regexp(t, `"parser":"actionlint\.kjanat\.dev v\d+\.\d+\.\d+"`, rec.Body.String())
+	want, err := json.Marshal(buildVersion())
+	assert.NoError(t, err)
+	assert.JSONEq(t, string(want), rec.Body.String())
 }

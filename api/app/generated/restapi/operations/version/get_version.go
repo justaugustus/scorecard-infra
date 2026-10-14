@@ -45,7 +45,7 @@ func NewGetVersion(ctx *middleware.Context, handler GetVersionHandler) *GetVersi
 //
 // # Get the build this server is running
 //
-// Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached briefly by the CDN; the origin reports the live build.
+// Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes.
 type GetVersion struct {
 	Context *middleware.Context
 	Handler GetVersionHandler
