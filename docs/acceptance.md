@@ -14,7 +14,7 @@ The S3-compatible leg is deferred (needs Docker); see the bottom of this file.
 ## Prerequisites
 
 - Go toolchain matching `go.mod` (1.25.x). Prefix Go commands with
-  `env -u GOROOT` if a stray `GOROOT` breaks stdlib builds (see `AGENTS.md`).
+  `env -u GOROOT` if a stray `GOROOT` breaks stdlib builds (see `README.md`).
 - Network egress for the live-scan leg: a live scan calls the GitHub API and,
   on first use, fetches the OSS-Fuzz `status.json` (`clients/ossfuzz`). The
   server itself starts offline — the OSS-Fuzz client is created lazily
