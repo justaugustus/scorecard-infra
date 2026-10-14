@@ -32,10 +32,10 @@ const GetVersionOKCode int = 200
 // swagger:response getVersionOK
 type GetVersionOK struct {
 
-	// TTL for browser caching. Example: max-age=60
+	// TTL for browser caching. Example: max-age=3600
 	CacheControl string `json:"Cache-Control"`
 
-	// TTL for Fastly CDN caching. Example: max-age=300
+	// TTL for Fastly CDN caching. Example: max-age=3600
 	SurrogateControl string `json:"Surrogate-Control"`
 
 	// Surrogate key for Fastly CDN purging.

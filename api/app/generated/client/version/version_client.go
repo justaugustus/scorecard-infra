@@ -82,7 +82,7 @@ type ClientService interface {
 
 // GetVersion gets the build this server is running.
 //
-// Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes..
+// Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for the TTL in the response's Surrogate-Control header..
 //
 // This method does not support injected context.
 // However, timeout and opentracing contexts are honored whenever enabled.
@@ -101,7 +101,7 @@ func (a *Client) GetVersion(params *GetVersionParams, opts ...ClientOption) (*Ge
 
 // GetVersionContext gets the build this server is running.
 //
-// Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes..
+// Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for the TTL in the response's Surrogate-Control header..
 //
 // Do not use the deprecated [GetVersionParams.Context] with this method: it would be ignored.
 func (a *Client) GetVersionContext(ctx context.Context, params *GetVersionParams, opts ...ClientOption) (*GetVersionOK, error) {

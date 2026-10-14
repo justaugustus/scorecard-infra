@@ -184,7 +184,7 @@ paths:
       description: >-
         Reports the scorecard-infra release and commit this server was built
         from, and the workflow parser that verifies uploads. Cached by the CDN
-        for up to five minutes.
+        for the TTL in the response's Surrogate-Control header.
       operationId: getVersion
       tags:
         - version
@@ -194,10 +194,10 @@ paths:
           headers:
             Surrogate-Control:
               type: string
-              description: "TTL for Fastly CDN caching. Example: max-age=300"
+              description: "TTL for Fastly CDN caching. Example: max-age=3600"
             Cache-Control:
               type: string
-              description: "TTL for browser caching. Example: max-age=60"
+              description: "TTL for browser caching. Example: max-age=3600"
             Surrogate-Key:
               type: string
               description: "Surrogate key for Fastly CDN purging."

@@ -264,7 +264,7 @@ func init() {
     },
     "/version": {
       "get": {
-        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes.",
+        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for the TTL in the response's Surrogate-Control header.",
         "tags": [
           "version"
         ],
@@ -279,11 +279,11 @@ func init() {
             "headers": {
               "Cache-Control": {
                 "type": "string",
-                "description": "TTL for browser caching. Example: max-age=60"
+                "description": "TTL for browser caching. Example: max-age=3600"
               },
               "Surrogate-Control": {
                 "type": "string",
-                "description": "TTL for Fastly CDN caching. Example: max-age=300"
+                "description": "TTL for Fastly CDN caching. Example: max-age=3600"
               },
               "Surrogate-Key": {
                 "type": "string",
@@ -693,7 +693,7 @@ func init() {
     },
     "/version": {
       "get": {
-        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for up to five minutes.",
+        "description": "Reports the scorecard-infra release and commit this server was built from, and the workflow parser that verifies uploads. Cached by the CDN for the TTL in the response's Surrogate-Control header.",
         "tags": [
           "version"
         ],
@@ -708,11 +708,11 @@ func init() {
             "headers": {
               "Cache-Control": {
                 "type": "string",
-                "description": "TTL for browser caching. Example: max-age=60"
+                "description": "TTL for browser caching. Example: max-age=3600"
               },
               "Surrogate-Control": {
                 "type": "string",
-                "description": "TTL for Fastly CDN caching. Example: max-age=300"
+                "description": "TTL for Fastly CDN caching. Example: max-age=3600"
               },
               "Surrogate-Key": {
                 "type": "string",

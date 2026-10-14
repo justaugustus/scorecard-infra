@@ -102,9 +102,9 @@ tofu apply
 
 `image` and `origin_hostname` have no defaults and must be supplied.
 
-After an apply, confirm the build that is serving. Fastly caches `/version` for
-up to five minutes under the `scorecard-version` surrogate key, so purge that
-key or wait out the TTL first.
+After an apply, confirm the build that is serving. Fastly caches `/version`
+under the `scorecard-version` surrogate key (TTL in
+`api/app/server/version.go`), so purge that key or wait out the TTL first.
 
 ```sh
 curl -s https://api.scorecard.dev/version

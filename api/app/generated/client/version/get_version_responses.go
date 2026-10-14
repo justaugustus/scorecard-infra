@@ -57,10 +57,10 @@ func NewGetVersionOK() *GetVersionOK {
 // The server's build information
 type GetVersionOK struct {
 
-	// TTL for browser caching. Example: max-age=60
+	// TTL for browser caching. Example: max-age=3600
 	CacheControl string
 
-	// TTL for Fastly CDN caching. Example: max-age=300
+	// TTL for Fastly CDN caching. Example: max-age=3600
 	SurrogateControl string
 
 	// Surrogate key for Fastly CDN purging.
