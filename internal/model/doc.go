@@ -29,8 +29,8 @@ limitations under the License.
 // dependency of this module regardless of what this package does. The remaining
 // argument is narrower but still holds — this package exists to unmarshal a
 // handful of fields, and depending on the generated models to do it would couple
-// the cache path to the frozen tree that presubmits.yml forbids importing.
-// Revisit when the two serving-tier implementations converge (design W10).
+// the cache path to the API's generated code. Revisit when the two serving-tier
+// implementations converge (design W10).
 //
 // Live results are formatted via pkg/scorecard.AsJSON2()
 // and cached bytes are passed through unchanged; [Result] exists only to

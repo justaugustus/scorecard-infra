@@ -204,13 +204,13 @@ linters:
       # code introduced, and all of it is in hand-written source rather than the
       # generated tree, so a generated-path exclusion would not reach it.
       #
-      # The tree is behavior-frozen until cutover completes, so the choice was
-      # to rewrite frozen code to satisfy a config it never ran under, or to
-      # apply its own historical rules to it. This is the latter, and it is
-      # deliberately scoped to api/ so nothing else inherits the laxer set.
+      # While the tree was behavior-frozen for its cutover, the choice was to
+      # rewrite it to satisfy a config it never ran under, or to apply its own
+      # historical rules to it. This is the latter, scoped to api/ so nothing
+      # else inherits the laxer set.
       #
-      # REMOVE THIS BLOCK when the freeze lifts, and fix what it surfaces --
-      # tracked as task 5.7 in openspec/changes/migrate-api.
+      # The freeze has lifted (lift-migration-quarantine). REMOVE THIS BLOCK and
+      # fix what it surfaces -- task 5.7 in openspec/changes/migrate-api.
       - linters:
           - err113
           - errcheck
@@ -226,8 +226,8 @@ linters:
       # here caught a real defect the split would otherwise have carried in: a
       # non-constant format string in api/main.go, which upstream CI never saw
       # because it only ran `go test` inside app/server. Only fieldalignment is
-      # excluded -- reordering struct fields in a frozen tree is churn, and it
-      # is a packing nit rather than a behavior bug.
+      # excluded -- reordering struct fields is churn, and it is a packing nit
+      # rather than a behavior bug.
       - linters:
           - govet
         text: "fieldalignment:"

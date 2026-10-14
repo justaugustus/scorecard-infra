@@ -1,11 +1,9 @@
 # Coverage visibility, not a merge gate: every status below is
 # informational so a PR is never blocked on coverage percentage.
 #
-# api/ and cron/ are behavior-frozen imported trees (see the import-edges
-# CI job in .github/workflows/presubmits.yml and the generated-code carve-out
-# in .golangci.yml); internal/ and cmd/ are this repository's native code.
-# Components mirror that boundary so a change to internal/ is judged on its
-# own coverage rather than blended with the imported trees.
+# api/ and cron/ were imported from other repositories; internal/ and cmd/
+# were built here. Components follow that split so a change to one tree is
+# judged on its own coverage rather than blended with the others.
 coverage:
   status:
     project:

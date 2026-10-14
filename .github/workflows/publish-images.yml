@@ -44,10 +44,9 @@
 # `cron/k8s/webhook.release.yaml` refers to. Every other release-test workload
 # reuses its normal image under a `-releasetest` *deployment* name -- controller
 # and worker both do -- so that reference is inconsistent with its neighbours and
-# nothing in this repository has ever built it. Correcting the manifest means
-# editing a frozen tree, so it is left alone and recorded in
-# `openspec/changes/migrate-batch-pipeline/tasks.md` instead of being papered
-# over by minting an image to match it.
+# nothing in this repository has ever built it. The fix belongs in the manifest,
+# not in minting an image to match it; it is recorded as
+# `openspec/changes/migrate-batch-pipeline/tasks.md` task 4.4a.
 
 name: publish-images
 

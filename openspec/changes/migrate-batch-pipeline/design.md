@@ -376,7 +376,8 @@ reasonably expect interaction:
   and putting `gocloud.dev/blob` underneath the pipeline — is the GCP-exit work
   this move enables (**C11**), and is where the "no hardcoded `gs://`" rule will
   eventually have to be applied to code that currently violates it. Until then,
-  the pipeline's GCP coupling is quarantined inside `cron/`.
+  the pipeline's GCP coupling is quarantined inside `cron/`. (Lifted after the
+  cutover; see `lift-migration-quarantine`.)
 - **`/capabilities`** (the MCP hardcoded-caveat gap): unchanged in this change.
   The endpoint continues to describe only what the API server itself does.
 - **Upstream graft map** (**D11**, `docs/upstream-graft.md`): the batch pipeline

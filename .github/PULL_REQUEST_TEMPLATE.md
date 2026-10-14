@@ -34,7 +34,6 @@ the checklist below — see CONTRIBUTING.md#adding-repositories-to-the-weekly-sc
 
 If this PR touches the **batch pipeline** (`cron/`):
 
-- [ ] No new import edges between `cron/` and `internal/` in either direction
 - [ ] If `cron/internal/format` changed, the corresponding engine change exists
       upstream and `schema_gen_test.go` passes
 

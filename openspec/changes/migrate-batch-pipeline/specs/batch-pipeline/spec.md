@@ -92,19 +92,6 @@ detected before it reaches a pinned release.
 - **THEN** it SHALL build against the explicitly pinned engine release, not
   against the development branch the scheduled job tracks
 
-### Requirement: Pipeline code isolated from the API server capabilities
-
-The imported pipeline SHALL remain self-contained: it SHALL NOT import this
-repository's API server packages, and those packages SHALL NOT import the
-pipeline.
-
-#### Scenario: No new coupling introduced by the migration
-
-- **WHEN** the migration completes
-- **THEN** no import edge SHALL exist in either direction between the imported
-  pipeline tree and the API server's store, cache, scan, flags, fallback, or HTTP
-  packages
-
 ### Requirement: Published schema contract ownership
 
 The pipeline SHALL own the published BigQuery and JSON schema contract it

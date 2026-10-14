@@ -21,26 +21,16 @@ context: |
   (design W10). Retained and building; do not add new API surface here expecting
   it to ship. Revisitable, but not ambiguous.
 
-  `api/` and `cron/` share no import edges with each other or with internal/ in
-  any direction (designs C11 and W10, enforced by presubmits.yml's import-edges
-  job). `cron/`'s equivalence freeze against ossf/scorecard lifted 2026-08-30,
-  once the openssf GCP project's turndown preempted the cutover it was tied
-  to — see cron/initial-graft.md for the equivalence snapshot taken at that
-  point. Converging the two serving-tier implementations is the point of
-  landing them together; it is deferred to its own change. Do not wire them
-  together opportunistically.
+  `api/` and `cron/` share no code with each other or with internal/ yet.
+  Converging the two serving-tier implementations is the point of landing them
+  together; it is deferred to its own change (designs C11 and W10). The
+  migration-era freeze and quarantine are lifted (lift-migration-quarantine):
+  the imported trees follow the same rules as the rest of the repository.
 
   Direction of travel is INBOUND. This repository was originally framed as an
   incubator whose pieces would graft upstream; two of those three graft targets
   have since been imported here instead. Consolidation replaced grafting.
   See docs/upstream-graft.md, which records what still genuinely grafts out.
-
-  Quarantined in the frozen trees, and deliberately not "fixed":
-  api/openapi.yaml carries an x-google-backend block (it is both the published
-  contract and gateway deployment config), and cron/ keeps its own GCS write
-  path. api/'s hardcoded gs:// bucket URLs were also quarantined and are no
-  longer: see configure-result-buckets, which made them environment variables
-  defaulting to the compiled-in values.
 
   Language & stack: Go. HTTP server (net/http; chi optional). Imports the Scorecard
   library directly: github.com/ossf/scorecard/v5/pkg (in-process entrypoint

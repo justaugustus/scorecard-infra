@@ -102,7 +102,7 @@ commits, spanning 2021-12-29 to 2026-08-07, across 12 authors.
   places and carries a Cloud Endpoints backend address inside `openapi.yaml`.
   Behavioral equivalence is the acceptance test for this change, so the coupling
   is frozen in place and explicitly out of scope, exactly as the pipeline's GCS
-  write path is.
+  write path is. (Lifted after both cutovers; see `lift-migration-quarantine`.)
 - **Retire `docs/upstream-graft.md`'s incubator framing** rather than amending
   it (**W10**). The document tells a reader that the durable pieces here graft
   outward; after this import that is wrong about two of its three targets, and a

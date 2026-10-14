@@ -74,7 +74,7 @@ The two systems in this repository are at different maturities:
 
 | Component | Status | Support |
 | --- | --- | --- |
-| Batch scanning pipeline (`cron/`) | Production | Runs the weekly public scan. Behavior-frozen until its migration out of `ossf/scorecard` completes; see [cron/initial-graft.md](cron/initial-graft.md). |
+| Batch scanning pipeline (`cron/`) | Production | Runs the weekly public scan on AWS. See [deploy/cron/README.md](deploy/cron/README.md). |
 | Results API server | Pre-release | Pre-1.0 and under active development; interfaces may change. |
 | Provider-agnostic design (`docs/research/`) | Reference design | Not an official artifact; nothing in it is committed. |
 

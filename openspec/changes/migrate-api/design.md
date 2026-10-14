@@ -327,6 +327,10 @@ duration of the freeze:
   and the Cloud Endpoints deployment configuration, including an
   `x-google-backend` address. Changing it changes a deployed service.
 
+> **Lifted by `lift-migration-quarantine` (L1, L2).** These constraints lasted
+> for the freeze, and the freeze ended with the cutovers. The import-edge check
+> is removed, and `x-google-backend` went with the Endpoints gateway.
+
 **D11 is not inverted, it is retired.** `docs/upstream-graft.md` describes this
 repository as an incubator whose durable pieces graft outward — `internal/store`
 and the `/projects` handlers to `ossf/scorecard-webapp`, the live-scan path to

@@ -133,45 +133,6 @@ jobs:
           -l apache -c 'OpenSSF Scorecard Authors' \
           ./api
 
-  # The imported API and the batch pipeline are behavior-frozen and must stay
-  # self-contained: no import edges to or from this repository's own packages,
-  # in either direction (designs W10 and C11). The pull-request template has
-  # asserted this for cron/ since the pipeline landed, but nothing enforced it.
-  import-edges:
-    name: import-edges
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
-      with:
-        egress-policy: audit # TODO(workflow): change to 'egress-policy: block' after a couple of runs
-
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        persist-credentials: false
-
-    - name: No import edges between the frozen trees and internal/
-      run: |
-        rc=0
-        check() {
-          # $1 = human description, $2 = grep pattern, $3.. = paths to search
-          desc="$1"; pattern="$2"; shift 2
-          if hits=$(grep -rnE "$pattern" --include="*.go" "$@" 2>/dev/null); then
-            echo "::error::$desc"
-            echo "$hits"
-            rc=1
-          fi
-        }
-        check "api/ must not import this repository's own packages" \
-          '"github\.com/ossf/scorecard-infra/(internal|cmd|cron)' api
-        check "cron/ must not import this repository's own packages" \
-          '"github\.com/ossf/scorecard-infra/(internal|cmd|api)' cron
-        check "internal/ and cmd/ must not import the frozen trees" \
-          '"github\.com/ossf/scorecard-infra/(api|cron)' internal cmd
-        exit $rc
-
   # Scan inventory checks for the batch pipeline. add-projects must be a no-op on
   # an already-normalized inventory, so a non-empty diff means someone hand-edited
   # the CSV into a state the tooling would not produce.

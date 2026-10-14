@@ -67,9 +67,8 @@ that applies here and nowhere else:
   corresponding engine change breaks the BigQuery/JSON contract silently.
   `schema_gen_test.go` is what catches it; do not skip or weaken it.
 
-Do **not** wire `cron/` and the API server together. There are no import edges in
-either direction, and that absence is deliberate — it is what keeps the migration
-revertible. Convergence needs its own spec (design **C11**).
+`cron/` and the API server share no code yet. Converging them deserves its own
+change rather than a drive-by (design **C11**).
 
 Pipeline-specific targets (`make help` lists them all):
 

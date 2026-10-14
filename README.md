@@ -86,20 +86,17 @@ carefully for: the Action's `POST` path is the only one that refreshes the edge
 promptly, because the cache purge fires from the publish handler; batch-produced
 results reach clients as the cache expires.
 
-They share a repository and **no code**. There are no import edges in any
-direction, enforced by CI, and that is deliberate. Converging them is the point
-of landing them together; it has not happened yet and should not happen
-incidentally (designs **C11** and **W10**, in
+They share a repository and, so far, **no code**. Converging them is the point
+of landing them together; it has not happened yet and should be done as its own
+change rather than incidentally (designs **C11** and **W10**, in
 [`migrate-batch-pipeline`](openspec/changes/migrate-batch-pipeline/design.md) and
 [`migrate-api`](openspec/changes/migrate-api/design.md)).
 
-**Where the effort is going.** Both trees are actively developed, but the work
-is scoped to what supports the migration described in
-[`scorecard#5208`](https://github.com/ossf/scorecard/issues/5208). For `cron/`,
-that additionally means keeping the tree equivalent to what `ossf/scorecard`
-builds until its cutover completes — that equivalence is the acceptance test and
-the rollback path. Contributions outside that scope are welcome but will
-generally wait.
+**Where the effort is going.** Both trees are actively developed. The
+migration described in
+[`scorecard#5208`](https://github.com/ossf/scorecard/issues/5208) is complete,
+and `api/` and `cron/` are held to the same rules as the rest of the
+repository.
 
 ## Getting Started
 
